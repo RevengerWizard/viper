@@ -9,9 +9,6 @@
 **
 */
 
-#define tea_char_c
-#define TEA_CORE
-
 #include "vp_char.h"
 
 const uint8_t vp_char_bits[257] = {
