@@ -1,0 +1,10 @@
+viper.o: viper.c vp_buf.h vp_def.h vp_state.h vp_emit.h
+vp_asm.o: vp_asm.c vp_asm.h vp_state.h vp_buf.h vp_def.h
+vp_buf.o: vp_buf.c vp_buf.h vp_def.h
+vp_char.o: vp_char.c vp_char.h vp_def.h
+vp_lex.o: vp_lex.c vp_lex.h vp_buf.h vp_def.h vp_state.h vp_char.h
+vp_load.o: vp_load.c vp_lex.h vp_buf.h vp_def.h vp_state.h vp_parse.h
+vp_parse.o: vp_parse.c vp_parse.h vp_lex.h vp_buf.h vp_def.h vp_state.h \
+ vp_asm.h
+vp_pe.o: vp_pe.c vp_buf.h vp_def.h vp_emit.h vp_state.h
+vp_state.o: vp_state.c vp_state.h vp_buf.h vp_def.h
