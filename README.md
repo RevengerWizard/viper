@@ -1,11 +1,11 @@
 # Viper
 
-Viper compiler.
+Viper programming language.
 
 Just a toy compiler to understand how optimizing compilers work.
 
 ```
-fn main() : int
+fn main() : int32
 {
     return 42
 }
@@ -13,7 +13,7 @@ fn main() : int
 
 ## Building
 
-You'll just need a C compiler and make
+You will need a C99 compiler (gcc or clang) and make
 
 ```bash
 git clone https://github.com/RevengerWizard/viper && cd viper
