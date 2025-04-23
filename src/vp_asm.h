@@ -9,6 +9,6 @@
 #include "vp_state.h"
 
 void vp_asm_ret(VpState* V);
-void vp_asm_mov_rax_imm32(VpState* V, int imm);
+void vp_asm_mov_rax_imm32(VpState* V, int32_t imm);
 
 #endif

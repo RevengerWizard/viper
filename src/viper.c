@@ -31,7 +31,7 @@ int main(int argc, char** argv)
 
     vp_load(V, argv[1]);
 
-    SBuf sb;
+    /*SBuf sb;
     vp_buf_init(&sb);
     vp_buf_need(&sb, 1024);
     vp_emit_exe(V, &sb);
@@ -40,7 +40,7 @@ int main(int argc, char** argv)
     {
         fwrite(sb.b, 1, sbuf_len(&sb), f);
         fclose(f);
-    }
+    }*/
 
     vp_state_close(V);
 

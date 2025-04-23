@@ -2,15 +2,15 @@
 # Viper Makefile. Requires GNU Make.
 ##############################################################################
 
-CC = gcc
+CC = clang -fsanitize=address
 
 CCOPT = #-O2
 
-CCDEBUG = -g
+CCDEBUG = -O0 -g3
 
 CCWARN = -Wall
 
-XCFLAGS = 
+XCFLAGS = -DVIPER_USE_ASSERT
 
 ##############################################################################
 # Host system detection
@@ -59,7 +59,7 @@ TARGET_STRIP = strip
 TARGET_LFSFLAGS = -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE
 TARGET_XCFLAGS = $(TARGET_LFSFLAGS) -U_FORTIFY_SOURCE
 TARGET_XLDFLAGS =
-TARGET_XLIBS = -lm
+TARGET_XLIBS = #-lm
 TARGET_ACFLAGS = $(CCOPTIONS) $(TARGET_XCFLAGS) $(TARGET_FLAGS) $(TARGET_CFLAGS)
 TARGET_ASFLAGS = $(ASOPTIONS) $(TARGET_XCFLAGS) $(TARGET_FLAGS) $(TARGET_CFLAGS)
 TARGET_ALDFLAGS = $(LDOPTIONS) $(TARGET_XLDFLAGS) $(TARGET_FLAGS) $(TARGET_LDFLAGS)
@@ -101,8 +101,11 @@ endif
 ##############################################################################
 
 VPCORE_O = vp_buf.o \
+	vp_assert.o \
 	vp_char.o vp_lex.o vp_load.o vp_parse.o \
-	vp_state.o vp_asm.o \
+	vp_strscan.o \
+	vp_state.o vp_asm.o vp_ast.o \
+	vp_str.o vp_type.o vp_vec.o vp_tab.o \
 	vp_pe.o	    
 
 VP_O = viper.o

@@ -15,7 +15,7 @@ void vp_asm_ret(VpState* V)
     V->code.w = p + 1;
 }
 
-void vp_asm_mov_rax_imm32(VpState* V, int imm)
+void vp_asm_mov_rax_imm32(VpState* V, int32_t imm)
 {
     char* p = vp_buf_more(&V->code, 7);
 

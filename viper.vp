@@ -1,0 +1,52 @@
+struct Foo
+{
+    a : int8;
+    b : bool;
+    c : int32[];
+}
+
+struct Bar
+{
+    hello : struct {
+        a : void*;
+        b : uint8;
+    }
+}
+
+type Reader = fn(void*, usize) : char*;
+
+type Funcs = fn[5]() : int32;
+
+enum Tag : uint8
+{
+    TAG_NUM,
+    TAG_INT,
+    TAG_BOOL
+}
+
+type Value = struct {
+    tag : Tag;
+    union
+    {
+        n : double;
+        i : int64;
+        b : bool;
+    }
+}
+
+fn other() : void
+{
+    var a : const int32 = 24;
+}
+
+fn add(a : int32, b : int32) : int32
+{
+    return a + b;    
+}
+
+fn main() : void
+{
+    var a = 23;
+    var b = 89;
+    add(a, b);
+}

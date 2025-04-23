@@ -1,5 +1,6 @@
 /*
 ** vp_parse.h
+** Syntax analyser
 */
 
 #ifndef _VP_PARSE_H

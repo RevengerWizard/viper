@@ -1,0 +1,27 @@
+u8, i8, u16, i16, u32, i32, u64, i64, u128, i128
+
+uint8, int8, uint16, int16, uint32, int32, uint64, int64, uint128, int128
+
+isize, usize
+
+char, uchar
+
+float, double
+
+bool
+
+nil
+
+---
+
+custom-width integer types
+
+bit{n}  bit7, bit24, bit16
+
+---
+
+lex -> parse -> ast -> types/semantics -> ir -> (optimizations) -> register allocation -> instruction encoding -> executable/object file
+
+---
+
+asm blocks
