@@ -1,0 +1,15 @@
+src/
+├── vp_def.h          ← common defininitions
+├── vp_char.c/h       ← ctype replacements
+├── vp_buf.c/h        ← buffer handling
+├── vp_lex.c/h        ← lexer
+├── vp_strscan.c/h    ← number scanning
+├── vp_parse.c/h      ← parser (produces AST)
+├── vp_ast.c/h        ← AST node allocation
+├── vp_type.c/h       ← type information
+├── vp_str.c/h        ← string interning
+├── vp_tab.c/h        ← hash table handling
+├── vp_vec.c/h        ← dynamic array handling
+├── vp_state.c/h      ← global state
+├── vp_load.c         ← frontend driver: parse + compile
+├── viper.c           ← CLI main

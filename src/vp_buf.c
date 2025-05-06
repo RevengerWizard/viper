@@ -6,6 +6,7 @@
 #include <stdlib.h>
 
 #include "vp_buf.h"
+#include "vp_mem.h"
 
 static void buf_grow(SBuf* sb, size_t size)
 {
@@ -14,7 +15,7 @@ static void buf_grow(SBuf* sb, size_t size)
     if(newsize < VP_MIN_SBUF) newsize = VP_MIN_SBUF;
     while(newsize < size) newsize += newsize;
 
-    char* b = (char*)realloc(sb->b, newsize);
+    char* b = (char*)vp_mem_realloc(sb->b, newsize);
 
     /* Adjust buffer pointers */
     sb->b = b;

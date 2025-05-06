@@ -14,6 +14,7 @@ void vp_assert_fail(const char* file, int line, const char* func, const char* fm
 {
     va_list argp;
     va_start(argp, fmt);
+    fputc('\n', stderr);
     fprintf(stderr, "Viper ASSERT %s:%d: %s: ", file, line, func);
     vfprintf(stderr, fmt, argp);
     fputc('\n', stderr);

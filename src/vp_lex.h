@@ -6,7 +6,6 @@
 #ifndef _VP_LEX_H
 #define _VP_LEX_H
 
-#include "vp_def.h"
 #include "vp_buf.h"
 #include "vp_state.h"
 #include "vp_str.h"
@@ -15,22 +14,24 @@
 #define TKDEF(_, __) \
     /* Keywords */ \
     _(fn) \
-    _(struct) _(enum) \
+    _(struct) _(union) _(enum) \
     _(var) _(const) \
     _(not) _(and) _(or) \
-    _(type) \
+    _(type) _(void) _(cast) \
+    _(bool) \
     _(int8) _(int16) _(int32) _(int64) \
     _(uint8) _(uint16) _(uint32) _(uint64) \
     _(usize) _(isize) \
     _(float) _(double) \
-    _(bool) _(true) _(false) _(nil) \
+    _(true) _(false) _(nil) \
     _(return) \
     /* Symbols */ \
     __(ge, >=) __(le, <=) \
     __(lshift, <<) __(rshift, >>) \
     __(eq, ==) __(noteq, !=) \
-    __(pluseq, +=) __(mineq, -=) __(muleq, *=) __(diveq, /=) __(modeq, %=) \
-    __(bandeq, &=) __(boreq, |=) __(xoreq, ^=) \
+    __(pluseq, +=) __(mineq, -=) \
+    __(muleq, *=) __(diveq, /=) __(modeq, %=) \
+    __(bandeq, &=) __(boreq, |=) __(bxoreq, ^=) \
     __(lshifteq, <<=) __(rshifteq, >>=) \
     __(name, <name>) __(integer, <integer>) __(number, <number>) \
     __(eof, <eof>)

@@ -6,6 +6,7 @@
 #include <stdlib.h>
 
 #include "vp_tab.h"
+#include "vp_mem.h"
 
 static TabEntry* tab_findkey(TabEntry* entries, uint32_t size, Str* key)
 {
@@ -41,7 +42,7 @@ static TabEntry* tab_findkey(TabEntry* entries, uint32_t size, Str* key)
 
 static void tab_resize(Tab* tab, uint32_t size)
 {
-    TabEntry* entries = (TabEntry*)calloc(size, sizeof(TabEntry));
+    TabEntry* entries = (TabEntry*)vp_mem_calloc(size, sizeof(TabEntry));
 
     uint32_t count = 0;
     for(uint32_t i = 0; i < tab->size; i++)

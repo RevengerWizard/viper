@@ -1,4 +1,38 @@
-fn main() : int
+type Integer = int32;
+
+type Ptr = int32**;
+
+type Arr = float[34 * 3];
+
+struct Bar
 {
-    return 0
+    foo : Foo*;
+}
+
+struct Foo
+{
+    bar : Bar*;
+    j, k : float;
+    a : int8;
+    b : bool;
+    c : int32[10];
+}
+
+type Reader = fn(void*, uint32) : uint8*;
+
+fn add(a : int32, b : int32, c : float[12]) : int32
+{
+    return a + b;
+}
+
+fn main() : int32
+{
+    var c : float = 0xf.f;
+    var a : int32 = 3;
+    var b : uint8 = a / 34;
+    a = b * 34 - 4 + 3 - 3;
+    var e : int32 = not 1;
+    var d : uint64 = 16 >> 1;
+    return 234 + 13 + 3.4 - 23 / 34 == 34;
+    // 2 * (1987 + 2 / 45 - 34 * 90)
 }

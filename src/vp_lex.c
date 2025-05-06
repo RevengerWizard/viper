@@ -268,7 +268,7 @@ static LexToken lex_scan(LexState* ls, LexValue* val)
             case '^':
             {
                 lex_next(ls);
-                if(ls->c == '=') { lex_next(ls); return TK_xoreq; }
+                if(ls->c == '=') { lex_next(ls); return TK_bxoreq; }
                 return '^';
             }
             default:

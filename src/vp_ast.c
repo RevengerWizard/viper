@@ -3,64 +3,114 @@
 ** Abstract Syntax Tree
 */
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "vp_ast.h"
+#include "vp_def.h"
+#include "vp_mem.h"
+#include "vp_str.h"
+#include "vp_vec.h"
+
+Expr* expr_false = &(Expr){.kind = EX_FALSE, {.b = false}};
+Expr* expr_true = &(Expr){.kind = EX_TRUE, {.b = true}};
+Expr* expr_nil = &(Expr){.kind = EX_NIL};
 
 static Expr* expr_new(ExprKind kind)
 {
-    Expr* expr = (Expr*)malloc(sizeof(*expr));
+    Expr* expr = (Expr*)vp_mem_alloc(sizeof(*expr));
     expr->kind = kind;
     return expr;
 }
 
-Expr* vp_expr_binop(ExprKind kind, Type* ty, Expr* lhs, Expr* rhs)
+Expr* vp_expr_binop(ExprKind kind, Expr* lhs, Expr* rhs)
 {
     Expr* expr = expr_new(kind);
-    expr->ty = ty;
     expr->binop.lhs = lhs;
     expr->binop.rhs = rhs;
     return expr;
 }
 
-Expr* vp_expr_unary(ExprKind kind, Type* ty, Expr* unary)
+Expr* vp_expr_unary(ExprKind kind, Expr* unary)
 {
     Expr* expr = expr_new(kind);
-    expr->ty = ty;
     expr->unary = unary;
     return expr;
 }
 
-Expr* vp_expr_ilit(Type* ty, int64_t i)
+Expr* vp_expr_ilit(int64_t i)
 {
     Expr* expr = expr_new(EX_INT);
-    expr->ty = ty;
     expr->i = i;
     return expr;
 }
 
-Expr* vp_expr_flit(Type* ty, double n)
+Expr* vp_expr_flit(double n)
 {
     Expr* expr = expr_new(EX_NUM);
-    expr->ty = ty;
     expr->n = n;
     return expr;
 }
 
-Expr* vp_expr_name(Str* name, Type* ty, Scope* scope)
+Expr* vp_expr_name(Str* name)
 {
     Expr* expr = expr_new(EX_NAME);
-    expr->ty = ty;
-    expr->name.name = name;
-    expr->name.scope = scope;
+    expr->name = name;
+    return expr;
+}
+
+Expr* vp_expr_comp(Field* fields)
+{
+    Expr* expr = expr_new(EX_COMPOUND);
+    expr->comp.fields = fields;
+    return expr;
+}
+
+Expr* vp_expr_call(Expr* e, Expr** args)
+{
+    Expr* expr = expr_new(EX_CALL);
+    expr->call.expr = e;
+    expr->call.args = args;
+    return expr;
+}
+
+Expr* vp_expr_idx(Expr* e, Expr* idx)
+{
+    Expr* expr = expr_new(EX_IDX);
+    expr->idx.expr = e;
+    expr->idx.index = idx;
+    return expr;
+}
+
+Expr* vp_expr_field(Expr* e, Str* name)
+{
+    Expr* expr = expr_new(EX_FIELD);
+    expr->field.expr = e;
+    expr->field.name = name;
+    return expr;
+}
+
+Expr* vp_expr_cast(TypeSpec* spec, Expr* e)
+{
+    Expr* expr = expr_new(EX_CAST);
+    expr->cast.spec = spec;
+    expr->field.expr = e;
     return expr;
 }
 
 static Stmt* stmt_new(StmtKind kind)
 {
-    Stmt* st = (Stmt*)calloc(1, sizeof(*st));
+    Stmt* st = (Stmt*)vp_mem_calloc(1, sizeof(*st));
     st->kind = kind;
+    return st;
+}
+
+Stmt* vp_stmt_assign(Expr* lhs, Expr* rhs)
+{
+    Stmt* st = stmt_new(ST_ASSIGN);
+    st->lhs = lhs;
+    st->rhs = rhs;
     return st;
 }
 
@@ -71,10 +121,17 @@ Stmt* vp_stmt_expr(Expr* e)
     return st;
 }
 
-Stmt* vp_stmt_block(Scope* scope)
+Stmt* vp_stmt_decl(Decl* d)
+{
+    Stmt* st = stmt_new(ST_DECL);
+    st->decl = d;
+    return st;
+}
+
+Stmt* vp_stmt_block(Stmt** block)
 {
     Stmt* st = stmt_new(ST_BLOCK);
-    st->block.scope = scope;
+    st->block = block;
     return st;
 }
 
@@ -85,25 +142,368 @@ Stmt* vp_stmt_return(Expr* e)
     return st;
 }
 
-Stmt* vp_stmt_var(VarInfo* vi)
+Decl* vp_decl_var(Str* name, TypeSpec* spec, Expr* e)
 {
-    Stmt* st = stmt_new(ST_VAR);
-    st->vi = vi;
-    return st;
+    Decl* d = (Decl*)vp_mem_calloc(1, sizeof(*d));
+    d->kind = DECL_VAR;
+    d->name = name;
+    d->var.spec = spec;
+    d->var.expr = e;
+    return d;
 }
 
-VarInit* vp_varinit_new(InitKind kind)
+Decl* vp_decl_fn(TypeSpec* ret, Str* name)
 {
-    VarInit* init = (VarInit*)calloc(1, sizeof(*init));
-    init->kind = kind;
-    return init;
+    Decl* d = (Decl*)vp_mem_calloc(1, sizeof(*d));
+    d->kind = DECL_FN;
+    d->name = name;
+    d->fn.ret = ret;
+    return d;
 }
 
-Fn* vp_fn_new(Type* type, Str* name)
+Decl* vp_decl_type(Str* name, TypeSpec* spec)
 {
-    Fn* fn = (Fn*)calloc(1, sizeof(*fn));
-    fn->type = type;
-    fn->name = name;
-    memset(&fn->params, 0, sizeof(fn->params));
-    return fn;
+    Decl* d = (Decl*)vp_mem_calloc(1, sizeof(*d));
+    d->kind = DECL_TYPE;
+    d->name = name;
+    d->ts.spec = spec;
+    return d;
+}
+
+Decl* vp_decl_aggr(DeclKind kind, Str* name, Aggregate* agr)
+{
+    Decl* d = (Decl*)vp_mem_calloc(1, sizeof(*d));
+    d->kind = kind;
+    d->agr = agr;
+    d->name = name;
+    return d;
+}
+
+Decl* vp_decl_enum(Str* name, TypeSpec* spec)
+{
+    Decl* d = (Decl*)vp_mem_calloc(1, sizeof(*d));
+    d->kind = DECL_ENUM;
+    d->enm.spec = spec;
+    return d;
+}
+
+Aggregate* vp_aggr_new(AggregateKind kind)
+{
+    Aggregate* ag = (Aggregate*)vp_mem_calloc(1, sizeof(*ag));
+    ag->kind = kind;
+    return ag;
+}
+
+TypeSpec* vp_typespec_name(Str* name)
+{
+    TypeSpec* ts = (TypeSpec*)vp_mem_calloc(1, sizeof(*ts));
+    ts->kind = SPEC_NAME;
+    ts->name = name;
+    return ts;
+}
+
+TypeSpec* vp_typespec_type(Type* ty)
+{
+    TypeSpec* ts = (TypeSpec*)vp_mem_calloc(1, sizeof(*ts));
+    ts->kind = SPEC_TYPE;
+    ts->ty = ty;
+    return ts;
+}
+
+TypeSpec* vp_typespec_ptr(TypeSpec* base)
+{
+    TypeSpec* ts = (TypeSpec*)vp_mem_calloc(1, sizeof(*ts));
+    ts->kind = SPEC_PTR;
+    ts->ptr = base;
+    return ts;
+}
+
+TypeSpec* vp_typespec_array(TypeSpec* base, Expr* e)
+{
+    TypeSpec* ts = (TypeSpec*)vp_mem_calloc(1, sizeof(*ts));
+    ts->kind = SPEC_ARRAY;
+    ts->arr.base = base;
+    ts->arr.expr = e;
+    return ts;
+}
+
+TypeSpec* vp_typespec_fn(TypeSpec* ret)
+{
+    TypeSpec* ts = (TypeSpec*)vp_mem_calloc(1, sizeof(*ts));
+    ts->kind = SPEC_FUNC;
+    ts->fn.ret = ret;
+    return ts;
+}
+
+static const char* const ast_binnames[] = {
+    "+", "-", "*", "/", "%", "&", "|", "^", "<<", ">>", "==", "!=", "<", "<=", ">", ">=", "and", "or"
+};
+
+static const char* const ast_unarynames[] = {
+    "-", "not", "~"
+};
+
+static int indent = 0;
+
+static void ast_print_expr(Expr* e);
+
+static void ast_print_indent()
+{
+    printf("%.*s", 4*indent, "                                                                      ");
+}
+
+static void ast_print_typespec(TypeSpec* spec)
+{
+    switch(spec->kind)
+    {
+        case SPEC_NAME:
+            printf("%s", str_data(spec->name));
+            break;
+        case SPEC_TYPE:
+            printf("%s", vp_type_names[spec->ty->kind]);
+            break;
+        case SPEC_PTR:
+            ast_print_typespec(spec->ptr);
+            printf("*");
+            break;
+        case SPEC_ARRAY:
+            ast_print_typespec(spec->arr.base);
+            printf("[");
+            if(spec->arr.expr != NULL)
+                ast_print_expr(spec->arr.expr);
+            printf("]");
+            break;
+        case SPEC_FUNC:
+            printf("fn(");
+            for(uint32_t i = 0; i < vec_len(spec->fn.args); i++)
+            {
+                TypeSpec* ts = spec->fn.args[i];
+                ast_print_typespec(ts);
+                if(i != vec_len(spec->fn.args) - 1)
+                {
+                    printf(", ");
+                }
+            }
+            printf(") : ");
+            ast_print_typespec(spec->fn.ret);
+            break;
+        default:
+            vp_assertX(0, "Unknown typespec");
+            break;
+    }
+}
+
+static void ast_print_aggr(Aggregate* agr)
+{
+    for(uint32_t i = 0; i < vec_len(agr->items); i++)
+    {
+        ast_print_indent();
+        AggregateItem* item = &agr->items[i];
+        for(uint32_t j = 0; j < vec_len(item->names); j++)
+        {
+            Str* name = item->names[j];
+            printf("%s", str_data(name));
+            if(j != vec_len(item->names) - 1)
+            {
+                printf(", ");
+            }
+        }
+        printf(" : ");
+        ast_print_typespec(item->type);
+        printf("\n");
+    }
+}
+
+static void ast_print_expr(Expr* e)
+{
+    switch(e->kind)
+    {
+        case EX_TRUE:
+            printf("true");
+            break;
+        case EX_FALSE:
+            printf("false");
+            break;
+        case EX_NIL:
+            printf("nil");
+            break;
+        case EX_INT:
+        {
+            int64_t i = e->i;
+            printf("%lli", i);
+            break;
+        }
+        case EX_NUM:
+        {
+            double n = e->n;
+            printf("%g", n);
+            break;
+        }
+        case EX_NAME:
+        {
+            printf("%.*s", e->name->len, str_data(e->name));
+            break;
+        }
+        case EX_COMPOUND:
+        {
+            printf("{");
+            for(Field* c = e->comp.fields; c != vec_end(e->comp.fields); c++)
+            {
+                if(c->kind == FIELD_IDX)
+                {
+                    printf("[");
+                    ast_print_expr(c->idx);
+                    printf("] = ");
+                }
+                else if(c->kind == FIELD_NAME)
+                {
+                    printf("%s = ", str_data(c->name));
+                }
+                ast_print_expr(c->init);
+                if(c != vec_end(e->comp.fields) - 1)
+                {
+                    printf(", ");
+                }
+            }
+            printf("}");
+            break;
+        }
+        case EX_NEG:
+        case EX_NOT:
+        case EX_BNOT:
+        {
+            printf("%s", ast_unarynames[e->kind - EX_UNARY]);
+            printf("(");
+            ast_print_expr(e->unary);
+            printf(")");
+            break;
+        }
+        case EX_ADD:
+        case EX_SUB:
+        case EX_MUL:
+        case EX_DIV:
+        case EX_MOD:
+        case EX_BAND:
+        case EX_BOR:
+        case EX_BXOR:
+        case EX_LSHIFT:
+        case EX_RSHIFT:
+        case EX_EQ:
+        case EX_NOTEQ:
+        case EX_LT:
+        case EX_LE:
+        case EX_GT:
+        case EX_GE:
+        case EX_AND:
+        case EX_OR:
+        {
+            printf("(");
+            ast_print_expr(e->binop.lhs);
+            printf(" %s ", ast_binnames[e->kind - EX_BINOP]);
+            ast_print_expr(e->binop.rhs);
+            printf(")");
+            break;
+        }
+        default:
+            vp_assertX(0, "Unknown expression");
+            break;
+    }
+}
+
+void ast_print_stmt(Stmt* stm)
+{
+    switch(stm->kind)
+    {
+        case ST_RETURN:
+            ast_print_indent();
+            printf("return ");
+            ast_print_expr(stm->expr);
+            printf("\n");
+            break;
+        case ST_ASSIGN:
+            ast_print_indent();
+            ast_print_expr(stm->lhs);
+            printf(" = ");
+            ast_print_expr(stm->rhs);
+            printf("\n");
+            break;
+        case ST_EXPR:
+        {
+            ast_print_indent();
+            ast_print_expr(stm->expr);
+            printf("\n");
+            break;
+        }
+        case ST_BLOCK:
+        {
+            for(uint32_t i = 0; i < vec_len(stm->block); i++)
+            {
+                Stmt* st = stm->block[i];
+                ast_print_stmt(st);
+            }
+            break;
+        }
+        case ST_DECL:
+        {
+            vp_ast_print(stm->decl);
+            break;
+        }
+        default:
+            vp_assertX(0, "Unknown statement");
+            break;
+    }
+}
+
+void vp_ast_print(Decl* d)
+{
+    switch(d->kind)
+    {
+        case DECL_TYPE:
+            printf("type %s = ", str_data(d->name));
+            ast_print_typespec(d->ts.spec);
+            printf("\n");
+            break;
+        case DECL_VAR:
+        {
+            ast_print_indent();
+            printf("var %s", str_data(d->name));
+            if(d->var.spec)
+            {
+                printf(" : ");
+                ast_print_typespec(d->var.spec);
+            }
+            printf(" = ");
+            ast_print_expr(d->var.expr);
+            printf("\n");
+            break;
+        }
+        case DECL_FN:
+            printf("fn %s(", str_data(d->name));
+            for(uint32_t i = 0; i < vec_len(d->fn.params); i++)
+            {
+                Param* param = &d->fn.params[i];
+                printf("%s : ", str_data(param->name));
+                ast_print_typespec(param->spec);
+                if(i != vec_len(d->fn.params) - 1)
+                {
+                    printf(", ");
+                }
+            }
+            printf(")\n{\n");
+            indent++;
+            ast_print_stmt(d->fn.body);
+            indent--;
+            printf("}\n");
+            break;
+        case DECL_STRUCT:
+            printf("struct %s\n{\n", str_data(d->name));
+            indent++;
+            ast_print_aggr(d->agr);
+            indent--;
+            printf("}\n");
+            break;
+        default:
+            vp_assertX(0, "Unknown decl");
+            break;
+    }
 }

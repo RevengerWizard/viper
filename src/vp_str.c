@@ -7,6 +7,7 @@
 #include <stdlib.h>
 
 #include "vp_str.h"
+#include "vp_mem.h"
 #include "vp_tab.h"
 
 static Tab strtab;
@@ -56,7 +57,7 @@ Str* vp_str_new(const char* chars, uint32_t len)
     {
         return s;
     }
-    s = (Str*)malloc(vp_str_size(len));
+    s = (Str*)vp_mem_alloc(vp_str_size(len));
     s->reserved = 0;
     s->len = len;
     s->hash = hash;

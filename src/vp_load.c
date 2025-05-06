@@ -14,6 +14,8 @@
 #include "vp_lex.h"
 #include "vp_parse.h"
 #include "vp_state.h"
+#include "vp_ast.h"
+#include "vp_sema.h"
 
 typedef struct FileReaderCtx
 {
@@ -44,6 +46,7 @@ void vp_load(VpState* V, const char* filename)
     ls.rdata = &ctx;
     vp_buf_init(&ls.sb);
     vp_lex_setup(&ls);
-    vp_parse(V, &ls);
+    Decl** decls = vp_parse(V, &ls);
+    vp_sema(decls);
     fclose(ctx.fp);    
 }

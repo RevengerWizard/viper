@@ -45,12 +45,7 @@ typedef struct
     Prec prec;
 } ParseRule;
 
-static Scope* globscope;
-static Scope* curscope;
-
-static void print_stmt(Stmt* st);
-
-static void parse_error(const char* msg, ...)
+static void vp_parse_error(const char* msg, ...)
 {
     va_list args;
     va_start(args, msg);
@@ -89,94 +84,26 @@ static bool lex_match(LexState* ls, LexToken t)
 }
 
 /* Forward declarations */
+static Decl* parse_decl(LexState* ls);
 static ParseRule expr_rule(LexToken t);
 static Expr* expr_prec(LexState* ls, Prec prec);
 static Expr* expr(LexState* ls);
 
-static VarInit* var_init(LexState* ls)
-{
-    VarInit* vinit;
-    Expr* e = expr(ls);
-    vinit = vp_varinit_new(IK_SINGLE);
-    vinit->expr = e;
-    return vinit;
-}
-
-static VarInfo* var_add(vec_VarInfo_t* vars, Str* name, Type* type)
-{
-    VarInfo* vi = (VarInfo*)calloc(1, sizeof(*vi));
-    vi->name = name;
-    vi->ty = type;
-    vec_push(vars, vi);
-    return vi;
-}
-
-static int var_find(vec_VarInfo_t* vars, Str* name)
-{
-    for(uint32_t i = 0; i < vars->len; i++)
-    {
-        VarInfo* vi = vars->data[i];
-        if((vi->name->len == name->len) && 
-            memcmp(str_data(name), str_data(vi->name), name->len) == 0)
-        {
-            return i;
-        }
-    }
-    return -1;
-}
-
-/* -- Scope handling ------------------------------------------------ */
-
-static Scope* scope_begin(Scope* parent)
-{
-    Scope* scope = (Scope*)calloc(1, sizeof(*scope));
-    scope->parent = parent;
-    vec_init(&scope->vars);
-    return scope;
-}
-
-static VarInfo* scope_find(Scope* scope, Str* name, Scope** pscope)
-{
-    VarInfo* vi = NULL;
-    for(; scope != NULL; scope = scope->parent)
-    {
-        if(scope->vars.len)
-        {
-            int idx = var_find(&scope->vars, name);
-            if(idx >= 0)
-            {
-                vi = scope->vars.data[idx];
-                break;
-            }
-        }
-    }
-    if(pscope) *pscope = scope;
-    return vi;
-}
-
-static VarInfo* scope_addvar(Scope* scope, Str* name, Type* type)
-{
-    if(scope->vars.len)
-    {
-        int idx = var_find(&scope->vars, name);
-        if(idx != -1)
-        {
-            parse_error("%s already defined", str_data(name));
-        }
-    }
-
-    VarInfo* vi = var_add(&scope->vars, name, type);
-    return vi;
-}
-
+/* Parse literal expression */
 static Expr* expr_lit(LexState* ls)
 {
     switch(ls->prev)
     {
+        case TK_true:
+            return expr_true;
+        case TK_false:
+            return expr_false;
+        case TK_nil:
+            return expr_nil;
         case TK_integer:
-            return vp_expr_ilit(tyint32, ls->val.i);
+            return vp_expr_ilit(ls->val.i);
         case TK_number:
-            return vp_expr_flit(tydouble, ls->val.n);
+            return vp_expr_flit(ls->val.n);
         default:
             vp_assertX(false, "Unknown literal");
             break;
@@ -184,6 +111,7 @@ static Expr* expr_lit(LexState* ls)
     return NULL;    /* unreachable */
 }
 
+/* Parse grouping expression */
 static Expr* expr_group(LexState* ls)
 {
     Expr* e = expr(ls);
@@ -191,222 +119,73 @@ static Expr* expr_group(LexState* ls)
     return e;
 }
 
+/* Forward declaration */
+static TypeSpec* parse_type(LexState* ls);
+
+/* Parse cast expression */
+static Expr* expr_cast(LexState* ls)
+{
+    lex_consume(ls, '(');
+    TypeSpec* spec = parse_type(ls);
+    lex_consume(ls, ',');
+    Expr* e = expr(ls);
+    lex_consume(ls, ')');
+    return vp_expr_cast(spec, e);
+}
+
+/* Parse call expression */
+static Expr* expr_call(LexState* ls, Expr* lhs)
+{
+    Expr** args = NULL;
+    if(!lex_check(ls, ')'))
+    {
+        do
+        {
+            Expr* e = expr(ls);
+            vec_push(args, e);
+        }
+        while(lex_match(ls, ','));
+    }
+    lex_consume(ls, ')');
+    return vp_expr_call(lhs, args);
+}
+
+/* Parse index subscript expression */
+static Expr* expr_idx(LexState* ls, Expr* lhs)
+{
+    Expr* idx = expr(ls);
+    lex_consume(ls, ']');
+    return vp_expr_idx(lhs, idx);
+}
+
+/* Parse named field expression */
+static Expr* expr_dot(LexState* ls, Expr* lhs)
+{
+    lex_consume(ls, TK_name);
+    Str* name = ls->val.name;
+    return vp_expr_field(lhs, name);
+}
+
 /* Parse unary expression */
 static Expr* expr_unary(LexState* ls)
 {
     LexToken tok = ls->prev;
     Expr* expr = expr_prec(ls, PREC_UNARY);
+    ExprKind kind = 0;
     switch(tok)
     {
-        case '-':
-        {
-            Type* type = expr->ty;
-            if(!type_isnum(type))
-            {
-                parse_error("Cannot apply '-' except number types");
-            }
-            if(expr_isconst(expr))
-            {
-                expr->i = -expr->i;
-                expr->ty = type;
-            }
-            return vp_expr_unary(EX_NEG, type, expr);
-        }
+        case '-': kind = EX_NEG; break;
+        case '~': kind = EX_BNOT; break;
+        case '!':
+        case TK_not:
+            kind = EX_NOT;
+            break;
         default:
             vp_assertX(false, "Unknown unary op");
             break;
     }
-    return NULL;    /* unreachable */
+    return vp_expr_unary(kind, expr);
 }
-
-static Expr* expr_new_term(ExprKind kind, Expr* lhs, Expr* rhs)
-{
-    Type* type = NULL;
-    Type* ltype = lhs->ty;
-    Type* rtype = rhs->ty;
-    if(type_isnum(ltype) && type_isnum(rtype))
-    {
-        if(expr_isconst(lhs) && expr_isconst(rhs))
-        {
-            if(type_isflo(lhs->ty) || type_isflo(rhs->ty))
-            {
-                double lval = type_isflo(lhs->ty) ? lhs->n : (double)lhs->i;
-                double rval = type_isflo(rhs->ty) ? rhs->n : (double)rhs->i;
-                double val = 0;
-                switch(kind)
-                {
-                case EX_ADD: val = lval + rval; break;
-                case EX_SUB: val = lval - rval; break;
-                default: vp_assertX(false, "?"); break;
-                }
-                type = lhs->ty;
-                if(type_isflo(rhs->ty)) type = rhs->ty;
-                if(type_isflo(type))
-                    return vp_expr_flit(type, val);
-                else
-                    return vp_expr_ilit(type, (int64_t)val);
-            }
-            int64_t lval = lhs->i;
-            int64_t rval = rhs->i;
-            int64_t val = 0;
-            switch(kind)
-            {
-            case EX_ADD: val = lval + rval; break;
-            case EX_SUB: val = lval - rval; break;
-            default: vp_assertX(false, "?"); break;
-            }
-            type = tyint32;
-            return vp_expr_ilit(type, val);
-        }
-        type = lhs->ty;
-    }
-    if(type == NULL)
-    {
-        parse_error("Cannot apply %c", kind == EX_ADD ? '+' : '-');
-    }
-    return vp_expr_binop(kind, type, lhs, rhs);
-}
-
-#define CALC(kind, lval, rval, val) \
-    switch(kind) \
-    { \
-        case EX_MUL: val = lval * rval; break; \
-        case EX_DIV: val = lval / rval; break; \
-        default: vp_assertX(false, "?"); break; \
-    }
-
-static Expr* expr_new_fact(ExprKind kind, Expr* lhs, Expr* rhs)
-{
-    if(expr_isconst(rhs) && type_isnum(rhs->ty))
-    {
-        if(expr_isconst(lhs) && type_isnum(lhs->ty))
-        {
-            if(type_isflo(lhs->ty))
-            {
-                vp_assertX(type_isflo(rhs->ty), "float");
-                double lval = lhs->n;
-                double rval = rhs->n;
-                double val = 0;
-                switch(kind)
-                {
-                case EX_MUL: val = lval * rval; break;
-                case EX_DIV: val = lval / rval; break;
-                default: vp_assertX(false, "?"); break;
-                }
-                Type* type = lhs->ty;
-                if(type_isflo(rhs->ty)) type = rhs->ty;
-                if(type_isflo(type))
-                    return vp_expr_flit(type, val);
-                else
-                    return vp_expr_ilit(type, (int64_t)val);
-            }
-
-            if((kind == EX_DIV) && rhs->i == 0) goto end;
-
-            int64_t val = 0;
-            if(type_isunsigned(lhs->ty))
-            {
-                uint64_t lval = lhs->i;
-                uint64_t rval = rhs->i;
-                CALC(kind, lval, rval, val)
-            }
-            else
-            {
-                int64_t lval = lhs->i;
-                int64_t rval = rhs->i;
-                CALC(kind, lval, rval, val)
-            }
-            Type* type = lhs->ty->kind >= rhs->ty->kind ? lhs->ty : rhs->ty;
-            return vp_expr_ilit(type, val);
-        }
-        else
-        {
-            if(type_isflo(rhs->ty))
-            {
-                vp_assertX(type_isflo(lhs->ty), "float");
-                double rval = rhs->n;
-                switch(kind)
-                {
-                case EX_MUL:
-                    if(rval == 0.0)     /* 0.0 */
-                        return vp_expr_binop(EX_COMMA, lhs->ty, lhs, rhs);
-                    if(rval == -1.0)    /* -lhs */
-                        return vp_expr_unary(EX_NEG, lhs->ty, lhs);
-                    /* fallthrough */
-                case EX_DIV:
-                    if(rval == 1.0)
-                        return lhs;
-                    break;
-                default: break;
-                }
-                goto end;
-            }
-
-            int64_t rval = rhs->i;
-            switch(kind)
-            {
-            case EX_MUL:
-                if(rval == 0)   /* 0 */
-                    return vp_expr_binop(EX_COMMA, rhs->ty, lhs, rhs);
-                if(rval == -1)
-                    return vp_expr_unary(EX_NEG, lhs->ty, lhs);
-                /* fallthrough */
-            case EX_DIV:
-                if(rval == 1)
-                    return lhs;
-            default: break;
-            }
-        }
-    }
-    else
-    {
-        if(expr_isconst(lhs) && type_isnum(lhs->ty))
-        {
-            if(type_isflo(lhs->ty))
-            {
-                vp_assertX(type_isflo(rhs->ty), "float");
-                double lval = lhs->n;
-                switch(kind)
-                {
-                case EX_MUL:
-                    if(lval == 0.0)     /* 0.0 */
-                        return vp_expr_binop(EX_COMMA, lhs->ty, rhs, lhs);
-                    if(lval == 1.0)
-                        return rhs;
-                    if(lval == -1.0)    /* -rhs */
-                        return vp_expr_unary(EX_NEG, rhs->ty, rhs);
-                    break;
-                default: break;
-                }
-                goto end;
-            }
-
-            int64_t lval = rhs->i;
-            switch(kind)
-            {
-            case EX_MUL:
-                if(lval == 0)   /* 0 */
-                    return vp_expr_binop(EX_COMMA, lhs->ty, rhs, lhs);
-                if(lval == -1)
-                    return vp_expr_unary(EX_NEG, rhs->ty, rhs);
-                /* fallthrough */
-            case EX_DIV:
-                if(lval == 1)
-                    return rhs;
-            default: break;
-            }
-        }
-    }
-end:
-    if((kind == EX_DIV) && expr_isconst(rhs) 
-        && type_isint(rhs->ty) && rhs->i == 0)
-    {
-        fprintf(stderr, "Divide by 0\n");
-    }
-    return vp_expr_binop(kind, lhs->ty, lhs, rhs);
-}
-
-#undef CALC
 
 /* Parse binary expression */
 static Expr* expr_binary(LexState* ls, Expr* lhs)
@@ -414,47 +193,80 @@ static Expr* expr_binary(LexState* ls, Expr* lhs)
     LexToken tok = ls->prev;
     ParseRule rule = expr_rule(tok);
     Expr* rhs = expr_prec(ls, (Prec)(rule.prec + 1));
+    ExprKind kind = 0;
     switch(tok)
     {
-        case '+':
-            return expr_new_term(EX_ADD, lhs, rhs);
-        case '-':
-            return expr_new_term(EX_SUB, lhs, rhs);
-        case '*':
-            return expr_new_fact(EX_MUL, lhs, rhs);
-        case '/':
-            return expr_new_fact(EX_DIV, lhs, rhs);
+        case '+': kind = EX_ADD; break;
+        case '-': kind = EX_SUB; break;
+        case '*': kind = EX_MUL; break;
+        case '/': kind = EX_DIV; break;
+        case '%': kind = EX_MOD; break;
+        case '&': kind = EX_BAND; break;
+        case '|': kind = EX_BOR; break;
+        case '^': kind = EX_BXOR; break;
+        case TK_lshift: kind = EX_LSHIFT; break;
+        case TK_rshift: kind = EX_RSHIFT; break;
+        case TK_eq: kind = EX_EQ; break;
+        case TK_noteq: kind = EX_NOTEQ; break;
+        case '<': kind = EX_LT; break;
+        case TK_le: kind = EX_LE; break;
+        case '>': kind = EX_GT; break;
+        case TK_ge: kind = EX_GE; break;
+        case TK_and: kind = EX_AND; break;
+        case TK_or: kind = EX_OR; break;
         default:
             vp_assertX(false, "Unknown binary op");
             break;  /* Unreachable */
     }
-    return NULL;
+    return vp_expr_binop(kind, lhs, rhs);
 }
 
-static Expr* expr_assign(LexState* ls, Expr* lhs)
-{
-    LexToken tok = ls->prev;
-    ParseRule rule = expr_rule(tok);
-    Expr* rhs = expr_prec(ls, (Prec)(rule.prec));
-    if(tok == '=')
-    {
-        return vp_expr_binop(EX_ASSIGN, lhs->ty, lhs, rhs);
-    }
-    return NULL;
-}
-
+/* Parse name expression */
 static Expr* expr_name(LexState* ls)
 {
     Str* name = ls->val.name;
-    Scope* scope;
-    VarInfo* vi = scope_find(curscope, name, &scope);
-    Type* type;
-    if(vi == NULL)
+    return vp_expr_name(name);
+}
+
+static Field expr_field(LexState* ls)
+{
+    if(lex_match(ls, '['))
     {
-        parse_error("'%.*s' undeclared", name->len, str_data(name));
+        Expr* idx = expr(ls);
+        lex_consume(ls, ']');
+        lex_consume(ls, '=');
+        Expr* e = expr(ls);
+        return (Field){.kind = FIELD_IDX, .init = e, .idx = idx};
     }
-    type = vi->ty;
-    return vp_expr_name(name, type, scope);
+    else
+    {
+        Expr* e = expr(ls);
+        if(lex_match(ls, '='))
+        {
+            if(e->kind != EX_NAME)
+                vp_parse_error("Expected field name");
+            return (Field){.kind = FIELD_NAME, .init = e, .name = e->name};
+        }
+        else
+        {
+            return (Field){.kind = FIELD_DEFAULT, .init = e};
+        }
+    }
+}
+
+/* Parse compound literal expression */
+static Expr* expr_comp(LexState* ls)
+{
+    Field* fields = NULL;
+    while(!lex_check(ls, '}'))
+    {
+        Field c = expr_field(ls);
+        vec_push(fields, c);
+        if(!lex_match(ls, ','))
+            break;
+    }
+    lex_consume(ls, '}');
+    return vp_expr_comp(fields);
 }
 
 #define NONE                    (ParseRule){ NULL, NULL, PREC_NONE }
@@ -468,11 +280,31 @@ static ParseRule expr_rule(LexToken t)
 {
     switch(t)
     {
+        /* Literals */
+        case TK_true:
+        case TK_false:
+        case TK_nil:
         case TK_integer:
         case TK_number:
             return PREFIX(expr_lit);
+        case TK_name:
+            return PREFIX(expr_name);
+        case '{':
+            return PREFIX(expr_comp);
         case '(':
-            return RULE(expr_group, NULL, PREC_CALL);
+            return RULE(expr_group, expr_call, PREC_CALL);
+        case '[':
+            return RULE(NULL, expr_idx, PREC_CALL);
+        case '.':
+            return RULE(NULL, expr_dot, PREC_CALL);
+        case TK_cast:
+            return PREFIX(expr_cast);
+        /* Unary */
+        case TK_not:
+        case '!':
+        case '~':
+            return PREFIX(expr_unary);
+        /* Binary */
         case '+':
             return OPERATOR(expr_binary, PREC_TERM);
         case '-':
@@ -480,10 +312,29 @@ static ParseRule expr_rule(LexToken t)
         case '*':
         case '/':
             return OPERATOR(expr_binary, PREC_FACTOR);
-        case TK_name:
-            return PREFIX(expr_name);
-        case '=':
-            return OPERATOR(expr_assign, PREC_ASSIGN);
+        case '%':
+            return OPERATOR(expr_binary, PREC_FACTOR);
+        case '&':
+            return OPERATOR(expr_binary, PREC_BAND);
+        case '|':
+            return OPERATOR(expr_binary, PREC_BOR);
+        case '^':
+            return OPERATOR(expr_binary, PREC_BXOR);
+        case TK_lshift:
+        case TK_rshift:
+            return OPERATOR(expr_binary, PREC_SHIFT);
+        case TK_noteq:
+        case TK_eq:
+            return OPERATOR(expr_binary, PREC_EQUALITY);
+        case '<':
+        case '>':
+        case TK_ge:
+        case TK_le:
+            return OPERATOR(expr_binary, PREC_COMPARISON);
+        case TK_and:
+            return OPERATOR(expr_binary, PREC_AND);
+        case TK_or:
+            return OPERATOR(expr_binary, PREC_OR);
         default:
             return NONE;
     }
@@ -502,7 +353,7 @@ static Expr* expr_prec(LexState* ls, Prec prec)
     ParsePrefixFn prefix = expr_rule(ls->prev).prefix;
     if(prefix == NULL)
     {
-        parse_error("Expected expression");
+        vp_parse_error("Expected expression");
     }
 
     Expr* expr = prefix(ls);
@@ -521,73 +372,120 @@ static Expr* expr(LexState* ls)
     return expr_prec(ls, PREC_ASSIGN);
 }
 
-/* Parse type information (keyword or name) */
-static Type* parse_type(LexState* ls)
+static Type* parse_type_builtin(LexToken tok)
 {
-    Type* type = NULL;
-    switch(ls->curr)
+    Type* ty = NULL;
+    switch(tok)
     {
-    case TK_bool:
-        type = tybool;
-        break;
-    case TK_uint8:
-        type = tyuint8;
-        break;
-    case TK_uint16:
-        type = tyuint16;
-        break;
-    case TK_uint32:
-        type = tyuint32;
-        break;
-    case TK_uint64:
-        type = tyuint64;
-        break;
-    case TK_int8:
-        type = tyint8;
-        break;
-    case TK_int16:
-        type = tyint16;
-        break;
-    case TK_int32:
-        type = tyint32;
-        break;
-    case TK_int64:
-        type = tyint64;
-        break;
-    case TK_float:
-        type = tyfloat;
-        break;
-    case TK_double:
-        type = tydouble;
-        break;
-    default:
-        break;
+    case TK_void: ty = tyvoid; break;
+    case TK_bool: ty = tybool; break;
+    case TK_uint8: ty = tyuint8; break;
+    case TK_uint16: ty = tyuint16; break;
+    case TK_uint32: ty = tyuint32; break;
+    case TK_uint64: ty = tyuint64; break;
+    case TK_int8: ty = tyint8; break;
+    case TK_int16: ty = tyint16; break;
+    case TK_int32: ty = tyint32; break;
+    case TK_int64: ty = tyint64; break;
+    case TK_float: ty = tyfloat; break;
+    case TK_double: ty = tydouble; break;
+    default: break;
     }
-    vp_assertX(type != NULL, "Unknown type");
-    vp_lex_next(ls);    /* Skip type */
-    return type;
+    return ty;
+}
+
+static TypeSpec* parse_type_fn(LexState* ls)
+{
+    TypeSpec** args = NULL;
+    lex_consume(ls, '(');
+    if(!lex_check(ls, ')'))
+    {
+        do
+        {
+            TypeSpec* spec = parse_type(ls);
+            vec_push(args, spec);
+        }
+        while(lex_match(ls, ','));
+    }
+    lex_consume(ls, ')');
+    lex_consume(ls, ':');
+    TypeSpec* ret = parse_type(ls);
+    TypeSpec* spec = vp_typespec_fn(ret);
+    spec->fn.args = args;
+    return spec;
+}
+
+/* Parse type information (keyword or name) */
+static TypeSpec* parse_type(LexState* ls)
+{
+    TypeSpec* spec = NULL;
+    if(lex_match(ls, TK_name))
+    {
+        Str* name = ls->val.name;
+        spec = vp_typespec_name(name);
+    }
+    else if(lex_match(ls, TK_fn))
+    {
+        spec = parse_type_fn(ls);
+    }
+    else
+    {
+        Type* type = parse_type_builtin(ls->curr);
+        if(type == NULL)
+        {
+            vp_parse_error("Unexpected token type");
+        } 
+        vp_lex_next(ls);    /* Skip type */
+        spec = vp_typespec_type(type);
+    }
+    while(lex_check(ls, '*') || lex_check(ls, '['))
+    {
+        if(lex_match(ls, '['))
+        {
+            Expr* size = NULL;
+            if(!lex_check(ls, ']')) size = expr(ls);
+            lex_consume(ls, ']');
+            spec = vp_typespec_array(spec, size);
+        }
+        else
+        {
+            lex_consume(ls, '*');
+            spec = vp_typespec_ptr(spec);
+        }
+    }
+    return spec;
 }
 
 /* Forward declaration */
 static Stmt* parse_stmt(LexState* ls);
 
-/* Parse code block {} */
-static Stmt* parse_block(LexState* ls, Scope* scope)
+static Str* parse_name(LexState* ls)
 {
-    vec_Stmt_t stmts;
-    vec_init(&stmts);
+    lex_consume(ls, TK_name);
+    return ls->val.name;
+}
 
+/* Parse code block {} */
+static Stmt* parse_block(LexState* ls)
+{
+    Stmt** stmts = NULL;
     lex_consume(ls, '{');
     while(!lex_check(ls, '}') && !lex_check(ls, TK_eof))
     {
-        Stmt* st = parse_stmt(ls);
-        vec_push(&stmts, st);
+        Stmt* st = NULL;
+        Decl* d = parse_decl(ls);
+        if(d)
+        {
+            st = vp_stmt_decl(d);
+        }
+        else
+        {
+            st = parse_stmt(ls);
+        }
+        vec_push(stmts, st);
     }
     lex_consume(ls, '}');
-
-    Stmt* block = vp_stmt_block(scope);
-    block->block.stmts = stmts;
-    return block;
+    return vp_stmt_block(stmts);
 }
 
 /* Parse 'return' statement */
@@ -600,72 +498,143 @@ static Stmt* parse_return(LexState* ls)
 }
 
 /* Parse fn parameters */
-static void parse_params(LexState* ls, vec_Type_t* types)
+static Param* parse_params(LexState* ls)
 {
+    Param* params = NULL;
     lex_consume(ls, '(');
     if(!lex_check(ls, ')'))
     {
         do
         {
-            lex_consume(ls, TK_name);
+            Str* name = parse_name(ls);
             lex_consume(ls, ':');
-            Type* ty = parse_type(ls);
-            vec_push(types, ty);
+            TypeSpec* spec = parse_type(ls);
+            Param p = (Param){.name = name, .spec = spec};
+            vec_push(params, p);
         }
         while(lex_match(ls, ','));
     }
     lex_consume(ls, ')');
+    return params;
+}
+
+static Decl* parse_typedef(LexState* ls)
+{
+    vp_lex_next(ls);    /* Skip 'type' */
+    lex_consume(ls, TK_name);
+    Str* name = ls->val.name;
+    lex_consume(ls, '=');
+    TypeSpec* spec = parse_type(ls);
+    lex_consume(ls, ';');
+    return vp_decl_type(name, spec);
+}
+
+static Aggregate* parse_aggr(LexState* ls);
+
+static AggregateItem parse_aggr_item(LexState* ls)
+{
+    if(lex_match(ls, TK_struct))
+    {
+        return (AggregateItem) {
+            .kind = AGR_ITEM_SUB,
+            .sub = parse_aggr(ls)
+        };
+    }
+    else
+    {
+        Str** names = NULL;
+        do
+        {
+            Str* name = parse_name(ls);
+            vec_push(names, name);
+        }
+        while(lex_match(ls, ','));
+        lex_consume(ls, ':');
+        TypeSpec* spec = parse_type(ls);
+        lex_consume(ls, ';');
+        return (AggregateItem) {
+            .kind = AGR_ITEM_FIELD,
+            .names = names,
+            .type = spec
+        };
+    }
+}
+
+static Aggregate* parse_aggr(LexState* ls)
+{
+    lex_consume(ls, '{');
+
+    AggregateItem* items = NULL;
+    while(!lex_check(ls, '}') && !lex_check(ls, TK_eof))
+    {
+        AggregateItem item = parse_aggr_item(ls);
+        vec_push(items, item);
+    }
+    lex_consume(ls, '}');
+    Aggregate* aggr = vp_aggr_new(AGR_STRUCT);
+    aggr->items = items;
+    return aggr;
+}
+
+static Decl* parse_struct(LexState* ls)
+{
+    vp_lex_next(ls);    /* Skip 'struct' */
+    lex_consume(ls, TK_name);
+    Str* name = ls->val.name;
+    Aggregate* aggr = parse_aggr(ls);
+    return vp_decl_aggr(DECL_STRUCT, name, aggr);
 }
 
 /* Parse 'fn' declaration */
-static void parse_fn(LexState* ls)
+static Decl* parse_fn(LexState* ls)
 {
     vp_lex_next(ls);    /* Skip 'fn' */
     lex_consume(ls, TK_name);
     Str* name = ls->val.name;
 
-    vec_Type_t types;
-    vec_init(&types);
-
-    parse_params(ls, &types);
+    Param* params = parse_params(ls);
     lex_consume(ls, ':');
-    Type* ret = parse_type(ls);
-    Type* type = vp_type_func(ret);
-    if(types.len) type->fn.params = types;
+    TypeSpec* ret = parse_type(ls);
 
-    Fn* fn = vp_fn_new(type, name);
+    Decl* decl = vp_decl_fn(ret, name);
+    decl->fn.body = parse_block(ls);
+    decl->fn.params = params;
 
-    printf("fn %s : %s\n", str_data(name), vp_type_names[ret->kind]);
-
-    Scope* scope = scope_begin(curscope);
-    Stmt* stmt = parse_block(ls, scope);
-    print_stmt(stmt);
+    return decl;
 }
 
 /* Parse 'var' */
-static Stmt* parse_var(LexState* ls)
+static Decl* parse_var(LexState* ls)
 {
     vp_lex_next(ls);    /* Skip 'var' */
     lex_consume(ls, TK_name);
     Str* name = ls->val.name;
 
-    lex_consume(ls, ':');
-    Type* type = parse_type(ls);
-    VarInit* vinit = lex_match(ls, '=') ? var_init(ls) : NULL;
-    VarInfo* vi = scope_addvar(curscope, name, type);
-    vi->ty = type;
-    vi->loc.init = vinit;
+    TypeSpec* spec = NULL;
+    if(lex_match(ls, ':'))
+        spec = parse_type(ls);
+
+    Expr* e = lex_match(ls, '=') ? expr(ls) : NULL;
     lex_consume(ls, ';');
 
-    return vp_stmt_var(vi);
+    return vp_decl_var(name, spec, e);
 }
 
-/* Parse expression statement */
-static Stmt* parse_stmt_expr(LexState* ls)
+/* Parse simple statement */
+static Stmt* parse_stmt_simple(LexState* ls)
 {
     Expr* e = expr(ls);
+    Stmt* st;
+    if(lex_match(ls, '='))
+    {
+        st = vp_stmt_assign(e, expr(ls));
+    }
+    else
+    {
+        st = vp_stmt_expr(e);
+    }
     lex_consume(ls, ';');
-    return vp_stmt_expr(e);
+    return st;
 }
 
 /* Parse a statement */
@@ -674,165 +643,52 @@ static Stmt* parse_stmt(LexState* ls)
     Stmt* st;
     switch(ls->curr)
     {
-        case TK_var:
-            st = parse_var(ls);
-            break;
         case TK_return:
             st = parse_return(ls);
             break;
         case '{':
-            st = parse_block(ls, NULL);
+            st = parse_block(ls);
             break;
         default:
-            st = parse_stmt_expr(ls);
+            st = parse_stmt_simple(ls);
             break;
     }
     return st;
 }
 
 /* Parse a declaration */
-static void parse_decl(LexState* ls)
+static Decl* parse_decl(LexState* ls)
 {
+    Decl* d = NULL;
     switch(ls->curr)
     {
         case TK_fn:
-            parse_fn(ls);
+            d = parse_fn(ls);
+            break;
+        case TK_var:
+            d = parse_var(ls);
+            break;
+        case TK_type:
+            d = parse_typedef(ls);
+            break;
+        case TK_struct:
+            d = parse_struct(ls);
             break;
         default:
             break;
     }
+    return d;
 }
 
-static void print_expr(Expr* e)
+Decl** vp_parse(VpState* V, LexState* ls)
 {
-    switch(e->kind)
-    {
-        case EX_INT:
-        {
-            int64_t i = e->i;
-            printf("%lli", i);
-            break;
-        }
-        case EX_NUM:
-        {
-            double n = e->n;
-            printf("%g", n);
-            break;
-        }
-        case EX_NAME:
-        {
-            printf("%.*s", e->name.name->len, str_data(e->name.name));
-            break;
-        }
-        case EX_NEG:
-        {
-            printf("(");
-            print_expr(e->unary);
-            printf(")");
-            break;
-        }
-        case EX_ADD:
-        {
-            printf("(");
-            print_expr(e->binop.lhs);
-            printf(" + ");
-            print_expr(e->binop.rhs);
-            printf(")");
-            break;
-        }
-        case EX_SUB:
-        {
-            printf("(");
-            print_expr(e->binop.lhs);
-            printf(" - ");
-            print_expr(e->binop.rhs);
-            printf(")");
-            break;
-        }
-        case EX_MUL:
-        {
-            printf("(");
-            print_expr(e->binop.lhs);
-            printf(" * ");
-            print_expr(e->binop.rhs);
-            printf(")");
-            break;
-        }
-        case EX_DIV:
-        {
-            printf("(");
-            print_expr(e->binop.lhs);
-            printf(" / ");
-            print_expr(e->binop.rhs);
-            printf(")");
-            break;
-        }
-        case EX_COMMA:
-        {
-            printf("(");
-            print_expr(e->binop.lhs);
-            printf(", ");
-            print_expr(e->binop.rhs);
-            printf(")");
-            break;
-        }
-        case EX_ASSIGN:
-        {
-            print_expr(e->binop.lhs);
-            printf(" = ");
-            print_expr(e->binop.rhs);
-        }
-        default:
-            break;
-    }
-}
-
-static void print_stmt(Stmt* st)
-{
-    switch(st->kind)
-    {
-        case ST_VAR:
-        {
-            VarInfo* vi = st->vi;
-            printf("var %s", str_data(vi->name));
-            printf(" : %s = ", vp_type_names[vi->ty->kind]);
-            print_expr(vi->loc.init->expr);
-            printf("\n");
-            break;
-        }
-        case ST_RETURN:
-            printf("return ");
-            print_expr(st->expr);
-            printf("\n");
-            break;
-        case ST_EXPR:
-        {
-            print_expr(st->expr);
-            printf("\n");
-            break;
-        }
-        case ST_BLOCK:
-        {
-            for(int i = 0; i < st->block.stmts.len; i++)
-            {
-                Stmt* stm = st->block.stmts.data[i];
-                print_stmt(stm);
-            }
-            break;
-        }
-        default:
-            break;
-    }
-}
-
-void vp_parse(VpState* V, LexState* ls)
-{
-    globscope = scope_begin(NULL);
-    curscope = globscope;
-
     vp_lex_next(ls);    /* Read the first token into "next" */
+
+    Decl** decls = NULL;
     while(!lex_match(ls, TK_eof))
     {
-        parse_decl(ls);
+        Decl* d = parse_decl(ls);
+        vec_push(decls, d);
     }
+    return decls;
 }

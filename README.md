@@ -2,7 +2,7 @@
 
 Viper programming language.
 
-Just a toy compiler to understand how optimizing compilers work.
+Just a toy compiler to understand how compilers work.
 
 ```
 fn main() : int32
