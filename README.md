@@ -7,7 +7,7 @@ Just a toy compiler to understand how compilers work.
 ```
 fn main() : int32
 {
-    return 42
+    return 42;
 }
 ```
 
