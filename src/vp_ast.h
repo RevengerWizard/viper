@@ -6,6 +6,7 @@
 #ifndef _VP_AST_H
 #define _VP_AST_H
 
+#include "vp_lex.h"
 #include "vp_str.h"
 #include "vp_type.h"
 
@@ -22,6 +23,7 @@ enum
 typedef struct TypeSpec
 {
     uint8_t kind;
+    SrcPos sp;
     union
     {
         Type* ty;
@@ -95,6 +97,7 @@ typedef enum FieldKind
 typedef struct Field
 {
     FieldKind kind;
+    SrcPos sp;
     struct Expr* init;
     union
     {
@@ -106,6 +109,7 @@ typedef struct Field
 typedef struct Expr
 {
     ExprKind kind;
+    SrcPos sp;
     union
     {
         bool b;
@@ -157,6 +161,7 @@ typedef enum StmtKind
 typedef struct Stmt
 {
     StmtKind kind;
+    SrcPos sp;
     union
     {
         Expr* expr;
@@ -172,6 +177,7 @@ typedef struct Stmt
 
 typedef struct Param
 {
+    SrcPos sp;
     Str* name;
     TypeSpec* spec;
 } Param;
@@ -186,6 +192,7 @@ typedef enum AggregateItemKind
 typedef struct AggregateItem
 {
     AggregateItemKind kind;
+    SrcPos sp;
     union
     {
         struct
@@ -212,6 +219,7 @@ typedef struct Aggregate
 
 typedef struct EnumItem
 {
+    SrcPos sp;
     Str* name;
     Expr* init;
 } EnumItem;
@@ -229,6 +237,7 @@ typedef enum DeclKind
 typedef struct Decl
 {
     DeclKind kind;
+    SrcPos sp;
     Str* name;
     union
     {
@@ -266,41 +275,40 @@ static inline bool expr_isconst(Expr* e)
     return e->kind == EX_INT || e->kind == EX_NUM;
 }
 
-extern Expr* expr_false;
-extern Expr* expr_true;
-extern Expr* expr_nil;
+Expr* vp_expr_binop(SrcPos sp, ExprKind kind, Expr* lhs, Expr* rhs);
+Expr* vp_expr_unary(SrcPos sp, ExprKind kind, Expr* expr);
+Expr* vp_expr_false(SrcPos sp);
+Expr* vp_expr_true(SrcPos sp);
+Expr* vp_expr_nil(SrcPos sp);
+Expr* vp_expr_ilit(SrcPos sp, int64_t i);
+Expr* vp_expr_flit(SrcPos sp, double n);
+Expr* vp_expr_str(SrcPos sp, Str* str);
+Expr* vp_expr_name(SrcPos sp, Str* name);
+Expr* vp_expr_comp(SrcPos sp, Field* fields);
+Expr* vp_expr_call(SrcPos sp, Expr* e, Expr** args);
+Expr* vp_expr_idx(SrcPos sp, Expr* e, Expr* idx);
+Expr* vp_expr_field(SrcPos sp, Expr* e, Str* name);
+Expr* vp_expr_cast(SrcPos sp, TypeSpec* spec, Expr* e);
 
-Expr* vp_expr_binop(ExprKind kind, Expr* lhs, Expr* rhs);
-Expr* vp_expr_unary(ExprKind kind, Expr* expr);
-Expr* vp_expr_ilit(int64_t i);
-Expr* vp_expr_flit(double n);
-Expr* vp_expr_str(Str* str);
-Expr* vp_expr_name(Str* name);
-Expr* vp_expr_comp(Field* fields);
-Expr* vp_expr_call(Expr* e, Expr** args);
-Expr* vp_expr_idx(Expr* e, Expr* idx);
-Expr* vp_expr_field(Expr* e, Str* name);
-Expr* vp_expr_cast(TypeSpec* spec, Expr* e);
+Stmt* vp_stmt_assign(SrcPos sp, Expr* lhs, Expr* rhs);
+Stmt* vp_stmt_expr(SrcPos sp, Expr* e);
+Stmt* vp_stmt_decl(SrcPos sp, Decl* d);
+Stmt* vp_stmt_block(SrcPos sp, Stmt** block);
+Stmt* vp_stmt_return(SrcPos sp, Expr* e);
 
-Stmt* vp_stmt_assign(Expr* lhs, Expr* rhs);
-Stmt* vp_stmt_expr(Expr* e);
-Stmt* vp_stmt_decl(Decl* d);
-Stmt* vp_stmt_block(Stmt** block);
-Stmt* vp_stmt_return(Expr* e);
-
-Decl* vp_decl_fn(TypeSpec* ret, Str* name);
-Decl* vp_decl_var(Str* name, TypeSpec* spec, Expr* e);
-Decl* vp_decl_type(Str* name, TypeSpec* spec);
-Decl* vp_decl_aggr(DeclKind kind, Str* name, Aggregate* agr);
+Decl* vp_decl_fn(SrcPos sp, TypeSpec* ret, Str* name);
+Decl* vp_decl_var(SrcPos sp, Str* name, TypeSpec* spec, Expr* e);
+Decl* vp_decl_type(SrcPos sp, Str* name, TypeSpec* spec);
+Decl* vp_decl_aggr(SrcPos sp, DeclKind kind, Str* name, Aggregate* agr);
 Decl* vp_decl_enum(Str* name, TypeSpec* spec);
 
-Aggregate* vp_aggr_new(AggregateKind kind);
+Aggregate* vp_aggr_new(SrcPos sp, AggregateKind kind, AggregateItem* items);
 
-TypeSpec* vp_typespec_name(Str* name);
-TypeSpec* vp_typespec_type(Type* ty);
-TypeSpec* vp_typespec_ptr(TypeSpec* base);
-TypeSpec* vp_typespec_array(TypeSpec* base, Expr* e);
-TypeSpec* vp_typespec_fn(TypeSpec* ret);
+TypeSpec* vp_typespec_name(SrcPos sp, Str* name);
+TypeSpec* vp_typespec_type(SrcPos sp, Type* ty);
+TypeSpec* vp_typespec_ptr(SrcPos sp, TypeSpec* base);
+TypeSpec* vp_typespec_array(SrcPos sp, TypeSpec* base, Expr* e);
+TypeSpec* vp_typespec_fn(SrcPos sp, TypeSpec* ret, TypeSpec** args);
 
 void vp_ast_print(Decl* d);
 

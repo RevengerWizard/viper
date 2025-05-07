@@ -48,8 +48,17 @@ enum
     TK_RESERVED = TK_return - TK_OFS
 };
 
+typedef uint32_t LexLine;   /* Lexical line */
+
 typedef int LexChar;    /* Lexical character */
 typedef int LexToken;   /* Lexical token */
+
+/* Source line position */
+typedef struct SrcPos
+{
+    LexLine line;   /* Line number */
+    const char* name;   /* File name */
+} SrcPos;
 
 /* Lexical value */
 typedef union LexValue
@@ -77,11 +86,13 @@ typedef struct LexState
     LexToken curr;  /* Lookahead token */
     LexValue val;   /* Current token value */
     LexValue nextval;   /* Lookahead token value */
+    const char* name;   /* File name */
+    LexLine linenumber; /* Line counter */
 } LexState;
 
 void vp_lex_setup(LexState* ls);
 const char* vp_lex_tok2str(LexState* ls, LexToken t);
-void vp_lex_error(const char* msg, ...);
+void vp_lex_error(LexState* ls, LexLine line, const char* msg, ...);
 void vp_lex_next(LexState* ls);
 void vp_lex_init();
 

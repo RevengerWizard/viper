@@ -27,8 +27,10 @@ fn add(a : int32, b : int32, c : float[12]) : int32
 
 fn main() : int32
 {
-    var s : int8* = "hello nobody\0333";
-    var hello : uint8 = '\033';
+    //var x : int32 = cast(int32, true);
+    var arr : int32[4] = {1, 2, 3, 4};
+    var s : int8* = "hello everybody";
+    var hello : uint8 = '\x65';
     var c : float = 0xf.f;
     var a : int32 = 3;
     var b : uint8 = a / 34;

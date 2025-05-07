@@ -59,7 +59,7 @@ uint32_t vp_type_sizeof(Type* t)
         case TY_FUNC:
             return 8;
         case TY_ARRAY:
-            return vp_type_sizeof(t) * t->len;
+            return vp_type_sizeof(t->p) * t->len;
         case TY_STRUCT:
         case TY_UNION:
             return t->st.size;
@@ -217,7 +217,7 @@ Type* vp_type_arr(Type* t, uint32_t len)
             return p->arr;
     }
     Type* ty = (Type*)vp_mem_calloc(1, sizeof(*ty));
-    ty->kind = TY_PTR;
+    ty->kind = TY_ARRAY;
     ty->p = t;
     ty->len = len;
     vec_push(carr, (CacheArrayType){t, len, ty});

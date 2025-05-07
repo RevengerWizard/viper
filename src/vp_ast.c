@@ -13,9 +13,7 @@
 #include "vp_str.h"
 #include "vp_vec.h"
 
-Expr* expr_false = &(Expr){.kind = EX_FALSE, {.b = false}};
-Expr* expr_true = &(Expr){.kind = EX_TRUE, {.b = true}};
-Expr* expr_nil = &(Expr){.kind = EX_NIL};
+/* -- AST expressions ----------------------------------------------- */
 
 static Expr* expr_new(ExprKind kind)
 {
@@ -24,87 +22,122 @@ static Expr* expr_new(ExprKind kind)
     return expr;
 }
 
-Expr* vp_expr_binop(ExprKind kind, Expr* lhs, Expr* rhs)
+Expr* vp_expr_binop(SrcPos sp, ExprKind kind, Expr* lhs, Expr* rhs)
 {
     Expr* expr = expr_new(kind);
+    expr->sp = sp;
     expr->binop.lhs = lhs;
     expr->binop.rhs = rhs;
     return expr;
 }
 
-Expr* vp_expr_unary(ExprKind kind, Expr* unary)
+Expr* vp_expr_unary(SrcPos sp, ExprKind kind, Expr* unary)
 {
     Expr* expr = expr_new(kind);
+    expr->sp = sp;
     expr->unary = unary;
     return expr;
 }
 
-Expr* vp_expr_ilit(int64_t i)
+Expr* vp_expr_false(SrcPos sp)
+{
+    Expr* expr = expr_new(EX_FALSE);
+    expr->sp = sp;
+    expr->b = false;
+    return expr;
+}
+
+Expr* vp_expr_true(SrcPos sp)
+{
+    Expr* expr = expr_new(EX_TRUE);
+    expr->sp = sp;
+    expr->b = true;
+    return expr;
+}
+
+Expr* vp_expr_nil(SrcPos sp)
+{
+    Expr* expr = expr_new(EX_NIL);
+    expr->sp = sp;
+    return expr;
+}
+
+Expr* vp_expr_ilit(SrcPos sp, int64_t i)
 {
     Expr* expr = expr_new(EX_INT);
+    expr->sp = sp;
     expr->i = i;
     return expr;
 }
 
-Expr* vp_expr_flit(double n)
+Expr* vp_expr_flit(SrcPos sp, double n)
 {
     Expr* expr = expr_new(EX_NUM);
+    expr->sp = sp;
     expr->n = n;
     return expr;
 }
 
-Expr* vp_expr_str(Str* str)
+Expr* vp_expr_str(SrcPos sp, Str* str)
 {
     Expr* expr = expr_new(EX_STR);
+    expr->sp = sp;
     expr->name = str;
     return expr;
 }
 
-Expr* vp_expr_name(Str* name)
+Expr* vp_expr_name(SrcPos sp, Str* name)
 {
     Expr* expr = expr_new(EX_NAME);
+    expr->sp = sp;
     expr->name = name;
     return expr;
 }
 
-Expr* vp_expr_comp(Field* fields)
+Expr* vp_expr_comp(SrcPos sp, Field* fields)
 {
     Expr* expr = expr_new(EX_COMPOUND);
+    expr->sp = sp;
     expr->comp.fields = fields;
     return expr;
 }
 
-Expr* vp_expr_call(Expr* e, Expr** args)
+Expr* vp_expr_call(SrcPos sp, Expr* e, Expr** args)
 {
     Expr* expr = expr_new(EX_CALL);
+    expr->sp = sp;
     expr->call.expr = e;
     expr->call.args = args;
     return expr;
 }
 
-Expr* vp_expr_idx(Expr* e, Expr* idx)
+Expr* vp_expr_idx(SrcPos sp, Expr* e, Expr* idx)
 {
     Expr* expr = expr_new(EX_IDX);
+    expr->sp = sp;
     expr->idx.expr = e;
     expr->idx.index = idx;
     return expr;
 }
 
-Expr* vp_expr_field(Expr* e, Str* name)
+Expr* vp_expr_field(SrcPos sp, Expr* e, Str* name)
 {
     Expr* expr = expr_new(EX_FIELD);
+    expr->sp = sp;
     expr->field.expr = e;
     expr->field.name = name;
     return expr;
 }
 
-Expr* vp_expr_cast(TypeSpec* spec, Expr* e)
+Expr* vp_expr_cast(SrcPos sp, TypeSpec* spec, Expr* e)
 {
     Expr* expr = expr_new(EX_CAST);
     expr->cast.spec = spec;
-    expr->field.expr = e;
+    expr->cast.expr = e;
     return expr;
 }
+
+/* -- AST statements ------------------------------------------------ */
 
 static Stmt* stmt_new(StmtKind kind)
 {
@@ -113,62 +146,71 @@ static Stmt* stmt_new(StmtKind kind)
     return st;
 }
 
-Stmt* vp_stmt_assign(Expr* lhs, Expr* rhs)
+Stmt* vp_stmt_assign(SrcPos sp, Expr* lhs, Expr* rhs)
 {
     Stmt* st = stmt_new(ST_ASSIGN);
+    st->sp = sp;
     st->lhs = lhs;
     st->rhs = rhs;
     return st;
 }
 
-Stmt* vp_stmt_expr(Expr* e)
+Stmt* vp_stmt_expr(SrcPos sp, Expr* e)
 {
     Stmt* st = stmt_new(ST_EXPR);
+    st->sp = sp;
     st->expr = e;
     return st;
 }
 
-Stmt* vp_stmt_decl(Decl* d)
+Stmt* vp_stmt_decl(SrcPos sp, Decl* d)
 {
     Stmt* st = stmt_new(ST_DECL);
+    st->sp = sp;
     st->decl = d;
     return st;
 }
 
-Stmt* vp_stmt_block(Stmt** block)
+Stmt* vp_stmt_block(SrcPos sp, Stmt** block)
 {
     Stmt* st = stmt_new(ST_BLOCK);
+    st->sp = sp;
     st->block = block;
     return st;
 }
 
-Stmt* vp_stmt_return(Expr* e)
+Stmt* vp_stmt_return(SrcPos sp, Expr* e)
 {
     Stmt* st = stmt_new(ST_RETURN);
+    st->sp = sp;
     st->expr = e;
     return st;
 }
 
-Decl* vp_decl_var(Str* name, TypeSpec* spec, Expr* e)
+/* -- AST declarations ---------------------------------------------- */
+
+Decl* vp_decl_var(SrcPos sp, Str* name, TypeSpec* spec, Expr* e)
 {
     Decl* d = (Decl*)vp_mem_calloc(1, sizeof(*d));
     d->kind = DECL_VAR;
+    d->sp = sp;
     d->name = name;
     d->var.spec = spec;
     d->var.expr = e;
     return d;
 }
 
-Decl* vp_decl_fn(TypeSpec* ret, Str* name)
+Decl* vp_decl_fn(SrcPos sp, TypeSpec* ret, Str* name)
 {
     Decl* d = (Decl*)vp_mem_calloc(1, sizeof(*d));
     d->kind = DECL_FN;
+    d->sp = sp;
     d->name = name;
     d->fn.ret = ret;
     return d;
 }
 
-Decl* vp_decl_type(Str* name, TypeSpec* spec)
+Decl* vp_decl_type(SrcPos sp, Str* name, TypeSpec* spec)
 {
     Decl* d = (Decl*)vp_mem_calloc(1, sizeof(*d));
     d->kind = DECL_TYPE;
@@ -177,10 +219,11 @@ Decl* vp_decl_type(Str* name, TypeSpec* spec)
     return d;
 }
 
-Decl* vp_decl_aggr(DeclKind kind, Str* name, Aggregate* agr)
+Decl* vp_decl_aggr(SrcPos sp, DeclKind kind, Str* name, Aggregate* agr)
 {
     Decl* d = (Decl*)vp_mem_calloc(1, sizeof(*d));
     d->kind = kind;
+    d->sp = sp;
     d->agr = agr;
     d->name = name;
     return d;
@@ -194,38 +237,44 @@ Decl* vp_decl_enum(Str* name, TypeSpec* spec)
     return d;
 }
 
-Aggregate* vp_aggr_new(AggregateKind kind)
+Aggregate* vp_aggr_new(SrcPos sp, AggregateKind kind, AggregateItem* items)
 {
     Aggregate* ag = (Aggregate*)vp_mem_calloc(1, sizeof(*ag));
     ag->kind = kind;
+    ag->items = items;
     return ag;
 }
 
-TypeSpec* vp_typespec_name(Str* name)
+/* -- AST type specs ------------------------------------------------ */
+
+TypeSpec* vp_typespec_name(SrcPos sp, Str* name)
 {
     TypeSpec* ts = (TypeSpec*)vp_mem_calloc(1, sizeof(*ts));
     ts->kind = SPEC_NAME;
+    ts->sp = sp;
     ts->name = name;
     return ts;
 }
 
-TypeSpec* vp_typespec_type(Type* ty)
+TypeSpec* vp_typespec_type(SrcPos sp, Type* ty)
 {
     TypeSpec* ts = (TypeSpec*)vp_mem_calloc(1, sizeof(*ts));
     ts->kind = SPEC_TYPE;
+    ts->sp = sp;
     ts->ty = ty;
     return ts;
 }
 
-TypeSpec* vp_typespec_ptr(TypeSpec* base)
+TypeSpec* vp_typespec_ptr(SrcPos sp, TypeSpec* base)
 {
     TypeSpec* ts = (TypeSpec*)vp_mem_calloc(1, sizeof(*ts));
     ts->kind = SPEC_PTR;
+    ts->sp = sp;
     ts->ptr = base;
     return ts;
 }
 
-TypeSpec* vp_typespec_array(TypeSpec* base, Expr* e)
+TypeSpec* vp_typespec_array(SrcPos sp, TypeSpec* base, Expr* e)
 {
     TypeSpec* ts = (TypeSpec*)vp_mem_calloc(1, sizeof(*ts));
     ts->kind = SPEC_ARRAY;
@@ -234,13 +283,16 @@ TypeSpec* vp_typespec_array(TypeSpec* base, Expr* e)
     return ts;
 }
 
-TypeSpec* vp_typespec_fn(TypeSpec* ret)
+TypeSpec* vp_typespec_fn(SrcPos sp, TypeSpec* ret, TypeSpec** args)
 {
     TypeSpec* ts = (TypeSpec*)vp_mem_calloc(1, sizeof(*ts));
     ts->kind = SPEC_FUNC;
     ts->fn.ret = ret;
+    ts->fn.args = args;
     return ts;
 }
+
+/* -- AST printing -------------------------------------------------- */
 
 static const char* const ast_binnames[] = {
     "+", "-", "*", "/", "%", "&", "|", "^", "<<", ">>", "==", "!=", "<", "<=", ">", ">=", "and", "or"
@@ -413,6 +465,15 @@ static void ast_print_expr(Expr* e)
             ast_print_expr(e->binop.lhs);
             printf(" %s ", ast_binnames[e->kind - EX_BINOP]);
             ast_print_expr(e->binop.rhs);
+            printf(")");
+            break;
+        }
+        case EX_CAST:
+        {
+            printf("cast(");
+            ast_print_typespec(e->cast.spec);
+            printf(", ");
+            ast_print_expr(e->cast.expr);
             printf(")");
             break;
         }

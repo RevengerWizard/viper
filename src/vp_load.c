@@ -44,6 +44,7 @@ void vp_load(VpState* V, const char* filename)
     LexState ls;
     ls.reader = reader;
     ls.rdata = &ctx;
+    ls.name = filename;
     vp_buf_init(&ls.sb);
     vp_lex_setup(&ls);
     Decl** decls = vp_parse(V, &ls);

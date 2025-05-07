@@ -12,6 +12,11 @@
 #include <stdint.h>
 #include <limits.h>
 
+#define VP_MAX_MEM32   0x7fffff00  /* Max. 32 bit memory allocation */
+#define VP_MAX_MEM64 ((uint64_t)1 << 47) /* Max. 64 bit memory allocation */
+
+#define VP_MAX_LINE VP_MAX_MEM32
+
 #define VP_BUFFER_SIZE 1024
 
 #define VP_MIN_SBUF 32
