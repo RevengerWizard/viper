@@ -274,6 +274,7 @@ Expr* vp_expr_binop(ExprKind kind, Expr* lhs, Expr* rhs);
 Expr* vp_expr_unary(ExprKind kind, Expr* expr);
 Expr* vp_expr_ilit(int64_t i);
 Expr* vp_expr_flit(double n);
+Expr* vp_expr_str(Str* str);
 Expr* vp_expr_name(Str* name);
 Expr* vp_expr_comp(Field* fields);
 Expr* vp_expr_call(Expr* e, Expr** args);

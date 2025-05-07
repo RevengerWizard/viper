@@ -896,6 +896,9 @@ static Operand sema_expr_ty(Expr* e, Type* ret)
         case EX_NUM:
             res = opr_rval(tyfloat);
             break;
+        case EX_STR:
+            res = opr_rval(vp_type_ptr(tyuint8));
+            break;
         case EX_NAME:
             res = sema_expr_name(e);
             break;

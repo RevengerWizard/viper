@@ -104,6 +104,8 @@ static Expr* expr_lit(LexState* ls)
             return vp_expr_ilit(ls->val.i);
         case TK_number:
             return vp_expr_flit(ls->val.n);
+        case TK_string:
+            return vp_expr_str(ls->val.name);
         default:
             vp_assertX(false, "Unknown literal");
             break;
@@ -286,6 +288,7 @@ static ParseRule expr_rule(LexToken t)
         case TK_nil:
         case TK_integer:
         case TK_number:
+        case TK_string:
             return PREFIX(expr_lit);
         case TK_name:
             return PREFIX(expr_name);

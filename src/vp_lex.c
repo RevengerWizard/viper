@@ -111,6 +111,239 @@ static LexChar lex_number(LexState* ls, LexValue* v)
     return TK_eof;
 }
 
+/* Parse decimal escape '\ddd' */
+static LexChar lex_dec_escape(LexState* ls, LexChar c)
+{
+    if(!vp_char_isdigit(c))
+        goto err_xesc;
+    c -= '0'; /* Decimal escape '\ddd' */
+    if(vp_char_isdigit(lex_next(ls)))
+    {
+        c = c * 10 + (ls->c - '0');
+        if(vp_char_isdigit(lex_next(ls)))
+        {
+            c = c * 10 + (ls->c - '0');
+            if(c > 255)
+            {
+            err_xesc:
+                return -1;
+            }
+            lex_next(ls);
+        }
+    }
+    return c;
+}
+
+/* Parse hex escape '\xXX' */
+static LexChar lex_hex_escape(LexState* ls)
+{
+    LexChar c = (lex_next(ls) & 15u) << 4;
+    if(!vp_char_isdigit(ls->c))
+    {
+        if(!vp_char_isxdigit(ls->c))
+            return -1;
+        c += 9 << 4;
+    }
+    c += (lex_next(ls) & 15u);
+    if(!vp_char_isdigit(ls->c))
+    {
+        if(!vp_char_isxdigit(ls->c))
+            return -1;
+        c += 9;
+    }
+    return c;
+}
+
+/* Parse unicode escapes '\uXXXX' or '\UXXXXXXXX' */
+static int lex_unicode_escape(LexState* ls, int len)
+{
+    LexChar c = 0;
+    for(int i = 0; i < len; i++)
+    {
+        c = (c << 4) | (ls->c & 15u);
+        if(!vp_char_isdigit(ls->c))
+        {
+            if(!vp_char_isxdigit(ls->c))
+                return -1;
+            c += 9;
+        }
+        if(c >= 0x110000)
+            return -1;  /* Out of Unicode range */
+        lex_next(ls);
+    }
+    if(c < 0x800)
+    {
+        if(c < 0x80)
+            return c;
+        lex_save(ls, 0xc0 | (c >> 6));
+    }
+    else
+    {
+        if(c >= 0x10000)
+        {
+            lex_save(ls, 0xf0 | (c >> 18));
+            lex_save(ls, 0x80 | ((c >> 12) & 0x3f));
+        }
+        else
+        {
+            if(c >= 0xd800 && c < 0xe000)
+                return -1; /* No surrogates */
+            lex_save(ls, 0xe0 | (c >> 12));
+        }
+        lex_save(ls, 0x80 | ((c >> 6) & 0x3f));
+    }
+    c = 0x80 | (c & 0x3f);
+    return c;
+}
+
+/* Parse a string */
+static LexChar lex_string(LexState* ls, LexValue* val)
+{
+    while(ls->c != '"')
+    {
+        switch(ls->c)
+        {
+            case LEX_EOF:
+            case '\n':
+            case '\r':
+            {
+                vp_lex_error("Unterminated string");
+            }
+            case '\\':
+            {
+                LexChar c = lex_next(ls);  /* Skip the '\\' */
+                switch(ls->c)
+                {
+                    case LEX_EOF: continue; /* Will raise an error next loop */
+                    case '\"': c = '\"'; break;
+                    case '\'': c = '\''; break;
+                    case '\\': c = '\\'; break;
+                    case 'a': c = '\a'; break;
+                    case 'b': c = '\b'; break;
+                    case 'e': c = '\033'; break;
+                    case 'f': c = '\f'; break;
+                    case 'n': c = '\n'; break;
+                    case 'r': c = '\r'; break;
+                    case 't': c = '\t'; break;
+                    case 'v': c = '\v'; break;
+                    case 'x':   /* Hexadecimal escape '\xXX' */
+                    {
+                        c = lex_hex_escape(ls);
+                        if(c == -1)
+                        {
+                            vp_lex_error("Incomplete hex escape sequence");
+                        }
+                        break;
+                    }
+                    case 'u':   /* Unicode escapes '\uXXXX' and '\uXXXXXXXX' */
+                    case 'U':
+                    {
+                        int u = (ls->c == 'u') * 4 + (ls->c == 'U') * 8;
+                        lex_next(ls);
+                        c = lex_unicode_escape(ls, u);
+                        if(c == -1)
+                        {
+                            vp_lex_error("Incomplete unicode escape sequence");
+                        }
+                        lex_save(ls, c);
+                        continue;
+                    }
+                    default:
+                    {
+                        c = lex_dec_escape(ls, c);
+                        if(c == -1)
+                        {
+                            vp_lex_error("Invalid decimal escape character");
+                        }
+                        lex_save(ls, c);
+                        continue;
+                    }
+                }
+                lex_save(ls, c);
+                lex_next(ls);
+                break;
+            }
+            default:
+            {
+                lex_savenext(ls);
+                break;
+            }
+        }
+    }
+    lex_savenext(ls);   /* Skip and save " */
+    Str* str = vp_str_new(ls->sb.b + 1, sbuf_len(&ls->sb) - 2);
+    val->name = str;
+    return TK_string;
+}
+
+/* Parse a char literal */
+static LexChar lex_char(LexState* ls, LexValue* val)
+{
+    LexChar c = 0;
+    switch(ls->c)
+    {
+        case LEX_EOF:
+        case '\n':
+        case '\r':
+            vp_lex_error("Unterminated char");
+            break;
+        case '\'':
+            vp_lex_error("Char literal cannot be empty");
+            break;
+        case '\\':
+        {
+            c = lex_next(ls);  /* Skip the '\\' */
+            switch(ls->c)
+            {
+                case LEX_EOF: vp_lex_error("Unterminated char"); break;
+                case '\"': c = '\"'; break;
+                case '\'': c = '\''; break;
+                case '\\': c = '\\'; break;
+                case 'a': c = '\a'; break;
+                case 'b': c = '\b'; break;
+                case 'e': c = '\033'; break;
+                case 'f': c = '\f'; break;
+                case 'n': c = '\n'; break;
+                case 'r': c = '\r'; break;
+                case 't': c = '\t'; break;
+                case 'v': c = '\v'; break;
+                case 'x':   /* Hexadecimal escape '\xXX' */
+                {
+                    c = lex_hex_escape(ls);
+                    if(c == -1)
+                    {
+                        vp_lex_error("Incomplete hex escape sequence");
+                    }
+                    goto finish;
+                }
+                default:
+                {
+                    c = lex_dec_escape(ls, c);
+                    if(c == -1)
+                    {
+                        vp_lex_error("Invalid decimal escape character");
+                    }
+                    goto finish;
+                }
+            }
+            lex_next(ls);
+            break;
+        }
+        default:
+            c = ls->c;
+            lex_next(ls);
+            break;
+    }
+finish:
+    if(ls->c != '\'')
+    {
+        vp_lex_error("Unterminated char");
+    }
+    lex_next(ls);   /* Skip ' */
+    val->i = c;
+    return TK_integer;
+}
+
 /* Get next lexical token */
 static LexToken lex_scan(LexState* ls, LexValue* val)
 {
@@ -270,6 +503,16 @@ static LexToken lex_scan(LexState* ls, LexValue* val)
                 lex_next(ls);
                 if(ls->c == '=') { lex_next(ls); return TK_bxoreq; }
                 return '^';
+            }
+            case '"':
+            {
+                lex_savenext(ls);
+                return lex_string(ls, val);
+            }
+            case '\'':
+            {
+                lex_savenext(ls);
+                return lex_char(ls, val);
             }
             default:
             {

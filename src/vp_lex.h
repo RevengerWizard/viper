@@ -33,7 +33,8 @@
     __(muleq, *=) __(diveq, /=) __(modeq, %=) \
     __(bandeq, &=) __(boreq, |=) __(bxoreq, ^=) \
     __(lshifteq, <<=) __(rshifteq, >>=) \
-    __(name, <name>) __(integer, <integer>) __(number, <number>) \
+    __(name, <name>) __(string, <string>) \
+    __(integer, <integer>) __(number, <number>) \
     __(eof, <eof>)
 
 enum

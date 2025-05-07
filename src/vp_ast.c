@@ -53,6 +53,13 @@ Expr* vp_expr_flit(double n)
     return expr;
 }
 
+Expr* vp_expr_str(Str* str)
+{
+    Expr* expr = expr_new(EX_STR);
+    expr->name = str;
+    return expr;
+}
+
 Expr* vp_expr_name(Str* name)
 {
     Expr* expr = expr_new(EX_NAME);
@@ -337,6 +344,11 @@ static void ast_print_expr(Expr* e)
         {
             double n = e->n;
             printf("%g", n);
+            break;
+        }
+        case EX_STR:
+        {
+            printf("\"%.*s\"", e->name->len, str_data(e->name));
             break;
         }
         case EX_NAME:
