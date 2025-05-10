@@ -78,8 +78,8 @@ typedef enum ExprKind
     EX_NEG = EX_UNARY,
     EX_NOT,
     EX_BNOT,
-    EX_REF,
-    EX_DEREF,
+    EX_REF, /* &x */
+    EX_DEREF,   /* *x */
 
     EX_CAST,
     EX_CALL,
@@ -274,6 +274,12 @@ static inline bool expr_isconst(Expr* e)
 {
     return e->kind == EX_INT || e->kind == EX_NUM;
 }
+
+#define ast_binname(i) (vp_ast_binop[(i) - EX_BINOP])
+#define ast_unaryname(i) (vp_ast_unary[(i) - EX_UNARY])
+
+extern const char* const vp_ast_binop[];
+extern const char* const vp_ast_unary[];
 
 Expr* vp_expr_binop(SrcPos sp, ExprKind kind, Expr* lhs, Expr* rhs);
 Expr* vp_expr_unary(SrcPos sp, ExprKind kind, Expr* expr);

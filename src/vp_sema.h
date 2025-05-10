@@ -36,6 +36,7 @@ typedef struct Sym
 
 typedef union Val
 {
+    bool b;
     uint8_t u8;
     int8_t i8;
     uint16_t u16;

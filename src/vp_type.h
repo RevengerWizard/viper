@@ -28,19 +28,14 @@ typedef enum TypeKind
     /* Floats */
     TY_FLOAT,
     TY_DOUBLE,
-    TY_NIL,
     TY_PTR,
-    TY_ARRAY,
     TY_FUNC,
+    TY_ARRAY,
     TY_STRUCT,
     TY_UNION,
     TY_VOID,
+    TY_NIL,
 } TypeKind;
-
-enum
-{
-    TQ_CONST = 1 << 0
-};
 
 typedef struct TypeField
 {
@@ -52,7 +47,6 @@ typedef struct TypeField
 typedef struct Type
 {
     TypeKind kind;
-    uint8_t qual;
     struct Sym* sym;
     union
     {
@@ -75,6 +69,24 @@ typedef struct Type
         } st;
     };
 } Type;
+
+/* Unsigned */
+extern Type* tybool;
+extern Type* tyuint8;
+extern Type* tyuint16;
+extern Type* tyuint32;
+extern Type* tyuint64;
+/* Signed */
+extern Type* tyint8;
+extern Type* tyint16;
+extern Type* tyint32;
+extern Type* tyint64;
+/* Floats */
+extern Type* tyfloat;
+extern Type* tydouble;
+
+extern Type* tyvoid;
+extern Type* tynil;
 
 static inline bool type_isbool(const Type* t)
 {
@@ -109,12 +121,37 @@ static inline bool type_isnum(const Type* t)
 
 static inline bool type_isptr(const Type* t)
 {
-    return t->kind == TY_PTR || t->kind == TY_NIL;
+    return t->kind == TY_PTR;
 }
 
-static inline bool type_ispri(const Type* t)
+static inline bool type_isptrlike(const Type* t)
 {
-    return type_isnum(t) || t->kind == TY_PTR || t->kind == TY_BOOL;
+    return t->kind == TY_PTR || t->kind == TY_FUNC;
+}
+
+static inline bool type_isarrempty(const Type* t)
+{
+    return t->kind == TY_ARRAY && t->len == 0;
+}
+
+static inline bool type_isnil(const Type* t)
+{
+    return t == tynil;
+}
+
+static inline bool type_isscalar(const Type* t)
+{
+    return TY_BOOL <= t->kind && t->kind <= TY_FUNC;
+}
+
+static inline bool type_isaggr(const Type* t)
+{
+    return t->kind == TY_STRUCT || t->kind == TY_UNION;
+}
+
+static inline bool type_isfunc(const Type* t)
+{
+    return t->kind == TY_FUNC;
 }
 
 static inline int type_rank(const Type* t)
@@ -122,35 +159,25 @@ static inline int type_rank(const Type* t)
     return (t->kind - TY_UINT8) + 1;
 }
 
-/* Unsigned */
-extern Type* tybool;
-extern Type* tyuint8;
-extern Type* tyuint16;
-extern Type* tyuint32;
-extern Type* tyuint64;
-/* Signed */
-extern Type* tyint8;
-extern Type* tyint16;
-extern Type* tyint32;
-extern Type* tyint64;
-/* Floats */
-extern Type* tyfloat;
-extern Type* tydouble;
-
-extern Type* tyvoid;
-extern Type* tynil;
+#define type_name(i) (vp_type_names[(i)])
 
 extern const char* const vp_type_names[];
 
 uint32_t vp_type_sizeof(Type* t);
 uint32_t vp_type_alignof(Type* t);
-bool vp_type_isconv(Type* dest, Type* src);
+bool vp_type_isconv(Type* dst, Type* src);
+bool vp_type_iscast(Type* dst, Type* src);
 Type* vp_type_tounsigned(Type* t);
+Type* vp_type_decay(Type* t);
+Type* vp_type_decayempty(Type* t);
 Type* vp_type_none(struct Sym* sym);
 Type* vp_type_ptr(Type* t);
 Type* vp_type_arr(Type* t, uint32_t size);
 Type* vp_type_func(Type* ret, Type** params);
-void vp_type_struct(Type* ty, TypeField* fields);
-void vp_type_union(Type* ty, TypeField* fields);
+void vp_type_struct(Str* name, Type* ty, TypeField* fields);
+void vp_type_union(Str* name, Type* ty, TypeField* fields);
+
+void vp_type_print(Type* ty);
+void vp_type_printcache();
 
 #endif

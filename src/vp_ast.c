@@ -11,7 +11,16 @@
 #include "vp_def.h"
 #include "vp_mem.h"
 #include "vp_str.h"
+#include "vp_type.h"
 #include "vp_vec.h"
+
+const char* const vp_ast_binop[] = {
+    "+", "-", "*", "/", "%", "&", "|", "^", "<<", ">>", "==", "!=", "<", "<=", ">", ">=", "and", "or"
+};
+
+const char* const vp_ast_unary[] = {
+    "-", "not ", "~"
+};
 
 /* -- AST expressions ----------------------------------------------- */
 
@@ -294,14 +303,6 @@ TypeSpec* vp_typespec_fn(SrcPos sp, TypeSpec* ret, TypeSpec** args)
 
 /* -- AST printing -------------------------------------------------- */
 
-static const char* const ast_binnames[] = {
-    "+", "-", "*", "/", "%", "&", "|", "^", "<<", ">>", "==", "!=", "<", "<=", ">", ">=", "and", "or"
-};
-
-static const char* const ast_unarynames[] = {
-    "-", "not", "~"
-};
-
 static int indent = 0;
 
 static void ast_print_expr(Expr* e);
@@ -319,7 +320,7 @@ static void ast_print_typespec(TypeSpec* spec)
             printf("%s", str_data(spec->name));
             break;
         case SPEC_TYPE:
-            printf("%s", vp_type_names[spec->ty->kind]);
+            printf("%s", type_name(spec->ty->kind));
             break;
         case SPEC_PTR:
             ast_print_typespec(spec->ptr);
@@ -436,10 +437,8 @@ static void ast_print_expr(Expr* e)
         case EX_NOT:
         case EX_BNOT:
         {
-            printf("%s", ast_unarynames[e->kind - EX_UNARY]);
-            printf("(");
+            printf("%s", ast_unaryname(e->kind));
             ast_print_expr(e->unary);
-            printf(")");
             break;
         }
         case EX_ADD:
@@ -463,7 +462,7 @@ static void ast_print_expr(Expr* e)
         {
             printf("(");
             ast_print_expr(e->binop.lhs);
-            printf(" %s ", ast_binnames[e->kind - EX_BINOP]);
+            printf(" %s ", ast_binname(e->kind));
             ast_print_expr(e->binop.rhs);
             printf(")");
             break;
@@ -545,8 +544,11 @@ void vp_ast_print(Decl* d)
                 printf(" : ");
                 ast_print_typespec(d->var.spec);
             }
-            printf(" = ");
-            ast_print_expr(d->var.expr);
+            if(d->var.expr)
+            {
+                printf(" = ");
+                ast_print_expr(d->var.expr);
+            }
             printf("\n");
             break;
         }

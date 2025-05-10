@@ -12,7 +12,6 @@
 #include "vp_tab.h"
 #include "vp_type.h"
 #include "vp_vec.h"
-#include <stdio.h>
 
 #define MAX_LOCAL_SYMS 1024
 
@@ -146,7 +145,15 @@ static void type_complete(Type* ty)
     {
         AggregateItem* item = &d->agr->items[i];
         Type* tyitem = sema_typespec(item->type);
+        tyitem = vp_type_decayempty(tyitem);
         type_complete(tyitem);
+        if(vp_type_sizeof(tyitem) == 0)
+        {
+            if(tyitem->kind != TY_ARRAY || vp_type_sizeof(tyitem->p) == 0)
+            {
+                vp_parse_error(item->sp, "field type of size 0 is not allowed");
+            }
+        }
         for(uint32_t j = 0; j < vec_len(item->names); j++)
         {
             vec_push(fields, (TypeField){item->names[j], tyitem});
@@ -162,12 +169,12 @@ static void type_complete(Type* ty)
     }
     if(d->kind == DECL_STRUCT)
     {
-        vp_type_struct(ty, fields);
+        vp_type_struct(d->name, ty, fields);
     }
     else
     {
         vp_assertX(d->kind == DECL_UNION, "union");
-        vp_type_union(ty, fields);
+        vp_type_union(d->name, ty, fields);
     }
     vec_push(sorted, ty->sym);
 }
@@ -190,19 +197,21 @@ static Operand opr_rval(Type* ty)
     return (Operand){.ty = ty};
 }
 
-/* Decay operand array to pointer */
-static Operand opr_decay(Operand e)
+/* Decay operand */
+static Operand opr_decay(Operand opr)
 {
-    if(e.ty->kind == TY_ARRAY)
-        return opr_rval(vp_type_ptr(e.ty->p));
-    else
-        return e;
+    opr.ty = vp_type_decay(opr.ty);
+    opr.islval = false;
+    return opr;
 }
 
 #define CASE(k, t) \
     case k: \
         switch(ty->kind) \
         { \
+        case TY_BOOL: \
+            opr->val.b = (bool)opr->val.b; \
+            break; \
         case TY_UINT8: \
             opr->val.u8 = (uint8_t)opr->val.t; \
             break; \
@@ -239,34 +248,55 @@ static Operand opr_decay(Operand e)
         } \
         break;
 
-/* Operand type conversion */
-static bool opr_conv(Operand* opr, Type* ty)
+/* Explicit operand type casting */
+static bool opr_cast(Operand* opr, Type* ty)
 {
-    if(opr->ty == ty)
-        return true;
-    if(!vp_type_isconv(opr->ty, ty))
-        return false;
-    if(opr->isconst)
+    if(opr->ty != ty)
     {
-        switch(opr->ty->kind)
+        if(!vp_type_iscast(opr->ty, ty))
+            return false;
+        if(opr->isconst)
         {
-        CASE(TY_UINT8, u8)
-        CASE(TY_INT8, i8)
-        CASE(TY_UINT16, u16)
-        CASE(TY_INT16, i16)
-        CASE(TY_UINT32, u32)
-        CASE(TY_INT32, i32)
-        CASE(TY_UINT64, u64)
-        CASE(TY_INT64, i64)
-        CASE(TY_FLOAT, f)
-        CASE(TY_DOUBLE, d)
-        default:
-            opr->isconst = false;
-            break;
+            if(type_isflo(opr->ty))
+            {
+                opr->isconst = !type_isint(ty);
+            }
+            else
+            {
+                switch(opr->ty->kind)
+                {
+                CASE(TY_BOOL, b)
+                CASE(TY_UINT8, u8)
+                CASE(TY_INT8, i8)
+                CASE(TY_UINT16, u16)
+                CASE(TY_INT16, i16)
+                CASE(TY_UINT32, u32)
+                CASE(TY_INT32, i32)
+                CASE(TY_UINT64, u64)
+                CASE(TY_INT64, i64)
+                CASE(TY_FLOAT, f)
+                CASE(TY_DOUBLE, d)
+                default:
+                    opr->isconst = false;
+                    break;
+                }
+            }
         }
     }
     opr->ty = ty;
     return true;
+}
+
+/* Implicit operand type conversion */
+static bool opr_conv(Operand* opr, Type* ty)
+{
+    if(vp_type_isconv(ty, opr->ty))
+    {
+        opr_cast(opr, ty);
+        opr->islval = false;
+        return true;
+    }
+    return false;
 }
 
 #undef CASE
@@ -280,12 +310,53 @@ static void opr_promote(Operand* opr)
         case TY_INT8:
         case TY_UINT16:
         case TY_INT16:
-            opr_conv(opr, tyint32);
+            opr_cast(opr, tyint32);
             break;
         default:
             /* Do nothing */
             break;
     }
+}
+
+/* Unify operands of different types */
+static void opr_unify(Operand* lop, Operand* rop)
+{
+    if(lop->ty == tydouble) opr_cast(rop, tydouble);
+    else if(rop->ty == tydouble) opr_cast(lop, tydouble);
+    else if(lop->ty == tyfloat) opr_cast(rop, tyfloat);
+    else if(rop->ty == tyfloat) opr_cast(lop, tyfloat);
+    else
+    {
+        vp_assertX(type_isint(lop->ty), "left int");
+        vp_assertX(type_isint(rop->ty), "right int");
+        opr_promote(lop);
+        opr_promote(rop);
+        if(lop->ty != rop->ty)
+        {
+            if(type_issigned(lop->ty) == type_issigned(rop->ty))
+            {
+                if(type_rank(lop->ty) <= type_rank(rop->ty))
+                    opr_cast(lop, rop->ty);
+                else
+                    opr_cast(rop, lop->ty);
+            }
+            else if(type_issigned(lop->ty) && type_rank(rop->ty) >= type_rank(lop->ty))
+                opr_cast(lop, rop->ty);
+            else if(type_issigned(rop->ty) && type_rank(lop->ty) >= type_rank(rop->ty))
+                opr_cast(rop, lop->ty);
+            else if(type_issigned(lop->ty) && vp_type_sizeof(lop->ty) > vp_type_sizeof(rop->ty))
+                opr_cast(rop, lop->ty);
+            else if(type_issigned(rop->ty) && vp_type_sizeof(rop->ty) > vp_type_sizeof(lop->ty))
+                opr_cast(lop, rop->ty);
+            else
+            {
+                Type* ty = vp_type_tounsigned(type_issigned(lop->ty) ? lop->ty : rop->ty);
+                opr_cast(lop, ty);
+                opr_cast(rop, ty);
+            }
+        }
+    }
+    vp_assertX(lop->ty == rop->ty, "unequal types");
 }
 
 /* Fold unary operator to i64 */
@@ -310,6 +381,20 @@ static uint64_t fold_unary_u64(ExprKind op, uint64_t val)
     {
         case EX_NEG: return -val;
         case EX_BNOT: return ~val;
+        case EX_NOT: return !val;
+        default:
+            vp_assertX(0, "?");
+            break;
+    }
+    return 0;
+}
+
+/* Fold unary operator to float (double) */
+static double fold_unary_f(ExprKind op, double val)
+{
+    switch(op)
+    {
+        case EX_NEG: return -val;
         case EX_NOT: return !val;
         default:
             vp_assertX(0, "?");
@@ -378,21 +463,52 @@ static uint64_t fold_binop_u64(ExprKind op, uint64_t l, uint64_t r)
     return 0;
 }
 
+/* Fold binary operator to float (double) */
+static double fold_binop_f(ExprKind op, double l, double r)
+{
+    switch(op)
+    {
+        case EX_ADD: return l + r;
+        case EX_SUB: return l - r;
+        case EX_MUL: return l * r;
+        case EX_DIV: return r == 0 ? 0 : l / r;
+        case EX_EQ: return l == r;
+        case EX_NOTEQ: return l != r;
+        case EX_LT: return l < r;
+        case EX_LE: return l <= r;
+        case EX_GT: return l > r;
+        case EX_GE: return l >= r;
+        default:
+            vp_assertX(0, "%s", ast_binname(op));
+            break;
+    }
+    return 0;
+}
+
 /* Fold unary operator */
 static Val fold_unary(ExprKind op, Type* ty, Val val)
 {
     Operand opr = opr_const(ty, val);
     if(type_issigned(ty))
     {
-        opr_conv(&opr, tyint64);
+        opr_cast(&opr, tyint64);
         opr.val.i64 = fold_unary_i64(op, opr.val.i64);
+    }
+    else if(type_isunsigned(ty))
+    {
+        opr_cast(&opr, tyuint64);
+        opr.val.u64 = fold_unary_u64(op, opr.val.u64);
+    }
+    else if(type_isflo(ty))
+    {
+        opr_cast(&opr, tydouble);
+        opr.val.d = fold_unary_f(op, opr.val.d);
     }
     else
     {
-        opr_conv(&opr, tyuint64);
-        opr.val.u64 = fold_unary_u64(op, opr.val.u64);
+        vp_assertX(0, "unknown type to fold");
     }
-    opr_conv(&opr, ty);
+    opr_cast(&opr, ty);
     return opr.val;
 }
 
@@ -404,59 +520,31 @@ static Val fold_binop(ExprKind op, Type* ty, Val lval, Val rval)
     Operand res;
     if(type_isunsigned(ty))
     {
-        opr_conv(&lop, tyuint64);
-        opr_conv(&rop, tyuint64);
-        res = opr_const(tyuint64, (Val){.u64 = fold_binop_u64(op, lop.val.u64, rop.val.u64)});
+        opr_cast(&lop, tyuint64);
+        opr_cast(&rop, tyuint64);
+        uint64_t val = fold_binop_u64(op, lop.val.u64, rop.val.u64);
+        res = opr_const(tyuint64, (Val){.u64 = val});
+    }
+    else if(type_issigned(ty))
+    {
+        opr_cast(&lop, tyint64);
+        opr_cast(&rop, tyint64);
+        int64_t val = fold_binop_i64(op, lop.val.i64, rop.val.i64);
+        res = opr_const(tyint64, (Val){.i64 = val});
+    }
+    else if(type_isflo(ty))
+    {
+        opr_cast(&lop, tydouble);
+        opr_cast(&rop, tydouble);
+        double val = fold_binop_f(op, lop.val.d, rop.val.d);
+        res = opr_const(tydouble, (Val){.d = val});
     }
     else
     {
-        opr_conv(&lop, tyint64);
-        opr_conv(&rop, tyint64);
-        res = opr_const(tyint64, (Val){.i64 = fold_binop_i64(op, lop.val.i64, rop.val.i64)});
+        vp_assertX(0, "unknown type to fold");
     }
-    opr_conv(&res, ty);
+    opr_cast(&res, ty);
     return res.val;
-}
-
-/* Unify operands of different types */
-static void opr_unify(Operand* lop, Operand* rop)
-{
-    if(lop->ty == tydouble) opr_conv(rop, tydouble);
-    else if(rop->ty == tydouble) opr_conv(lop, tydouble);
-    else if(lop->ty == tyfloat) opr_conv(rop, tyfloat);
-    else if(rop->ty == tyfloat) opr_conv(lop, tyfloat);
-    else
-    {
-        vp_assertX(type_isint(lop->ty), "left int");
-        vp_assertX(type_isint(rop->ty), "right int");
-        opr_promote(lop);
-        opr_promote(rop);
-        if(lop->ty != rop->ty)
-        {
-            if(type_issigned(lop->ty) == type_issigned(rop->ty))
-            {
-                if(type_rank(lop->ty) <= type_rank(rop->ty))
-                    opr_conv(lop, rop->ty);
-                else
-                    opr_conv(rop, lop->ty);
-            }
-            else if(type_issigned(lop->ty) && type_rank(rop->ty) >= type_rank(lop->ty))
-                opr_conv(lop, rop->ty);
-            else if(type_issigned(rop->ty) && type_rank(lop->ty) >= type_rank(rop->ty))
-                opr_conv(rop, lop->ty);
-            else if(type_issigned(lop->ty) && vp_type_sizeof(lop->ty) > vp_type_sizeof(rop->ty))
-                opr_conv(rop, lop->ty);
-            else if(type_issigned(rop->ty) && vp_type_sizeof(rop->ty) > vp_type_sizeof(lop->ty))
-                opr_conv(lop, rop->ty);
-            else
-            {
-                Type* ty = vp_type_tounsigned(type_issigned(lop->ty) ? lop->ty : rop->ty);
-                opr_conv(lop, ty);
-                opr_conv(rop, ty);
-            }
-        }
-    }
-    vp_assertX(lop->ty == rop->ty, "unequal types");
 }
 
 static Operand opr_binop(ExprKind op, Operand lop, Operand rop)
@@ -487,9 +575,22 @@ static Operand opr_unary_arith(ExprKind op, Operand opr)
     else return opr;
 }
 
+/* Forward declarations */
 static Operand sema_expr(Expr* e);
 static Operand sema_expr_ty(Expr* e, Type* ret);
 static Type* sema_var(Decl* d);
+
+/* Resolve rval expression */
+static Operand sema_expr_rval(Expr* e)
+{
+    return opr_decay(sema_expr(e));
+}
+
+/* Resolve rval expression typed */
+static Operand sema_expr_rval_ty(Expr* e, Type* ret)
+{
+    return opr_decay(sema_expr_ty(e, ret));
+}
 
 /* Resolve constant expression */
 static Operand sema_constexpr(Expr* e)
@@ -505,26 +606,23 @@ static Operand sema_constexpr(Expr* e)
 /* Resolve unary expression */
 static Operand sema_expr_unary(Expr* e)
 {
-    Operand opr = sema_expr(e->unary);
+    Operand opr = sema_expr_rval(e->unary);
     Type* ty = opr.ty;
     ExprKind op = e->kind;
     switch(op)
     {
-        case EX_REF:
-            opr = opr_decay(opr);
-            ty = opr.ty;
+        case EX_DEREF:
             if(!type_isptr(ty))
             {
                 vp_parse_error(e->sp, "Cannot deref non-pointer type");
             }
-            return opr_rval(ty->p);
-        case EX_DEREF:
-            if(!opr.islval)
-            {
-                vp_parse_error(e->sp, "Cannot take address of non-lvalue");
-            }
-            return opr_rval(vp_type_ptr(ty));
+            return opr_lval(ty->p);
         case EX_NOT:
+            if(!type_isscalar(ty))
+            {
+                vp_parse_error(e->sp, "Can only use '!' with scalar types");
+            }
+            return opr_unary_arith(op, opr);
         case EX_NEG:
             if(!type_isnum(ty))
             {
@@ -547,9 +645,10 @@ static Operand sema_expr_unary(Expr* e)
 /* Resolve binary expression */
 static Operand sema_expr_binop(Expr* e)
 {
-    Operand lop = sema_expr(e->binop.lhs);
-    Operand rop = sema_expr(e->binop.rhs);
+    Operand lop = sema_expr_rval(e->binop.lhs);
+    Operand rop = sema_expr_rval(e->binop.rhs);
     ExprKind op = e->kind;
+    const char* opname = ast_binname(op);
     switch(op)
     {
         case EX_ADD:
@@ -559,10 +658,12 @@ static Operand sema_expr_binop(Expr* e)
             }
             else if(type_isptr(lop.ty) && type_isint(rop.ty))
             {
+                type_complete(lop.ty->p);
                 return opr_rval(lop.ty);
             }
             else if(type_isptr(rop.ty) && type_isint(lop.ty))
             {
+                type_complete(rop.ty->p);
                 return opr_rval(rop.ty);
             }
             else
@@ -596,50 +697,21 @@ static Operand sema_expr_binop(Expr* e)
         case EX_DIV:
             if(!type_isnum(lop.ty))
             {
-                vp_parse_error(e->sp, "Left operand of '' must have arithmetic type");
+                vp_parse_error(e->sp, "Left operand of '%s' must have arithmetic type", opname);
             }
             if(!type_isnum(rop.ty))
             {
-                vp_parse_error(e->sp, "Right operand of '' must have arithmetic type");
+                vp_parse_error(e->sp, "Right operand of '%s' must have arithmetic type", opname);
             }
             return opr_binop_arith(op, lop, rop);
-        case EX_LSHIFT:
-        case EX_RSHIFT:
-            if(type_isint(lop.ty) && type_isint(rop.ty))
-            {
-                opr_promote(&lop);
-                opr_promote(&rop);
-                Type* ty = lop.ty;
-                Operand res;
-                if(type_issigned(lop.ty))
-                {
-                    opr_conv(&lop, tyint64);
-                    opr_conv(&rop, tyint64);
-                }
-                else
-                {
-                    opr_conv(&lop, tyuint64);
-                    opr_conv(&rop, tyuint64);
-                }
-                res = opr_binop(op, lop, rop);
-                opr_conv(&res, ty);
-                return res;
-            }
-            else
-            {
-                vp_parse_error(e->sp, "Operands of '' must both have integer types");
-            }
-            break;
         case EX_LE:
         case EX_LT:
         case EX_GE:
         case EX_GT:
-        case EX_EQ:
-        case EX_NOTEQ:
             if(type_isnum(lop.ty) && type_isnum(rop.ty))
             {
                 Operand res = opr_binop_arith(op, lop, rop);
-                opr_conv(&res, tyint32);
+                opr_cast(&res, tyint32);
                 return res;
             }
             else if(type_isptr(lop.ty) && type_isptr(rop.ty))
@@ -652,7 +724,33 @@ static Operand sema_expr_binop(Expr* e)
             }
             else
             {
-                vp_parse_error(e->sp, "Operands of '' must be arithmetic types or compatible pointer types");
+                vp_parse_error(e->sp, "Operands of '%s' must be arithmetic types or compatible pointer types", opname);
+            }
+            break;
+        case EX_EQ:
+        case EX_NOTEQ:
+            if(type_isnum(lop.ty) && type_isnum(rop.ty))
+            {
+                Operand res = opr_binop_arith(op, lop, rop);
+                opr_cast(&res, tyint32);
+                return res;
+            }
+            else if(type_isptr(lop.ty) && type_isptr(rop.ty))
+            {
+                if(lop.ty->p != rop.ty->p)
+                {
+                    vp_parse_error(e->sp, "Cannot compare pointers of different types");
+                }
+                return opr_rval(tyint32);
+            }
+            else if((type_isnil(lop.ty) && type_isptr(rop.ty)) ||
+                    (type_isnil(rop.ty) && type_isptr(lop.ty)))
+            {
+                return opr_rval(tyint32);
+            }
+            else
+            {
+                vp_parse_error(e->sp, "Operands of '%s' must be arithmetic types or compatible pointer types", opname);
             }
             break;
         case EX_BAND:
@@ -662,9 +760,64 @@ static Operand sema_expr_binop(Expr* e)
                 return opr_binop_arith(op, lop, rop);
             else
             {
-                vp_parse_error(e->sp, "Operands of '' must have arithmetic types");
+                vp_parse_error(e->sp, "Operands of '%s' must have arithmetic types", opname);
             }
             break;
+        case EX_LSHIFT:
+        case EX_RSHIFT:
+            if(type_isint(lop.ty) && type_isint(rop.ty))
+            {
+                opr_promote(&lop);
+                opr_promote(&rop);
+                Type* ty = lop.ty;
+                Operand res;
+                if(type_issigned(lop.ty))
+                {
+                    opr_cast(&lop, tyint64);
+                    opr_cast(&rop, tyint64);
+                }
+                else
+                {
+                    opr_cast(&lop, tyuint64);
+                    opr_cast(&rop, tyuint64);
+                }
+                res = opr_binop(op, lop, rop);
+                opr_cast(&res, ty);
+                return res;
+            }
+            else
+            {
+                vp_parse_error(e->sp, "Operands of '%s' must both have integer types", opname);
+            }
+            break;
+        case EX_AND:
+        case EX_OR:
+            if(type_isscalar(lop.ty) && type_isscalar(rop.ty))
+            {
+                if(lop.isconst && rop.isconst)
+                {
+                    opr_cast(&lop, tybool);
+                    opr_cast(&rop, tybool);
+                    bool i;
+                    if(op == EX_AND)
+                    {
+                        i = lop.val.b && rop.val.b;
+                    }
+                    else
+                    {
+                        i = lop.val.b || rop.val.b;
+                    }
+                    return opr_const(tyint32, (Val){.i32 = i});
+                }
+                else
+                {
+                    return opr_rval(tyint32);
+                }
+            }
+            else
+            {
+                vp_parse_error(e->sp, "Operands of %s must have scalar types", opname);
+            }
         default:
             vp_assertX(0, "?");
             break;
@@ -692,6 +845,73 @@ static Operand sema_expr_name(Expr* e)
     }
 }
 
+/* Resolve variable or compound initializer */
+static Type* sema_init_ty(Type* ty, Expr* e)
+{
+    Operand opr = sema_expr_ty(e, ty);
+    if(type_isarrempty(ty))
+    {
+        if(opr.ty->kind == TY_ARRAY && ty->p == opr.ty->p)
+        {
+            /* Empty array, infer size from initializer expression type */
+            ty->len = opr.ty->len;
+            return ty;
+        }
+        else if(type_isptr(opr.ty) && ty->p == opr.ty->p)
+        {
+            return opr.ty;
+        }
+    }
+    if(ty && type_isptr(ty))
+    {
+        opr = opr_decay(opr);
+    }
+    if(!opr_conv(&opr, ty))
+    {
+        return NULL;
+    }
+    return opr.ty;
+}
+
+/* Resolve variable or compound initializer */
+static Type* sema_init(SrcPos sp, TypeSpec* spec, Expr* e)
+{
+    Type* ty = NULL;
+    Type* inferty = NULL;
+    Type* declty = NULL;
+    if(spec)
+    {
+        declty = ty = sema_typespec(spec);
+        if(e)
+        {
+            inferty = ty = sema_init_ty(declty, e);
+            if(!inferty)
+            {
+                vp_parse_error(sp, "invalid type in init, expected %s", type_name(declty->kind));
+            }
+        }
+    }
+    else
+    {
+        vp_assertX(e, "expression");
+        inferty = ty = sema_expr(e).ty;
+        if(ty->kind == TY_ARRAY && e->kind != EX_COMPOUND)
+        {
+            ty = vp_type_decay(ty);
+        }
+    }
+    type_complete(ty);
+    if(!e || type_isptr(inferty))
+    {
+        ty = vp_type_decayempty(ty);
+    }
+    if(vp_type_sizeof(ty) == 0)
+    {
+        vp_parse_error(sp, "Variable of size 0");
+    }
+    return ty;
+}
+
 /* Find index from field name */
 static uint32_t field_idx(Type* ty, Str* name)
 {
@@ -708,10 +928,14 @@ static uint32_t field_idx(Type* ty, Str* name)
 static Operand sema_expr_comp(Expr* e, Type* ret)
 {
     vp_assertX(e->kind == EX_COMPOUND, "compound");
+    if(!ret)
+    {
+        vp_parse_error(e->sp, "implicitly typed compound literal used in context without expected type");
+    }
     uint32_t numfields = vec_len(e->comp.fields);
     Type* ty = ret;
     type_complete(ty);
-    if(ty->kind == TY_STRUCT || ty->kind == TY_UNION)
+    if(type_isaggr(ty))
     {
         uint32_t idx = 0;
         for(uint32_t i = 0; i < numfields; i++)
@@ -734,10 +958,9 @@ static Operand sema_expr_comp(Expr* e, Type* ret)
                 vp_parse_error(field->sp, "Field init in struct/union compound literal out of range");
             }
             Type* fieldty = ty->st.fields[idx].ty;
-            Operand init = sema_expr_ty(field->init, fieldty);
-            if(opr_conv(&init, fieldty))
-            {   
-                vp_parse_error(field->sp, "Illegal conversion in compound literal init");
+            if(!sema_init_ty(fieldty, field->init))
+            {
+                vp_parse_error(field->sp, "Invalid type in compound literal initializer for aggregate type, expected %s", type_name(fieldty->kind));
             }
             idx++;
         }
@@ -759,7 +982,7 @@ static Operand sema_expr_comp(Expr* e, Type* ret)
                 {
                     vp_parse_error(field->sp, "Field init index expression must have type int");
                 }
-                if(!opr_conv(&opr, tyint32))
+                if(!opr_cast(&opr, tyint32))
                 {
                     vp_parse_error(field->sp, "Illegal conversion in field initializer index");
                 }
@@ -773,10 +996,9 @@ static Operand sema_expr_comp(Expr* e, Type* ret)
             {
                 vp_parse_error(field->sp, "Field init in array compound literal out of range");
             }
-            Operand init = sema_expr_ty(field->init, ty->p);
-            if(!opr_conv(&init, ty->p))
+            if(!sema_init_ty(ty->p, field->init))
             {
-                vp_parse_error(field->sp, "Illegal conversion in compound literal init");
+                vp_parse_error(field->sp, "Invalid type in compound literal initializer for array type, expected %s", type_name(ty->p->kind));
             }
             maxidx = MAX(maxidx, idx);
             idx++;
@@ -798,25 +1020,25 @@ static Operand sema_expr_comp(Expr* e, Type* ret)
 static Operand sema_expr_call(Expr* e)
 {
     vp_assertX(e->kind == EX_CALL, "call");
-    Operand fn = sema_expr(e);
+    Operand fn = sema_expr_rval(e);
     if(fn.ty->kind != TY_FUNC)
     {
-        vp_parse_error(e->sp, "Trying to call non-function value");
+        vp_parse_error(e->sp, "Cannot call non-function value");
     }
     uint32_t numarg = vec_len(e->call.args);
     uint32_t numparam = vec_len(fn.ty->fn.params);
     if(numarg < numparam)
     {
-        vp_parse_error(e->sp, "Tried to call function with too few arguments");
+        vp_parse_error(e->sp, "function call with too few arguments");
     }
     if(numarg > numparam)
     {
-        vp_parse_error(e->sp, "Tried to call function with too many arguments");
+        vp_parse_error(e->sp, "function call with too many arguments");
     }
     for(uint32_t i = 0; i < numparam; i++)
     {
         Type* typaram = fn.ty->fn.params[i];
-        Operand arg = sema_expr_ty(e->call.args[i], typaram);
+        Operand arg = sema_expr_rval_ty(e->call.args[i], typaram);
         if(!opr_conv(&arg, typaram))
         {
             vp_parse_error(e->sp, "Illegal conversion in call argument expression");
@@ -834,7 +1056,7 @@ static Operand sema_expr_idx(Expr* e)
     {
         vp_parse_error(e->sp, "Can only index arrays or pointers");
     }
-    Operand idx = sema_expr(e->idx.index);
+    Operand idx = sema_expr_rval(e->idx.index);
     if(!type_isint(idx.ty))
     {
         vp_parse_error(e->sp, "Index expression must have type int");
@@ -870,10 +1092,10 @@ static Operand sema_expr_cast(Expr* e)
 {
     vp_assertX(e->kind == EX_CAST, "cast");
     Type* ty = sema_typespec(e->cast.spec);
-    Operand opr = opr_decay(sema_expr(e->cast.expr));
-    if(!opr_conv(&opr, ty))
+    Operand opr = sema_expr_rval_ty(e->cast.expr, ty);
+    if(!opr_cast(&opr, ty))
     {
-        vp_parse_error(e->sp, "Illegal conversion in cast");
+        vp_parse_error(e->sp, "Illegal type cast from %s to %s", type_name(opr.ty->kind), type_name(ty->kind));
     }
     return opr;
 }
@@ -895,18 +1117,35 @@ static Operand sema_expr_ty(Expr* e, Type* ret)
             res = opr_const(tyint32, (Val){.i32 = e->i});
             break;
         case EX_NUM:
-            res = opr_rval(tyfloat);
+            res = opr_const(tyfloat, (Val){.d = e->n});
             break;
         case EX_STR:
-            res = opr_rval(vp_type_ptr(tyuint8));
+            res = opr_rval(vp_type_arr(tyuint8, e->name->len + 1));
             break;
         case EX_NAME:
             res = sema_expr_name(e);
             break;
+        case EX_REF:
+        {
+            Operand opr;
+            if(ret && type_isptr(ret))
+            {
+                opr = sema_expr_ty(e->unary, ret->p);
+            }
+            else
+            {
+                opr = sema_expr(e->unary);
+            }
+            if(!opr.islval)
+            {
+                vp_parse_error(e->sp, "Cannot take address of non-lvalue");
+            }
+            res = opr_rval(vp_type_ptr(opr.ty));
+            break;
+        }
         case EX_NEG:
         case EX_NOT:
         case EX_BNOT:
-        case EX_REF:
         case EX_DEREF:
             res = sema_expr_unary(e);
             break;
@@ -983,7 +1222,7 @@ static Type* sema_typespec(TypeSpec* spec)
             break;
         case SPEC_ARRAY:
         {
-            int32_t size = 0;
+            int32_t len = 0;
             if(spec->arr.expr)
             {
                 Operand opr = sema_constexpr(spec->arr.expr);
@@ -991,16 +1230,16 @@ static Type* sema_typespec(TypeSpec* spec)
                 {
                     vp_parse_error(spec->sp, "Array size constant expression must have integer type");
                 }
-                opr_conv(&opr, tyint32);
-                size = opr.val.i32;
-                if(size <= 0)
+                opr_cast(&opr, tyint32);
+                len = opr.val.i32;
+                if(len <= 0)
                 {
-                    vp_parse_error(spec->sp, "Non-positive array size");
+                    vp_parse_error(spec->sp, "Non-positive array length");
                 }
             }
             Type* tyarr = sema_typespec(spec->arr.base);
             type_complete(tyarr);
-            ty = vp_type_arr(tyarr, size);
+            ty = vp_type_arr(tyarr, len);
             break;
         }
         case SPEC_FUNC:
@@ -1036,10 +1275,20 @@ static Type* sema_fn(Decl* d)
     Type** params = NULL;
     for(uint32_t i = 0; i < vec_len(d->fn.params); i++)
     {
-        Type* ty = sema_typespec(d->fn.params[i].spec);
-        vec_push(params, ty);
+        Type* typaram = sema_typespec(d->fn.params[i].spec);
+        typaram = vp_type_decayempty(typaram);
+        type_complete(typaram);
+        if(typaram == tyvoid)
+        {
+            vp_parse_error(d->sp, "function parameter type cannot be 'void'");
+        }
+        vec_push(params, typaram);
     }
-    Type* ret = sema_typespec(d->fn.ret);
+    Type* ret = vp_type_decayempty(sema_typespec(d->fn.ret));
+    if(ret->kind == TY_ARRAY)
+    {
+        vp_parse_error(d->sp, "function return type cannot be array");
+    }
     return vp_type_func(ret, params);
 }
 
@@ -1069,7 +1318,7 @@ static void sema_stmt_assign(Stmt* st)
     Operand rop = sema_expr_ty(st->rhs, lop.ty);
     if(!opr_conv(&rop, lop.ty))
     {
-        vp_parse_error(st->sp, "Illegal conversion in assignment statement");
+        vp_parse_error(st->sp, "Illegal conversion in assignment");
     }
 }
 
@@ -1081,7 +1330,7 @@ static void sema_stmt(Stmt* st, Type* ret)
         case ST_RETURN:
             if(st->expr)
             {
-                Operand res = sema_expr_ty(st->expr, ret);
+                Operand res = sema_expr_rval_ty(st->expr, ret);
                 if(!opr_conv(&res, ret))
                 {
                     vp_parse_error(st->expr->sp, "Illegal conversion in return expression");
@@ -1144,33 +1393,7 @@ static void sema_fn_body(Sym* sym)
 static Type* sema_var(Decl* d)
 {
     vp_assertX(d->kind == DECL_VAR, "var declaration");
-    Type* ty = NULL;
-    if(d->var.spec)
-    {
-        ty = sema_typespec(d->var.spec);
-    }
-    if(d->var.expr)
-    {
-        Operand opr = sema_expr_ty(d->var.expr, ty);
-        if(ty)
-        {
-            if(ty->kind == TY_ARRAY && opr.ty->kind == TY_ARRAY &&
-                ty->p == opr.ty->p && !ty->len)
-            {
-                /* Incomplete array size, infer size from initializer expression type */
-            }
-            else
-            {
-                if(!opr_conv(&opr, ty))
-                {
-                    vp_parse_error(d->sp, "Illegal conversion in version initializer");
-                }
-            }
-        }
-        ty = opr.ty;
-    }
-    type_complete(ty);
-    return ty;
+    return sema_init(d->sp, d->var.spec, d->var.expr);
 }
 
 /* Resolve symbols */
@@ -1232,4 +1455,6 @@ void vp_sema(Decl** decls)
             sema_fn_body(sym);
         }
     }
+
+    vp_type_printcache();
 }
