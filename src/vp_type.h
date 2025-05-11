@@ -177,7 +177,4 @@ Type* vp_type_func(Type* ret, Type** params);
 void vp_type_struct(Str* name, Type* ty, TypeField* fields);
 void vp_type_union(Str* name, Type* ty, TypeField* fields);
 
-void vp_type_print(Type* ty);
-void vp_type_printcache();
-
 #endif

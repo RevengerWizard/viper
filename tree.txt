@@ -13,4 +13,5 @@ src/
 ├── vp_vec.c/h        ← dynamic array handling
 ├── vp_state.c/h      ← global state
 ├── vp_load.c         ← frontend driver: parse + compile
+├── vp_print.c/h      ← data structure print
 ├── viper.c           ← CLI main

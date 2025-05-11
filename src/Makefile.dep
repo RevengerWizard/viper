@@ -1,24 +1,34 @@
-viper.o: viper.c vp_buf.h vp_def.h vp_state.h vp_emit.h
-vp_asm.o: vp_asm.c vp_asm.h vp_state.h vp_def.h vp_buf.h
+viper.o: viper.c vp_buf.h vp_def.h vp_state.h vp_type.h vp_str.h vp_tab.h \
+  vp_emit.h
+vp_asm.o: vp_asm.c vp_asm.h vp_state.h vp_buf.h vp_def.h vp_type.h \
+  vp_str.h vp_tab.h
 vp_assert.o: vp_assert.c vp_def.h
-vp_ast.o: vp_ast.c vp_ast.h vp_str.h vp_def.h vp_type.h vp_mem.h vp_vec.h
+vp_ast.o: vp_ast.c vp_ast.h vp_lex.h vp_buf.h vp_def.h vp_state.h \
+  vp_type.h vp_str.h vp_tab.h vp_mem.h
 vp_buf.o: vp_buf.c vp_buf.h vp_def.h vp_mem.h
 vp_char.o: vp_char.c vp_char.h vp_def.h
 vp_code.o: vp_code.c vp_code.h
-vp_lex.o: vp_lex.c vp_lex.h vp_buf.h vp_def.h vp_state.h vp_str.h \
-  vp_char.h vp_strscan.h
-vp_load.o: vp_load.c vp_lex.h vp_buf.h vp_def.h vp_state.h vp_str.h \
-  vp_parse.h vp_ast.h vp_type.h vp_sema.h
+vp_lex.o: vp_lex.c vp_lex.h vp_buf.h vp_def.h vp_state.h vp_type.h \
+  vp_str.h vp_tab.h vp_char.h vp_strscan.h
+vp_load.o: vp_load.c vp_lex.h vp_buf.h vp_def.h vp_state.h vp_type.h \
+  vp_str.h vp_tab.h vp_parse.h vp_ast.h vp_sema.h
 vp_mem.o: vp_mem.c vp_mem.h vp_vec.h vp_def.h
-vp_parse.o: vp_parse.c vp_parse.h vp_ast.h vp_str.h vp_def.h vp_type.h \
-  vp_lex.h vp_buf.h vp_state.h vp_vec.h
-vp_pe.o: vp_pe.c vp_buf.h vp_def.h vp_emit.h vp_state.h
-vp_sema.o: vp_sema.c vp_sema.h vp_ast.h vp_str.h vp_def.h vp_type.h \
+vp_parse.o: vp_parse.c vp_parse.h vp_ast.h vp_lex.h vp_buf.h vp_def.h \
+  vp_state.h vp_type.h vp_str.h vp_tab.h vp_vec.h
+vp_pe.o: vp_pe.c vp_buf.h vp_def.h vp_emit.h vp_state.h vp_type.h \
+  vp_str.h vp_tab.h
+vp_print.o: vp_print.c vp_print.h vp_ast.h vp_lex.h vp_buf.h vp_def.h \
+  vp_state.h vp_type.h vp_str.h vp_tab.h vp_vec.h
+vp_sema.o: vp_sema.c vp_sema.h vp_ast.h vp_lex.h vp_buf.h vp_def.h \
+  vp_state.h vp_type.h vp_str.h vp_tab.h vp_mem.h vp_parse.h vp_print.h \
   vp_vec.h
-vp_state.o: vp_state.c vp_state.h vp_def.h vp_buf.h vp_lex.h vp_str.h
-vp_str.o: vp_str.c vp_str.h vp_def.h vp_mem.h vp_tab.h
+vp_state.o: vp_state.c vp_state.h vp_buf.h vp_def.h vp_type.h vp_str.h \
+  vp_tab.h vp_lex.h
+vp_str.o: vp_str.c vp_str.h vp_def.h vp_mem.h vp_tab.h vp_state.h \
+  vp_buf.h vp_type.h
 vp_strscan.o: vp_strscan.c vp_char.h vp_def.h vp_lex.h vp_buf.h \
-  vp_state.h vp_str.h vp_strscan.h
+  vp_state.h vp_type.h vp_str.h vp_tab.h vp_strscan.h
 vp_tab.o: vp_tab.c vp_tab.h vp_str.h vp_def.h vp_mem.h
-vp_type.o: vp_type.c vp_type.h vp_str.h vp_def.h vp_mem.h
+vp_type.o: vp_type.c vp_type.h vp_str.h vp_def.h vp_mem.h vp_vec.h \
+  vp_state.h vp_buf.h vp_tab.h
 vp_vec.o: vp_vec.c vp_vec.h vp_def.h vp_mem.h

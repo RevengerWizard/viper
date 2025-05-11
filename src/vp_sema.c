@@ -8,10 +8,13 @@
 #include "vp_def.h"
 #include "vp_mem.h"
 #include "vp_parse.h"
+#include "vp_print.h"
 #include "vp_str.h"
 #include "vp_tab.h"
 #include "vp_type.h"
 #include "vp_vec.h"
+
+#include "vp_print.h"
 
 #define MAX_LOCAL_SYMS 1024
 
@@ -131,7 +134,7 @@ static void type_complete(Type* ty)
 {
     if(ty->kind == TY_NAME)
     {
-        vp_parse_error(ty->sym->decl->sp, "Type completion cycle");
+        vp_parse_error(ty->sym->decl->loc, "Type completion cycle");
     }
     else if(ty->kind != TY_NONE)
         return;
@@ -151,7 +154,7 @@ static void type_complete(Type* ty)
         {
             if(tyitem->kind != TY_ARRAY || vp_type_sizeof(tyitem->p) == 0)
             {
-                vp_parse_error(item->sp, "field type of size 0 is not allowed");
+                vp_parse_error(item->loc, "field type of size 0 is not allowed");
             }
         }
         for(uint32_t j = 0; j < vec_len(item->names); j++)
@@ -161,11 +164,11 @@ static void type_complete(Type* ty)
     }
     if(vec_len(fields) == 0)
     {
-        vp_parse_error(d->sp, "No fields");
+        vp_parse_error(d->loc, "No fields");
     }
     if(field_duplicates(fields))
     {
-        vp_parse_error(d->sp, "Duplicate fields");
+        vp_parse_error(d->loc, "Duplicate fields");
     }
     if(d->kind == DECL_STRUCT)
     {
@@ -598,7 +601,7 @@ static Operand sema_constexpr(Expr* e)
     Operand res = sema_expr(e);
     if(!res.isconst)
     {
-        vp_parse_error(e->sp, "Expected constant expression");
+        vp_parse_error(e->loc, "Expected constant expression");
     }
     return res;
 }
@@ -614,25 +617,25 @@ static Operand sema_expr_unary(Expr* e)
         case EX_DEREF:
             if(!type_isptr(ty))
             {
-                vp_parse_error(e->sp, "Cannot deref non-pointer type");
+                vp_parse_error(e->loc, "Cannot deref non-pointer type");
             }
             return opr_lval(ty->p);
         case EX_NOT:
             if(!type_isscalar(ty))
             {
-                vp_parse_error(e->sp, "Can only use '!' with scalar types");
+                vp_parse_error(e->loc, "Can only use '!' with scalar types");
             }
             return opr_unary_arith(op, opr);
         case EX_NEG:
             if(!type_isnum(ty))
             {
-                vp_parse_error(e->sp, "Can only use unary '-' with arithmetic types");
+                vp_parse_error(e->loc, "Can only use unary '-' with arithmetic types");
             }
             return opr_unary_arith(op, opr);
         case EX_BNOT:
             if(!type_isint(ty))
             {
-                vp_parse_error(e->sp, "Can only use '~' with integer types");
+                vp_parse_error(e->loc, "Can only use '~' with integer types");
             }
             return opr_unary_arith(op, opr);
         default:
@@ -668,7 +671,7 @@ static Operand sema_expr_binop(Expr* e)
             }
             else
             {
-                vp_parse_error(e->sp, "Operands of '+' must both have arithmetic type, or pointer and integer type");
+                vp_parse_error(e->loc, "Operands of '+' must both have arithmetic type, or pointer and integer type");
             }
             break;
         case EX_SUB:
@@ -684,24 +687,24 @@ static Operand sema_expr_binop(Expr* e)
             {
                 if(lop.ty->p != rop.ty->p)
                 {
-                    vp_parse_error(e->sp, "Cannot subtract pointers of different types");
+                    vp_parse_error(e->loc, "Cannot subtract pointers of different types");
                 }
                 return opr_rval(tyuint64);
             }
             else
             {
-                vp_parse_error(e->sp, "Operands of '-' must both have arithmetic type, pointer and integer, or compatible pointer types");
+                vp_parse_error(e->loc, "Operands of '-' must both have arithmetic type, pointer and integer, or compatible pointer types");
             }
             break;
         case EX_MUL:
         case EX_DIV:
             if(!type_isnum(lop.ty))
             {
-                vp_parse_error(e->sp, "Left operand of '%s' must have arithmetic type", opname);
+                vp_parse_error(e->loc, "Left operand of '%s' must have arithmetic type", opname);
             }
             if(!type_isnum(rop.ty))
             {
-                vp_parse_error(e->sp, "Right operand of '%s' must have arithmetic type", opname);
+                vp_parse_error(e->loc, "Right operand of '%s' must have arithmetic type", opname);
             }
             return opr_binop_arith(op, lop, rop);
         case EX_LE:
@@ -718,13 +721,13 @@ static Operand sema_expr_binop(Expr* e)
             {
                 if(lop.ty->p != rop.ty->p)
                 {
-                    vp_parse_error(e->sp, "Cannot compare pointers of different types");
+                    vp_parse_error(e->loc, "Cannot compare pointers of different types");
                 }
                 return opr_rval(tyint32);
             }
             else
             {
-                vp_parse_error(e->sp, "Operands of '%s' must be arithmetic types or compatible pointer types", opname);
+                vp_parse_error(e->loc, "Operands of '%s' must be arithmetic types or compatible pointer types", opname);
             }
             break;
         case EX_EQ:
@@ -739,7 +742,7 @@ static Operand sema_expr_binop(Expr* e)
             {
                 if(lop.ty->p != rop.ty->p)
                 {
-                    vp_parse_error(e->sp, "Cannot compare pointers of different types");
+                    vp_parse_error(e->loc, "Cannot compare pointers of different types");
                 }
                 return opr_rval(tyint32);
             }
@@ -750,7 +753,7 @@ static Operand sema_expr_binop(Expr* e)
             }
             else
             {
-                vp_parse_error(e->sp, "Operands of '%s' must be arithmetic types or compatible pointer types", opname);
+                vp_parse_error(e->loc, "Operands of '%s' must be arithmetic types or compatible pointer types", opname);
             }
             break;
         case EX_BAND:
@@ -760,7 +763,7 @@ static Operand sema_expr_binop(Expr* e)
                 return opr_binop_arith(op, lop, rop);
             else
             {
-                vp_parse_error(e->sp, "Operands of '%s' must have arithmetic types", opname);
+                vp_parse_error(e->loc, "Operands of '%s' must have arithmetic types", opname);
             }
             break;
         case EX_LSHIFT:
@@ -787,7 +790,7 @@ static Operand sema_expr_binop(Expr* e)
             }
             else
             {
-                vp_parse_error(e->sp, "Operands of '%s' must both have integer types", opname);
+                vp_parse_error(e->loc, "Operands of '%s' must both have integer types", opname);
             }
             break;
         case EX_AND:
@@ -816,7 +819,7 @@ static Operand sema_expr_binop(Expr* e)
             }
             else
             {
-                vp_parse_error(e->sp, "Operands of %s must have scalar types", opname);
+                vp_parse_error(e->loc, "Operands of %s must have scalar types", opname);
             }
         default:
             vp_assertX(0, "?");
@@ -832,7 +835,7 @@ static Operand sema_expr_name(Expr* e)
     Sym* sym = sym_name(e->name);
     if(!sym)
     {
-        vp_parse_error(e->sp, "Unresolved name '%s'", str_data(e->name));
+        vp_parse_error(e->loc, "Unresolved name '%s'", str_data(e->name));
     }
     if(sym->kind == SYM_VAR)
         return opr_lval(sym->type);
@@ -840,7 +843,7 @@ static Operand sema_expr_name(Expr* e)
         return opr_rval(sym->type);
     else
     {
-        vp_parse_error(e->sp, "%s must be a var", str_data(e->name));
+        vp_parse_error(e->loc, "%s must be a var", str_data(e->name));
         return (Operand){};
     }
 }
@@ -874,7 +877,7 @@ static Type* sema_init_ty(Type* ty, Expr* e)
 }
 
 /* Resolve variable or compound initializer */
-static Type* sema_init(SrcPos sp, TypeSpec* spec, Expr* e)
+static Type* sema_init(SrcLoc loc, TypeSpec* spec, Expr* e)
 {
     Type* ty = NULL;
     Type* inferty = NULL;
@@ -887,7 +890,7 @@ static Type* sema_init(SrcPos sp, TypeSpec* spec, Expr* e)
             inferty = ty = sema_init_ty(declty, e);
             if(!inferty)
             {
-                vp_parse_error(sp, "invalid type in init, expected %s", type_name(declty->kind));
+                vp_parse_error(loc, "invalid type in init, expected %s", type_name(declty->kind));
             }
         }
     }
@@ -907,7 +910,7 @@ static Type* sema_init(SrcPos sp, TypeSpec* spec, Expr* e)
     }
     if(vp_type_sizeof(ty) == 0)
     {
-        vp_parse_error(sp, "Variable of size 0");
+        vp_parse_error(loc, "Variable of size 0");
     }
     return ty;
 }
@@ -930,7 +933,7 @@ static Operand sema_expr_comp(Expr* e, Type* ret)
     vp_assertX(e->kind == EX_COMPOUND, "compound");
     if(!ret)
     {
-        vp_parse_error(e->sp, "implicitly typed compound literal used in context without expected type");
+        vp_parse_error(e->loc, "implicitly typed compound literal used in context without expected type");
     }
     uint32_t numfields = vec_len(e->comp.fields);
     Type* ty = ret;
@@ -943,24 +946,24 @@ static Operand sema_expr_comp(Expr* e, Type* ret)
             Field* field = &e->comp.fields[i];
             if(field->kind == FIELD_IDX)
             {
-                vp_parse_error(field->sp, "Index field init not allowed for struct/union compound literals");
+                vp_parse_error(field->loc, "Index field init not allowed for struct/union compound literals");
             }
             else if(field->kind == FIELD_NAME)
             {
                 idx = field_idx(ty, field->name);
                 if(idx == ((uint32_t)-1))
                 {
-                    vp_parse_error(field->sp, "Named field in compound literal does not exist");
+                    vp_parse_error(field->loc, "Named field in compound literal does not exist");
                 }
             }
             if(idx >= numfields)
             {
-                vp_parse_error(field->sp, "Field init in struct/union compound literal out of range");
+                vp_parse_error(field->loc, "Field init in struct/union compound literal out of range");
             }
             Type* fieldty = ty->st.fields[idx].ty;
             if(!sema_init_ty(fieldty, field->init))
             {
-                vp_parse_error(field->sp, "Invalid type in compound literal initializer for aggregate type, expected %s", type_name(fieldty->kind));
+                vp_parse_error(field->loc, "Invalid type in compound literal initializer for aggregate type, expected %s", type_name(fieldty->kind));
             }
             idx++;
         }
@@ -973,32 +976,32 @@ static Operand sema_expr_comp(Expr* e, Type* ret)
             Field* field = &e->comp.fields[i];
             if(field->kind == FIELD_NAME)
             {
-                vp_parse_error(field->sp, "Named field init not allowed for array compound literals");
+                vp_parse_error(field->loc, "Named field init not allowed for array compound literals");
             }
             else if(field->kind == FIELD_IDX)
             {
                 Operand opr = sema_constexpr(field->idx);
                 if(!type_isint(opr.ty))
                 {
-                    vp_parse_error(field->sp, "Field init index expression must have type int");
+                    vp_parse_error(field->loc, "Field init index expression must have type int");
                 }
                 if(!opr_cast(&opr, tyint32))
                 {
-                    vp_parse_error(field->sp, "Illegal conversion in field initializer index");
+                    vp_parse_error(field->loc, "Illegal conversion in field initializer index");
                 }
                 if(opr.val.i32 < 0)
                 {
-                    vp_parse_error(field->sp, "Field init index cannot be negative");
+                    vp_parse_error(field->loc, "Field init index cannot be negative");
                 }
                 idx = opr.val.i32;
             }
             if(ty->len && idx >= ty->len)
             {
-                vp_parse_error(field->sp, "Field init in array compound literal out of range");
+                vp_parse_error(field->loc, "Field init in array compound literal out of range");
             }
             if(!sema_init_ty(ty->p, field->init))
             {
-                vp_parse_error(field->sp, "Invalid type in compound literal initializer for array type, expected %s", type_name(ty->p->kind));
+                vp_parse_error(field->loc, "Invalid type in compound literal initializer for array type, expected %s", type_name(ty->p->kind));
             }
             maxidx = MAX(maxidx, idx);
             idx++;
@@ -1011,7 +1014,7 @@ static Operand sema_expr_comp(Expr* e, Type* ret)
     }
     else
     {
-        vp_parse_error(e->sp, "Field literal for scalar type");
+        vp_parse_error(e->loc, "Field literal for scalar type");
     }
     return opr_lval(ty);
 }
@@ -1023,17 +1026,17 @@ static Operand sema_expr_call(Expr* e)
     Operand fn = sema_expr_rval(e);
     if(fn.ty->kind != TY_FUNC)
     {
-        vp_parse_error(e->sp, "Cannot call non-function value");
+        vp_parse_error(e->loc, "Cannot call non-function value");
     }
     uint32_t numarg = vec_len(e->call.args);
     uint32_t numparam = vec_len(fn.ty->fn.params);
     if(numarg < numparam)
     {
-        vp_parse_error(e->sp, "function call with too few arguments");
+        vp_parse_error(e->loc, "function call with too few arguments");
     }
     if(numarg > numparam)
     {
-        vp_parse_error(e->sp, "function call with too many arguments");
+        vp_parse_error(e->loc, "function call with too many arguments");
     }
     for(uint32_t i = 0; i < numparam; i++)
     {
@@ -1041,7 +1044,7 @@ static Operand sema_expr_call(Expr* e)
         Operand arg = sema_expr_rval_ty(e->call.args[i], typaram);
         if(!opr_conv(&arg, typaram))
         {
-            vp_parse_error(e->sp, "Illegal conversion in call argument expression");
+            vp_parse_error(e->loc, "Illegal conversion in call argument expression");
         }
     }
     return opr_rval(fn.ty->fn.ret);
@@ -1054,12 +1057,12 @@ static Operand sema_expr_idx(Expr* e)
     Operand opr = opr_decay(sema_expr(e->idx.expr));
     if(opr.ty->kind != TY_PTR)
     {
-        vp_parse_error(e->sp, "Can only index arrays or pointers");
+        vp_parse_error(e->loc, "Can only index arrays or pointers");
     }
     Operand idx = sema_expr_rval(e->idx.index);
     if(!type_isint(idx.ty))
     {
-        vp_parse_error(e->sp, "Index expression must have type int");
+        vp_parse_error(e->loc, "Index expression must have type int");
     }
     return opr_lval(opr.ty->p);
 }
@@ -1073,7 +1076,7 @@ static Operand sema_expr_field(Expr* e)
     type_complete(ty);
     if(ty->kind != TY_STRUCT && ty->kind != TY_UNION)
     {
-        vp_parse_error(e->sp, "Can only access fields on struct/union types");
+        vp_parse_error(e->loc, "Can only access fields on struct/union types");
     }
     for(uint32_t i = 0; i < vec_len(ty->st.fields); i++)
     {
@@ -1083,7 +1086,7 @@ static Operand sema_expr_field(Expr* e)
             return lop.islval ? opr_lval(field->ty) : opr_rval(field->ty);
         }
     }
-    vp_parse_error(e->sp, "No field named '%s'", e->field.name);
+    vp_parse_error(e->loc, "No field named '%s'", e->field.name);
     return (Operand){};
 }
 
@@ -1095,7 +1098,7 @@ static Operand sema_expr_cast(Expr* e)
     Operand opr = sema_expr_rval_ty(e->cast.expr, ty);
     if(!opr_cast(&opr, ty))
     {
-        vp_parse_error(e->sp, "Illegal type cast from %s to %s", type_name(opr.ty->kind), type_name(ty->kind));
+        vp_parse_error(e->loc, "Illegal type cast from %s to %s", type_name(opr.ty->kind), type_name(ty->kind));
     }
     return opr;
 }
@@ -1138,7 +1141,7 @@ static Operand sema_expr_ty(Expr* e, Type* ret)
             }
             if(!opr.islval)
             {
-                vp_parse_error(e->sp, "Cannot take address of non-lvalue");
+                vp_parse_error(e->loc, "Cannot take address of non-lvalue");
             }
             res = opr_rval(vp_type_ptr(opr.ty));
             break;
@@ -1212,7 +1215,7 @@ static Type* sema_typespec(TypeSpec* spec)
             Sym* sym = sym_name(spec->name);
             if(sym->kind != SYM_TYPE)
             {
-                vp_parse_error(spec->sp, "%s must denote a type", str_data(spec->name));
+                vp_parse_error(spec->loc, "%s must denote a type", str_data(spec->name));
             }
             ty = sym->type;
             break;
@@ -1228,13 +1231,13 @@ static Type* sema_typespec(TypeSpec* spec)
                 Operand opr = sema_constexpr(spec->arr.expr);
                 if(!type_isint(opr.ty))
                 {
-                    vp_parse_error(spec->sp, "Array size constant expression must have integer type");
+                    vp_parse_error(spec->loc, "Array size constant expression must have integer type");
                 }
                 opr_cast(&opr, tyint32);
                 len = opr.val.i32;
                 if(len <= 0)
                 {
-                    vp_parse_error(spec->sp, "Non-positive array length");
+                    vp_parse_error(spec->loc, "Non-positive array length");
                 }
             }
             Type* tyarr = sema_typespec(spec->arr.base);
@@ -1280,14 +1283,14 @@ static Type* sema_fn(Decl* d)
         type_complete(typaram);
         if(typaram == tyvoid)
         {
-            vp_parse_error(d->sp, "function parameter type cannot be 'void'");
+            vp_parse_error(d->loc, "function parameter type cannot be 'void'");
         }
         vec_push(params, typaram);
     }
     Type* ret = vp_type_decayempty(sema_typespec(d->fn.ret));
     if(ret->kind == TY_ARRAY)
     {
-        vp_parse_error(d->sp, "function return type cannot be array");
+        vp_parse_error(d->loc, "function return type cannot be array");
     }
     return vp_type_func(ret, params);
 }
@@ -1313,12 +1316,12 @@ static void sema_stmt_assign(Stmt* st)
     Operand lop = sema_expr(st->lhs);
     if(!lop.islval)
     {
-        vp_parse_error(st->sp, "Cannot assign to non-lvalue");
+        vp_parse_error(st->loc, "Cannot assign to non-lvalue");
     }
     Operand rop = sema_expr_ty(st->rhs, lop.ty);
     if(!opr_conv(&rop, lop.ty))
     {
-        vp_parse_error(st->sp, "Illegal conversion in assignment");
+        vp_parse_error(st->loc, "Illegal conversion in assignment");
     }
 }
 
@@ -1333,12 +1336,12 @@ static void sema_stmt(Stmt* st, Type* ret)
                 Operand res = sema_expr_rval_ty(st->expr, ret);
                 if(!opr_conv(&res, ret))
                 {
-                    vp_parse_error(st->expr->sp, "Illegal conversion in return expression");
+                    vp_parse_error(st->expr->loc, "Illegal conversion in return expression");
                 }
             }
             else if(ret != tyvoid)
             {
-                vp_parse_error(st->sp, "Empty return expression for function with non-void return type");
+                vp_parse_error(st->loc, "Empty return expression for function with non-void return type");
             }
             break;
         case ST_ASSIGN:
@@ -1360,7 +1363,7 @@ static void sema_stmt(Stmt* st, Type* ret)
             }
             else
             {
-                vp_parse_error(d->sp, "Unimplemented local type declarations");
+                vp_parse_error(d->loc, "Unimplemented local type declarations");
             }
             break;
         }
@@ -1393,7 +1396,7 @@ static void sema_fn_body(Sym* sym)
 static Type* sema_var(Decl* d)
 {
     vp_assertX(d->kind == DECL_VAR, "var declaration");
-    return sema_init(d->sp, d->var.spec, d->var.expr);
+    return sema_init(d->loc, d->var.spec, d->var.expr);
 }
 
 /* Resolve symbols */
@@ -1403,7 +1406,7 @@ static void sema_resolve(Sym* sym)
         return;
     else if(sym->state == SYM_PROGRESS)
     {
-        vp_parse_error(sym->decl->sp, "Cyclic dependency");
+        vp_parse_error(sym->decl->loc, "Cyclic dependency");
     }
     vp_assertX(sym->state == SYM_PENDING, "bad symbol state");
     sym->state = SYM_PROGRESS;
@@ -1430,7 +1433,7 @@ void vp_sema(Decl** decls)
 {
     for(uint32_t i = 0; i < vec_len(decls); i++)
     {
-        vp_ast_print(decls[i]);
+        vp_print_ast(decls[i]);
     }
 
     /* Create symbols */
@@ -1456,5 +1459,5 @@ void vp_sema(Decl** decls)
         }
     }
 
-    vp_type_printcache();
+    vp_print_typecache();
 }

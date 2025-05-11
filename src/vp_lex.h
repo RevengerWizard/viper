@@ -54,11 +54,11 @@ typedef int LexChar;    /* Lexical character */
 typedef int LexToken;   /* Lexical token */
 
 /* Source line position */
-typedef struct SrcPos
+typedef struct SrcLoc
 {
     LexLine line;   /* Line number */
     const char* name;   /* File name */
-} SrcPos;
+} SrcLoc;
 
 /* Lexical value */
 typedef union LexValue

@@ -9,12 +9,11 @@
 #include "vp_str.h"
 #include "vp_mem.h"
 #include "vp_tab.h"
-
-static Tab strtab;
+#include "vp_state.h"
 
 static Str* str_find(const char* chars, uint32_t len, uint32_t hash)
 {
-    Tab* tab = &strtab;
+    Tab* tab = &V->strtab;
     if(tab->count == 0)
         return NULL;
 
@@ -64,6 +63,6 @@ Str* vp_str_new(const char* chars, uint32_t len)
     memcpy(str_datawr(s), chars, len);
     str_datawr(s)[len] = '\0';
     /* Add to string hash table */
-    vp_tab_set(&strtab, s, NULL);
+    vp_tab_set(&V->strtab, s, NULL);
     return s;
 }

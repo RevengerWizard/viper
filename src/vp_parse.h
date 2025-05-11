@@ -10,7 +10,7 @@
 #include "vp_lex.h"
 #include "vp_state.h"
 
-void vp_parse_error(SrcPos sp, const char* msg, ...);
+void vp_parse_error(SrcLoc loc, const char* msg, ...);
 Decl** vp_parse(VpState* V, LexState* ls);
 
 #endif

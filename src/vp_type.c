@@ -3,13 +3,12 @@
 ** Type information
 */
 
-#include <stdio.h>
-
 #include "vp_type.h"
 #include "vp_def.h"
 #include "vp_mem.h"
 #include "vp_str.h"
 #include "vp_vec.h"
+#include "vp_state.h"
 
 /* Unsigned */
 Type* tybool = &(Type){.kind = TY_BOOL};
@@ -191,16 +190,12 @@ Type* vp_type_none(struct Sym* sym)
     return ty;
 }
 
-Type** cacheptr;
-Type** cachefunc;
-Type** cachearr;
-
 Type* vp_type_ptr(Type* t)
 {
     Type* ty = NULL;
-    for(uint32_t i = 0; i < vec_len(cacheptr); i++)
+    for(uint32_t i = 0; i < vec_len(V->cacheptr); i++)
     {
-        ty = cacheptr[i];
+        ty = V->cacheptr[i];
         if(ty == t)
             break;
     }
@@ -209,7 +204,7 @@ Type* vp_type_ptr(Type* t)
         ty = (Type*)vp_mem_calloc(1, sizeof(*ty));
         ty->kind = TY_PTR;
         ty->p = t;
-        vec_push(cacheptr, ty);
+        vec_push(V->cacheptr, ty);
     }
     return ty;
 }
@@ -218,9 +213,9 @@ Type* vp_type_arr(Type* t, uint32_t len)
 {
     if(len)
     {
-        for(uint32_t i = 0; i < vec_len(cachearr); i++)
+        for(uint32_t i = 0; i < vec_len(V->cachearr); i++)
         {
-            Type* ct = cachearr[i];
+            Type* ct = V->cachearr[i];
             if(ct->p == t && ct->len == len)
                 return ct;
         }
@@ -231,16 +226,16 @@ Type* vp_type_arr(Type* t, uint32_t len)
     ty->len = len;
     if(len)
     {
-        vec_push(cachearr, ty);
+        vec_push(V->cachearr, ty);
     }
     return ty;
 }
 
 Type* vp_type_func(Type* ret, Type** params)
 {
-    for(uint32_t i = 0; i < vec_len(cachefunc); i++)
+    for(uint32_t i = 0; i < vec_len(V->cachefunc); i++)
     {
-        Type* ct = cachefunc[i];
+        Type* ct = V->cachefunc[i];
         if(vec_len(ct->fn.params) == vec_len(params) && ct->fn.ret == ret)
         {
             bool match = true;
@@ -260,7 +255,7 @@ Type* vp_type_func(Type* ret, Type** params)
     ty->kind = TY_FUNC;
     ty->fn.ret = ret;
     ty->fn.params = params;
-    vec_push(cachefunc, ty);
+    vec_push(V->cachefunc, ty);
     return ty;
 }
 
@@ -295,93 +290,4 @@ void vp_type_union(Str* name, Type* ty, TypeField* fields)
         ty->st.align = MAX(ty->st.align, vp_type_alignof(it->ty));
     }
     ty->st.fields = fields;
-}
-
-void vp_type_print(Type* ty)
-{
-    switch(ty->kind)
-    {
-        case TY_BOOL:
-        case TY_UINT8:
-        case TY_INT8:
-        case TY_UINT16:
-        case TY_INT16:
-        case TY_UINT32:
-        case TY_INT32:
-        case TY_UINT64:
-        case TY_INT64:
-        case TY_FLOAT:
-        case TY_DOUBLE:
-        case TY_VOID:
-            printf("%s", type_name(ty->kind));
-            break;
-        case TY_PTR:
-            vp_type_print(ty->p);
-            printf("*");
-            break;
-        case TY_ARRAY:
-            vp_type_print(ty->p);
-            printf("[");
-            printf("%d", ty->len);
-            printf("]");
-            break;
-        case TY_FUNC:
-            printf("fn(");
-            for(uint32_t i = 0; i < vec_len(ty->fn.params); i++)
-            {
-                Type* pt = ty->fn.params[i];
-                vp_type_print(pt);
-                if(i != vec_len(ty->fn.params) - 1)
-                {
-                    printf(", ");
-                }
-            }
-            printf(") : ");
-            vp_type_print(ty->fn.ret);
-            break;
-        case TY_UNION:
-        case TY_STRUCT:
-            if(ty->kind == TY_UNION)
-                printf("union");
-            else
-                printf("struct");
-            if(ty->st.name)
-            {
-                printf(" %s", str_data(ty->st.name));
-            }
-            printf("\n{\n");
-            for(uint32_t i = 0; i < vec_len(ty->st.fields); i++)
-            {
-                printf("%s : ", str_data(ty->st.fields[i].name));
-                vp_type_print(ty->st.fields[i].ty);
-                printf("\n");
-            }
-            printf("}");
-            break;
-        default:
-            vp_assertX(0, "?");
-            break;
-    }
-}
-
-void vp_type_printcache()
-{
-    printf("\n-- cache ptr --\n");
-    for(uint32_t i = 0; i < vec_len(cacheptr); i++)
-    {
-        vp_type_print(cacheptr[i]);
-        printf("\n");
-    }
-    printf("\n-- cache arr --\n");
-    for(uint32_t i = 0; i < vec_len(cachearr); i++)
-    {
-        vp_type_print(cachearr[i]);
-        printf("\n");
-    }
-    printf("\n-- cache func --\n");
-    for(uint32_t i = 0; i < vec_len(cachefunc); i++)
-    {
-        vp_type_print(cachefunc[i]);
-        printf("\n");
-    }
 }

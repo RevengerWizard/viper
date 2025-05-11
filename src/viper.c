@@ -27,7 +27,7 @@ int main(int argc, char** argv)
         return EXIT_SUCCESS;
     }
 
-    VpState* V = vp_state_open();
+    V = vp_state_open();
 
     vp_load(V, argv[1]);
 

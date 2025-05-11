@@ -23,7 +23,7 @@ enum
 typedef struct TypeSpec
 {
     uint8_t kind;
-    SrcPos sp;
+    SrcLoc loc;
     union
     {
         Type* ty;
@@ -97,7 +97,7 @@ typedef enum FieldKind
 typedef struct Field
 {
     FieldKind kind;
-    SrcPos sp;
+    SrcLoc loc;
     struct Expr* init;
     union
     {
@@ -109,7 +109,7 @@ typedef struct Field
 typedef struct Expr
 {
     ExprKind kind;
-    SrcPos sp;
+    SrcLoc loc;
     union
     {
         bool b;
@@ -161,7 +161,7 @@ typedef enum StmtKind
 typedef struct Stmt
 {
     StmtKind kind;
-    SrcPos sp;
+    SrcLoc loc;
     union
     {
         Expr* expr;
@@ -177,7 +177,7 @@ typedef struct Stmt
 
 typedef struct Param
 {
-    SrcPos sp;
+    SrcLoc loc;
     Str* name;
     TypeSpec* spec;
 } Param;
@@ -192,7 +192,7 @@ typedef enum AggregateItemKind
 typedef struct AggregateItem
 {
     AggregateItemKind kind;
-    SrcPos sp;
+    SrcLoc loc;
     union
     {
         struct
@@ -219,7 +219,7 @@ typedef struct Aggregate
 
 typedef struct EnumItem
 {
-    SrcPos sp;
+    SrcLoc loc;
     Str* name;
     Expr* init;
 } EnumItem;
@@ -237,7 +237,7 @@ typedef enum DeclKind
 typedef struct Decl
 {
     DeclKind kind;
-    SrcPos sp;
+    SrcLoc loc;
     Str* name;
     union
     {
@@ -281,41 +281,43 @@ static inline bool expr_isconst(Expr* e)
 extern const char* const vp_ast_binop[];
 extern const char* const vp_ast_unary[];
 
-Expr* vp_expr_binop(SrcPos sp, ExprKind kind, Expr* lhs, Expr* rhs);
-Expr* vp_expr_unary(SrcPos sp, ExprKind kind, Expr* expr);
-Expr* vp_expr_false(SrcPos sp);
-Expr* vp_expr_true(SrcPos sp);
-Expr* vp_expr_nil(SrcPos sp);
-Expr* vp_expr_ilit(SrcPos sp, int64_t i);
-Expr* vp_expr_flit(SrcPos sp, double n);
-Expr* vp_expr_str(SrcPos sp, Str* str);
-Expr* vp_expr_name(SrcPos sp, Str* name);
-Expr* vp_expr_comp(SrcPos sp, Field* fields);
-Expr* vp_expr_call(SrcPos sp, Expr* e, Expr** args);
-Expr* vp_expr_idx(SrcPos sp, Expr* e, Expr* idx);
-Expr* vp_expr_field(SrcPos sp, Expr* e, Str* name);
-Expr* vp_expr_cast(SrcPos sp, TypeSpec* spec, Expr* e);
+/* Expressions */
+Expr* vp_expr_binop(SrcLoc loc, ExprKind kind, Expr* lhs, Expr* rhs);
+Expr* vp_expr_unary(SrcLoc loc, ExprKind kind, Expr* expr);
+Expr* vp_expr_false(SrcLoc loc);
+Expr* vp_expr_true(SrcLoc loc);
+Expr* vp_expr_nil(SrcLoc loc);
+Expr* vp_expr_ilit(SrcLoc loc, int64_t i);
+Expr* vp_expr_flit(SrcLoc loc, double n);
+Expr* vp_expr_str(SrcLoc loc, Str* str);
+Expr* vp_expr_name(SrcLoc loc, Str* name);
+Expr* vp_expr_comp(SrcLoc loc, Field* fields);
+Expr* vp_expr_call(SrcLoc loc, Expr* e, Expr** args);
+Expr* vp_expr_idx(SrcLoc loc, Expr* e, Expr* idx);
+Expr* vp_expr_field(SrcLoc loc, Expr* e, Str* name);
+Expr* vp_expr_cast(SrcLoc loc, TypeSpec* spec, Expr* e);
 
-Stmt* vp_stmt_assign(SrcPos sp, Expr* lhs, Expr* rhs);
-Stmt* vp_stmt_expr(SrcPos sp, Expr* e);
-Stmt* vp_stmt_decl(SrcPos sp, Decl* d);
-Stmt* vp_stmt_block(SrcPos sp, Stmt** block);
-Stmt* vp_stmt_return(SrcPos sp, Expr* e);
+/* Statements */
+Stmt* vp_stmt_assign(SrcLoc loc, Expr* lhs, Expr* rhs);
+Stmt* vp_stmt_expr(SrcLoc loc, Expr* e);
+Stmt* vp_stmt_decl(SrcLoc loc, Decl* d);
+Stmt* vp_stmt_block(SrcLoc loc, Stmt** block);
+Stmt* vp_stmt_return(SrcLoc loc, Expr* e);
 
-Decl* vp_decl_fn(SrcPos sp, TypeSpec* ret, Str* name);
-Decl* vp_decl_var(SrcPos sp, Str* name, TypeSpec* spec, Expr* e);
-Decl* vp_decl_type(SrcPos sp, Str* name, TypeSpec* spec);
-Decl* vp_decl_aggr(SrcPos sp, DeclKind kind, Str* name, Aggregate* agr);
+/* Declarations */
+Decl* vp_decl_fn(SrcLoc loc, TypeSpec* ret, Str* name);
+Decl* vp_decl_var(SrcLoc loc, Str* name, TypeSpec* spec, Expr* e);
+Decl* vp_decl_type(SrcLoc loc, Str* name, TypeSpec* spec);
+Decl* vp_decl_aggr(SrcLoc loc, DeclKind kind, Str* name, Aggregate* agr);
 Decl* vp_decl_enum(Str* name, TypeSpec* spec);
 
-Aggregate* vp_aggr_new(SrcPos sp, AggregateKind kind, AggregateItem* items);
+Aggregate* vp_aggr_new(SrcLoc loc, AggregateKind kind, AggregateItem* items);
 
-TypeSpec* vp_typespec_name(SrcPos sp, Str* name);
-TypeSpec* vp_typespec_type(SrcPos sp, Type* ty);
-TypeSpec* vp_typespec_ptr(SrcPos sp, TypeSpec* base);
-TypeSpec* vp_typespec_array(SrcPos sp, TypeSpec* base, Expr* e);
-TypeSpec* vp_typespec_fn(SrcPos sp, TypeSpec* ret, TypeSpec** args);
-
-void vp_ast_print(Decl* d);
+/* Type specs */
+TypeSpec* vp_typespec_name(SrcLoc loc, Str* name);
+TypeSpec* vp_typespec_type(SrcLoc loc, Type* ty);
+TypeSpec* vp_typespec_ptr(SrcLoc loc, TypeSpec* base);
+TypeSpec* vp_typespec_array(SrcLoc loc, TypeSpec* base, Expr* e);
+TypeSpec* vp_typespec_fn(SrcLoc loc, TypeSpec* ret, TypeSpec** args);
 
 #endif

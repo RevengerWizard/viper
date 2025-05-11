@@ -8,10 +8,13 @@
 
 #include "vp_state.h"
 #include "vp_lex.h"
+#include "vp_mem.h"
+
+VpState* V;
 
 VpState* vp_state_open()
 {
-    VpState* V = (VpState*)malloc(sizeof(*V));
+    V = (VpState*)vp_mem_alloc(sizeof(*V));
     memset(V, 0, sizeof(*V));
     vp_lex_init();
     return V;
