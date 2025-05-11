@@ -10,6 +10,8 @@
 #include "vp_mem.h"
 #include "vp_vec.h"
 
+/* -- Memory Allocation --------------------------------------------- */
+
 void* vp_mem_calloc(size_t num, size_t size)
 {
     void* p = calloc(num, size);
@@ -49,6 +51,8 @@ void* vp_mem_dup(void* src, size_t size)
     memcpy(dest, src, size);
     return dest;
 }
+
+/* -- Arena allocator ----------------------------------------------- */
 
 #define ARENA_ALIGNMENT 8
 #define ARENA_BLOCK_SIZE (1024 * 1024)

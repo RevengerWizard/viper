@@ -11,60 +11,61 @@
 #include "vp_state.h"
 
 /* Unsigned */
-Type* tybool = &(Type){.kind = TY_BOOL};
-Type* tyuint8 = &(Type){.kind = TY_UINT8};
-Type* tyuint16 = &(Type){.kind = TY_UINT16};
-Type* tyuint32 = &(Type){.kind = TY_UINT32};
-Type* tyuint64 = &(Type){.kind = TY_UINT64};
+Type* tybool = &(Type){.kind = TY_bool};
+Type* tyuint8 = &(Type){.kind = TY_uint8};
+Type* tyuint16 = &(Type){.kind = TY_uint16};
+Type* tyuint32 = &(Type){.kind = TY_uint32};
+Type* tyuint64 = &(Type){.kind = TY_int64};
 /* Signed */
-Type* tyint8 = &(Type){.kind = TY_INT8};
-Type* tyint16 = &(Type){.kind = TY_INT16};
-Type* tyint32 = &(Type){.kind = TY_INT32};
-Type* tyint64 = &(Type){.kind = TY_INT64};
+Type* tyint8 = &(Type){.kind = TY_int8};
+Type* tyint16 = &(Type){.kind = TY_int16};
+Type* tyint32 = &(Type){.kind = TY_int32};
+Type* tyint64 = &(Type){.kind = TY_int64};
 /* Floats */
-Type* tyfloat = &(Type){.kind = TY_FLOAT};
-Type* tydouble = &(Type){.kind = TY_DOUBLE};
+Type* tyfloat = &(Type){.kind = TY_float};
+Type* tydouble = &(Type){.kind = TY_double};
 
-Type* tyvoid = &(Type){.kind = TY_VOID};
-Type* tynil = &(Type){.kind = TY_NIL};
+Type* tyvoid = &(Type){.kind = TY_void};
+Type* tynil = &(Type){.kind = TY_nil};
 
 const char* const vp_type_names[] = {
-    "none", "name",
-    "bool",
-    "uint8", "uint16", "uint32", "uint64",
-    "int8", "int16", "int32", "int64",
-    "float", "double",
-    "ptr", 
-    "func", "array", "struct", "union",
-    "void",
-    "nil"
+#define TYSTR(name) #name,
+    TYDEF(TYSTR)
+#undef TKSTR
 };
+
+static Type* type_alloc(TypeKind kind)
+{
+    Type* t = vp_arena_alloc(&V->typearena, sizeof(*t));
+    t->kind = kind;
+    return t;
+}
 
 uint32_t vp_type_sizeof(Type* t)
 {
     switch(t->kind)
     {
-        case TY_BOOL:
-        case TY_UINT8:
-        case TY_INT8:
+        case TY_bool:
+        case TY_uint8:
+        case TY_int8:
             return 1;
-        case TY_UINT16:
-        case TY_INT16:
+        case TY_uint16:
+        case TY_int16:
             return 2;
-        case TY_UINT32:
-        case TY_INT32:
-        case TY_FLOAT:
+        case TY_uint32:
+        case TY_int32:
+        case TY_float:
             return 4;
-        case TY_UINT64:
-        case TY_INT64:
-        case TY_DOUBLE:
-        case TY_PTR:
-        case TY_FUNC:
+        case TY_uint64:
+        case TY_int64:
+        case TY_double:
+        case TY_ptr:
+        case TY_func:
             return 8;
-        case TY_ARRAY:
+        case TY_array:
             return vp_type_sizeof(t->p) * t->len;
-        case TY_STRUCT:
-        case TY_UNION:
+        case TY_struct:
+        case TY_union:
             return t->st.size;
         default:
             vp_assertX(0, "?");
@@ -77,27 +78,27 @@ uint32_t vp_type_alignof(Type* t)
 {
     switch(t->kind)
     {
-        case TY_BOOL:
-        case TY_UINT8:
-        case TY_INT8:
+        case TY_bool:
+        case TY_uint8:
+        case TY_int8:
             return 1;
-        case TY_UINT16:
-        case TY_INT16:
+        case TY_uint16:
+        case TY_int16:
             return 2;
-        case TY_UINT32:
-        case TY_INT32:
-        case TY_FLOAT:
+        case TY_uint32:
+        case TY_int32:
+        case TY_float:
             return 4;
-        case TY_UINT64:
-        case TY_INT64:
-        case TY_DOUBLE:
-        case TY_PTR:
-        case TY_FUNC:
+        case TY_uint64:
+        case TY_int64:
+        case TY_double:
+        case TY_ptr:
+        case TY_func:
             return 8;
-        case TY_ARRAY:
+        case TY_array:
             return vp_type_alignof(t->p);
-        case TY_STRUCT:
-        case TY_UNION:
+        case TY_struct:
+        case TY_union:
             return t->st.align;
         default:
             vp_assertX(0, "?");
@@ -141,17 +142,17 @@ Type* vp_type_tounsigned(Type* t)
 {
     switch(t->kind)
     {
-        case TY_UINT8:
-        case TY_INT8:
+        case TY_uint8:
+        case TY_int8:
             return tyuint8;
-        case TY_UINT16:
-        case TY_INT16:
+        case TY_uint16:
+        case TY_int16:
             return tyuint16;
-        case TY_UINT32:
-        case TY_INT32:
+        case TY_uint32:
+        case TY_int32:
             return tyuint32;
-        case TY_UINT64:
-        case TY_INT64:
+        case TY_uint64:
+        case TY_int64:
             return tyuint64;
         default:
             vp_assertX(0, "?");
@@ -162,7 +163,7 @@ Type* vp_type_tounsigned(Type* t)
 /* Decay a pointer type, if present */
 Type* vp_type_decay(Type* t)
 {
-    if(t->kind == TY_ARRAY)
+    if(t->kind == TY_array)
     {
         t = vp_type_ptr(t->p);
     }
@@ -184,8 +185,7 @@ Type* vp_type_decayempty(Type* t)
 
 Type* vp_type_none(struct Sym* sym)
 {
-    Type* ty = (Type*)vp_mem_calloc(1, sizeof(*ty));
-    ty->kind = TY_NONE;
+    Type* ty = type_alloc(TY_none);
     ty->sym = sym;
     return ty;
 }
@@ -201,8 +201,7 @@ Type* vp_type_ptr(Type* t)
     }
     if(!ty)
     {
-        ty = (Type*)vp_mem_calloc(1, sizeof(*ty));
-        ty->kind = TY_PTR;
+        ty = type_alloc(TY_ptr);
         ty->p = t;
         vec_push(V->cacheptr, ty);
     }
@@ -220,8 +219,7 @@ Type* vp_type_arr(Type* t, uint32_t len)
                 return ct;
         }
     }
-    Type* ty = (Type*)vp_mem_calloc(1, sizeof(*ty));
-    ty->kind = TY_ARRAY;
+    Type* ty = type_alloc(TY_array);
     ty->p = t;
     ty->len = len;
     if(len)
@@ -251,8 +249,7 @@ Type* vp_type_func(Type* ret, Type** params)
                 return ct;
         }
     }
-    Type* ty = (Type*)vp_mem_calloc(1, sizeof(*ty));
-    ty->kind = TY_FUNC;
+    Type* ty = type_alloc(TY_func);
     ty->fn.ret = ret;
     ty->fn.params = params;
     vec_push(V->cachefunc, ty);
@@ -261,8 +258,8 @@ Type* vp_type_func(Type* ret, Type** params)
 
 void vp_type_struct(Str* name, Type* ty, TypeField* fields)
 {
-    vp_assertX(ty->kind == TY_NAME, "type name");
-    ty->kind = TY_STRUCT;
+    vp_assertX(ty->kind == TY_name, "type name");
+    ty->kind = TY_struct;
     ty->st.name = name;
     ty->st.fields = fields;
     ty->st.size = 0;
@@ -278,8 +275,8 @@ void vp_type_struct(Str* name, Type* ty, TypeField* fields)
 
 void vp_type_union(Str* name, Type* ty, TypeField* fields)
 {
-    vp_assertX(ty->kind == TY_NAME, "type name");
-    ty->kind = TY_UNION;
+    vp_assertX(ty->kind == TY_name, "type name");
+    ty->kind = TY_union;
     ty->st.name = name;
     ty->st.fields = fields;
     ty->st.size = 0;

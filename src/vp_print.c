@@ -7,6 +7,7 @@
 
 #include "vp_print.h"
 #include "vp_str.h"
+#include "vp_type.h"
 #include "vp_vec.h"
 #include "vp_tab.h"
 
@@ -39,31 +40,31 @@ void vp_print_type(Type* ty)
 {
     switch(ty->kind)
     {
-        case TY_BOOL:
-        case TY_UINT8:
-        case TY_INT8:
-        case TY_UINT16:
-        case TY_INT16:
-        case TY_UINT32:
-        case TY_INT32:
-        case TY_UINT64:
-        case TY_INT64:
-        case TY_FLOAT:
-        case TY_DOUBLE:
-        case TY_VOID:
+        case TY_bool:
+        case TY_uint8:
+        case TY_int8:
+        case TY_uint16:
+        case TY_int16:
+        case TY_uint32:
+        case TY_int32:
+        case TY_uint64:
+        case TY_int64:
+        case TY_float:
+        case TY_double:
+        case TY_void:
             printf("%s", type_name(ty->kind));
             break;
-        case TY_PTR:
+        case TY_ptr:
             vp_print_type(ty->p);
             printf("*");
             break;
-        case TY_ARRAY:
+        case TY_array:
             vp_print_type(ty->p);
             printf("[");
             printf("%d", ty->len);
             printf("]");
             break;
-        case TY_FUNC:
+        case TY_func:
             printf("fn(");
             for(uint32_t i = 0; i < vec_len(ty->fn.params); i++)
             {
@@ -77,9 +78,9 @@ void vp_print_type(Type* ty)
             printf(") : ");
             vp_print_type(ty->fn.ret);
             break;
-        case TY_UNION:
-        case TY_STRUCT:
-            if(ty->kind == TY_UNION)
+        case TY_union:
+        case TY_struct:
+            if(ty->kind == TY_union)
                 printf("union");
             else
                 printf("struct");

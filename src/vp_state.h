@@ -24,6 +24,7 @@ typedef struct VpState
     Tab strtab;
 
     Arena astarena;
+    Arena typearena;
 } VpState;
 
 extern VpState* V;

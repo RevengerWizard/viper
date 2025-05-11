@@ -9,32 +9,26 @@
 #include "vp_str.h"
 
 /* Viper types */
+#define TYDEF(_) \
+    _(none) /* Unresolved type */ \
+    _(name) /* Unknown type */ \
+    /* Integers */ \
+    _(bool) \
+    /* Unsigned */ \
+    _(uint8) _(uint16) _(uint32) _(uint64) \
+    /* Signed */ \
+    _(int8) _(int16) _(int32) _(int64) \
+    /* Floats */ \
+    _(float) _(double) \
+    _(ptr) _(func) _(array) \
+    _(struct) _(union) \
+    _(void) _(nil) \
+
 typedef enum TypeKind
 {
-    TY_NONE,    /* Unresolved type */
-    TY_NAME,    /* Unknown type */
-    /* Integers */
-    TY_BOOL,
-    /* Unsigned */
-    TY_UINT8,
-    TY_UINT16,
-    TY_UINT32,
-    TY_UINT64,
-    /* Signed */
-    TY_INT8,
-    TY_INT16,
-    TY_INT32,
-    TY_INT64,
-    /* Floats */
-    TY_FLOAT,
-    TY_DOUBLE,
-    TY_PTR,
-    TY_FUNC,
-    TY_ARRAY,
-    TY_STRUCT,
-    TY_UNION,
-    TY_VOID,
-    TY_NIL,
+#define TYENUM(name) TY_##name,
+    TYDEF(TYENUM)
+#undef TKENUM
 } TypeKind;
 
 typedef struct TypeField
@@ -90,28 +84,28 @@ extern Type* tynil;
 
 static inline bool type_isbool(const Type* t)
 {
-    return t->kind == TY_BOOL;
+    return t->kind == TY_bool;
 }
 
 static inline bool type_issigned(const Type* t)
 {
-    return t->kind >= TY_INT8 && t->kind <= TY_INT64;
+    return t->kind >= TY_int8 && t->kind <= TY_int64;
 }
 
 static inline bool type_isunsigned(const Type* t)
 {
-    return (t->kind >= TY_UINT8 && t->kind <= TY_UINT64) ||
-            t->kind == TY_PTR;
+    return (t->kind >= TY_uint8 && t->kind <= TY_uint64) ||
+            t->kind == TY_ptr;
 }
 
 static inline bool type_isint(const Type* t)
 {
-    return t->kind >= TY_UINT8 && t->kind <= TY_INT64;
+    return t->kind >= TY_uint8 && t->kind <= TY_int64;
 }
 
 static inline bool type_isflo(const Type* t)
 {
-    return t->kind == TY_FLOAT || t->kind == TY_DOUBLE;
+    return t->kind == TY_float || t->kind == TY_double;
 }
 
 static inline bool type_isnum(const Type* t)
@@ -121,17 +115,17 @@ static inline bool type_isnum(const Type* t)
 
 static inline bool type_isptr(const Type* t)
 {
-    return t->kind == TY_PTR;
+    return t->kind == TY_ptr;
 }
 
 static inline bool type_isptrlike(const Type* t)
 {
-    return t->kind == TY_PTR || t->kind == TY_FUNC;
+    return t->kind == TY_ptr || t->kind == TY_func;
 }
 
 static inline bool type_isarrempty(const Type* t)
 {
-    return t->kind == TY_ARRAY && t->len == 0;
+    return t->kind == TY_array && t->len == 0;
 }
 
 static inline bool type_isnil(const Type* t)
@@ -141,22 +135,22 @@ static inline bool type_isnil(const Type* t)
 
 static inline bool type_isscalar(const Type* t)
 {
-    return TY_BOOL <= t->kind && t->kind <= TY_FUNC;
+    return TY_bool <= t->kind && t->kind <= TY_func;
 }
 
 static inline bool type_isaggr(const Type* t)
 {
-    return t->kind == TY_STRUCT || t->kind == TY_UNION;
+    return t->kind == TY_struct || t->kind == TY_union;
 }
 
 static inline bool type_isfunc(const Type* t)
 {
-    return t->kind == TY_FUNC;
+    return t->kind == TY_func;
 }
 
 static inline int type_rank(const Type* t)
 {
-    return (t->kind - TY_UINT8) + 1;
+    return (t->kind - TY_uint8) + 1;
 }
 
 #define type_name(i) (vp_type_names[(i)])

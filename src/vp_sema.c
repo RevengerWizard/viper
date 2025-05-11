@@ -132,15 +132,15 @@ static bool field_duplicates(TypeField* fields)
 /* Complete a (symbolic) type */
 static void type_complete(Type* ty)
 {
-    if(ty->kind == TY_NAME)
+    if(ty->kind == TY_name)
     {
         vp_parse_error(ty->sym->decl->loc, "Type completion cycle");
     }
-    else if(ty->kind != TY_NONE)
+    else if(ty->kind != TY_none)
         return;
     
     Decl* d = ty->sym->decl;
-    ty->kind = TY_NAME;
+    ty->kind = TY_name;
     vp_assertX(d->kind == DECL_STRUCT || d->kind == DECL_UNION, "struct/union");
     
     TypeField* fields = NULL;
@@ -152,7 +152,7 @@ static void type_complete(Type* ty)
         type_complete(tyitem);
         if(vp_type_sizeof(tyitem) == 0)
         {
-            if(tyitem->kind != TY_ARRAY || vp_type_sizeof(tyitem->p) == 0)
+            if(tyitem->kind != TY_array || vp_type_sizeof(tyitem->p) == 0)
             {
                 vp_parse_error(item->loc, "field type of size 0 is not allowed");
             }
@@ -212,37 +212,37 @@ static Operand opr_decay(Operand opr)
     case k: \
         switch(ty->kind) \
         { \
-        case TY_BOOL: \
+        case TY_bool: \
             opr->val.b = (bool)opr->val.b; \
             break; \
-        case TY_UINT8: \
+        case TY_uint8: \
             opr->val.u8 = (uint8_t)opr->val.t; \
             break; \
-        case TY_INT8: \
+        case TY_int8: \
             opr->val.i8 = (int8_t)opr->val.t; \
             break; \
-        case TY_UINT16: \
+        case TY_uint16: \
             opr->val.u16 = (uint16_t)opr->val.t; \
             break; \
-        case TY_INT16: \
+        case TY_int16: \
             opr->val.i16 = (int16_t)opr->val.t; \
             break; \
-        case TY_UINT32: \
+        case TY_uint32: \
             opr->val.u32 = (uint32_t)opr->val.t; \
             break; \
-        case TY_INT32: \
+        case TY_int32: \
             opr->val.i32 = (int32_t)opr->val.t; \
             break; \
-        case TY_UINT64: \
+        case TY_uint64: \
             opr->val.u64 = (uint64_t)opr->val.t; \
             break; \
-        case TY_INT64: \
+        case TY_int64: \
             opr->val.i64 = (int64_t)opr->val.t; \
             break; \
-        case TY_FLOAT: \
+        case TY_float: \
             opr->val.f = (float)opr->val.t; \
             break; \
-        case TY_DOUBLE: \
+        case TY_double: \
             opr->val.d = (double)opr->val.t; \
             break; \
         default: \
@@ -268,17 +268,17 @@ static bool opr_cast(Operand* opr, Type* ty)
             {
                 switch(opr->ty->kind)
                 {
-                CASE(TY_BOOL, b)
-                CASE(TY_UINT8, u8)
-                CASE(TY_INT8, i8)
-                CASE(TY_UINT16, u16)
-                CASE(TY_INT16, i16)
-                CASE(TY_UINT32, u32)
-                CASE(TY_INT32, i32)
-                CASE(TY_UINT64, u64)
-                CASE(TY_INT64, i64)
-                CASE(TY_FLOAT, f)
-                CASE(TY_DOUBLE, d)
+                CASE(TY_bool, b)
+                CASE(TY_uint8, u8)
+                CASE(TY_int8, i8)
+                CASE(TY_uint16, u16)
+                CASE(TY_int16, i16)
+                CASE(TY_uint32, u32)
+                CASE(TY_int32, i32)
+                CASE(TY_uint64, u64)
+                CASE(TY_int64, i64)
+                CASE(TY_float, f)
+                CASE(TY_double, d)
                 default:
                     opr->isconst = false;
                     break;
@@ -309,10 +309,10 @@ static void opr_promote(Operand* opr)
 {
     switch(opr->ty->kind)
     {
-        case TY_UINT8:
-        case TY_INT8:
-        case TY_UINT16:
-        case TY_INT16:
+        case TY_uint8:
+        case TY_int8:
+        case TY_uint16:
+        case TY_int16:
             opr_cast(opr, tyint32);
             break;
         default:
@@ -854,7 +854,7 @@ static Type* sema_init_ty(Type* ty, Expr* e)
     Operand opr = sema_expr_ty(e, ty);
     if(type_isarrempty(ty))
     {
-        if(opr.ty->kind == TY_ARRAY && ty->p == opr.ty->p)
+        if(opr.ty->kind == TY_array && ty->p == opr.ty->p)
         {
             /* Empty array, infer size from initializer expression type */
             ty->len = opr.ty->len;
@@ -898,7 +898,7 @@ static Type* sema_init(SrcLoc loc, TypeSpec* spec, Expr* e)
     {
         vp_assertX(e, "expression");
         inferty = ty = sema_expr(e).ty;
-        if(ty->kind == TY_ARRAY && e->kind != EX_COMPOUND)
+        if(ty->kind == TY_array && e->kind != EX_COMPOUND)
         {
             ty = vp_type_decay(ty);
         }
@@ -918,7 +918,7 @@ static Type* sema_init(SrcLoc loc, TypeSpec* spec, Expr* e)
 /* Find index from field name */
 static uint32_t field_idx(Type* ty, Str* name)
 {
-    vp_assertX(ty->kind == TY_STRUCT || ty->kind == TY_UNION, "struct/union");
+    vp_assertX(ty->kind == TY_struct || ty->kind == TY_union, "struct/union");
     for(uint32_t i = 0; i < vec_len(ty->st.fields); i++)
     {
         if(ty->st.fields[i].name == name)
@@ -968,7 +968,7 @@ static Operand sema_expr_comp(Expr* e, Type* ret)
             idx++;
         }
     }
-    else if(ty->kind == TY_ARRAY)
+    else if(ty->kind == TY_array)
     {
         int32_t idx = 0, maxidx = 0;
         for(uint32_t i = 0; i < numfields; i++)
@@ -1024,7 +1024,7 @@ static Operand sema_expr_call(Expr* e)
 {
     vp_assertX(e->kind == EX_CALL, "call");
     Operand fn = sema_expr_rval(e);
-    if(fn.ty->kind != TY_FUNC)
+    if(fn.ty->kind != TY_func)
     {
         vp_parse_error(e->loc, "Cannot call non-function value");
     }
@@ -1055,7 +1055,7 @@ static Operand sema_expr_idx(Expr* e)
 {
     vp_assertX(e->kind == EX_IDX, "index");
     Operand opr = opr_decay(sema_expr(e->idx.expr));
-    if(opr.ty->kind != TY_PTR)
+    if(opr.ty->kind != TY_ptr)
     {
         vp_parse_error(e->loc, "Can only index arrays or pointers");
     }
@@ -1074,7 +1074,7 @@ static Operand sema_expr_field(Expr* e)
     Operand lop = sema_expr(e->field.expr);
     Type* ty = lop.ty;
     type_complete(ty);
-    if(ty->kind != TY_STRUCT && ty->kind != TY_UNION)
+    if(ty->kind != TY_struct && ty->kind != TY_union)
     {
         vp_parse_error(e->loc, "Can only access fields on struct/union types");
     }
@@ -1288,7 +1288,7 @@ static Type* sema_fn(Decl* d)
         vec_push(params, typaram);
     }
     Type* ret = vp_type_decayempty(sema_typespec(d->fn.ret));
-    if(ret->kind == TY_ARRAY)
+    if(ret->kind == TY_array)
     {
         vp_parse_error(d->loc, "function return type cannot be array");
     }
