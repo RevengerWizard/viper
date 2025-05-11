@@ -3,8 +3,10 @@
 ** Abstract Syntax Tree
 */
 
+#include <string.h>
 
 #include "vp_ast.h"
+#include "vp_lex.h"
 #include "vp_mem.h"
 #include "vp_str.h"
 #include "vp_type.h"
@@ -17,19 +19,27 @@ const char* const vp_ast_unary[] = {
     "-", "not ", "~"
 };
 
+static void* ast_alloc(uint32_t size)
+{
+    vp_assertX(size != 0, "0 size");
+    void* p = vp_arena_alloc(&V->astarena, size);
+    memset(p, 0, size);
+    return p;
+}
+
 /* -- AST expressions ----------------------------------------------- */
 
-static Expr* expr_new(ExprKind kind)
+static Expr* expr_new(ExprKind kind, SrcLoc loc)
 {
-    Expr* expr = (Expr*)vp_mem_alloc(sizeof(*expr));
-    expr->kind = kind;
-    return expr;
+    Expr* e = ast_alloc(sizeof(*e));
+    e->kind = kind;
+    e->loc = loc;
+    return e;
 }
 
 Expr* vp_expr_binop(SrcLoc loc, ExprKind kind, Expr* lhs, Expr* rhs)
 {
-    Expr* expr = expr_new(kind);
-    expr->loc = loc;
+    Expr* expr = expr_new(kind, loc);
     expr->binop.lhs = lhs;
     expr->binop.rhs = rhs;
     return expr;
@@ -37,79 +47,68 @@ Expr* vp_expr_binop(SrcLoc loc, ExprKind kind, Expr* lhs, Expr* rhs)
 
 Expr* vp_expr_unary(SrcLoc loc, ExprKind kind, Expr* unary)
 {
-    Expr* expr = expr_new(kind);
-    expr->loc = loc;
+    Expr* expr = expr_new(kind, loc);
     expr->unary = unary;
     return expr;
 }
 
 Expr* vp_expr_false(SrcLoc loc)
 {
-    Expr* expr = expr_new(EX_FALSE);
-    expr->loc = loc;
+    Expr* expr = expr_new(EX_FALSE, loc);
     expr->b = false;
     return expr;
 }
 
 Expr* vp_expr_true(SrcLoc loc)
 {
-    Expr* expr = expr_new(EX_TRUE);
-    expr->loc = loc;
+    Expr* expr = expr_new(EX_TRUE, loc);
     expr->b = true;
     return expr;
 }
 
 Expr* vp_expr_nil(SrcLoc loc)
 {
-    Expr* expr = expr_new(EX_NIL);
-    expr->loc = loc;
-    return expr;
+    return expr_new(EX_NIL, loc);
 }
 
 Expr* vp_expr_ilit(SrcLoc loc, int64_t i)
 {
-    Expr* expr = expr_new(EX_INT);
-    expr->loc = loc;
+    Expr* expr = expr_new(EX_INT, loc);
     expr->i = i;
     return expr;
 }
 
 Expr* vp_expr_flit(SrcLoc loc, double n)
 {
-    Expr* expr = expr_new(EX_NUM);
-    expr->loc = loc;
+    Expr* expr = expr_new(EX_NUM, loc);
     expr->n = n;
     return expr;
 }
 
 Expr* vp_expr_str(SrcLoc loc, Str* str)
 {
-    Expr* expr = expr_new(EX_STR);
-    expr->loc = loc;
+    Expr* expr = expr_new(EX_STR, loc);
     expr->name = str;
     return expr;
 }
 
 Expr* vp_expr_name(SrcLoc loc, Str* name)
 {
-    Expr* expr = expr_new(EX_NAME);
-    expr->loc = loc;
+    Expr* expr = expr_new(EX_NAME, loc);
     expr->name = name;
     return expr;
 }
 
 Expr* vp_expr_comp(SrcLoc loc, Field* fields)
 {
-    Expr* expr = expr_new(EX_COMPOUND);
-    expr->loc = loc;
+    Expr* expr = expr_new(EX_COMPOUND, loc);
     expr->comp.fields = fields;
     return expr;
 }
 
 Expr* vp_expr_call(SrcLoc loc, Expr* e, Expr** args)
 {
-    Expr* expr = expr_new(EX_CALL);
-    expr->loc = loc;
+    Expr* expr = expr_new(EX_CALL, loc);
     expr->call.expr = e;
     expr->call.args = args;
     return expr;
@@ -117,8 +116,7 @@ Expr* vp_expr_call(SrcLoc loc, Expr* e, Expr** args)
 
 Expr* vp_expr_idx(SrcLoc loc, Expr* e, Expr* idx)
 {
-    Expr* expr = expr_new(EX_IDX);
-    expr->loc = loc;
+    Expr* expr = expr_new(EX_IDX, loc);
     expr->idx.expr = e;
     expr->idx.index = idx;
     return expr;
@@ -126,8 +124,7 @@ Expr* vp_expr_idx(SrcLoc loc, Expr* e, Expr* idx)
 
 Expr* vp_expr_field(SrcLoc loc, Expr* e, Str* name)
 {
-    Expr* expr = expr_new(EX_FIELD);
-    expr->loc = loc;
+    Expr* expr = expr_new(EX_FIELD, loc);
     expr->field.expr = e;
     expr->field.name = name;
     return expr;
@@ -135,7 +132,7 @@ Expr* vp_expr_field(SrcLoc loc, Expr* e, Str* name)
 
 Expr* vp_expr_cast(SrcLoc loc, TypeSpec* spec, Expr* e)
 {
-    Expr* expr = expr_new(EX_CAST);
+    Expr* expr = expr_new(EX_CAST, loc);
     expr->cast.spec = spec;
     expr->cast.expr = e;
     return expr;
@@ -143,17 +140,17 @@ Expr* vp_expr_cast(SrcLoc loc, TypeSpec* spec, Expr* e)
 
 /* -- AST statements ------------------------------------------------ */
 
-static Stmt* stmt_new(StmtKind kind)
+static Stmt* stmt_new(StmtKind kind, SrcLoc loc)
 {
-    Stmt* st = (Stmt*)vp_mem_calloc(1, sizeof(*st));
+    Stmt* st = ast_alloc(sizeof(*st));
     st->kind = kind;
+    st->loc = loc;
     return st;
 }
 
 Stmt* vp_stmt_assign(SrcLoc loc, Expr* lhs, Expr* rhs)
 {
-    Stmt* st = stmt_new(ST_ASSIGN);
-    st->loc = loc;
+    Stmt* st = stmt_new(ST_ASSIGN, loc);
     st->lhs = lhs;
     st->rhs = rhs;
     return st;
@@ -161,44 +158,46 @@ Stmt* vp_stmt_assign(SrcLoc loc, Expr* lhs, Expr* rhs)
 
 Stmt* vp_stmt_expr(SrcLoc loc, Expr* e)
 {
-    Stmt* st = stmt_new(ST_EXPR);
-    st->loc = loc;
+    Stmt* st = stmt_new(ST_EXPR, loc);
     st->expr = e;
     return st;
 }
 
 Stmt* vp_stmt_decl(SrcLoc loc, Decl* d)
 {
-    Stmt* st = stmt_new(ST_DECL);
-    st->loc = loc;
+    Stmt* st = stmt_new(ST_DECL, loc);
     st->decl = d;
     return st;
 }
 
 Stmt* vp_stmt_block(SrcLoc loc, Stmt** block)
 {
-    Stmt* st = stmt_new(ST_BLOCK);
-    st->loc = loc;
+    Stmt* st = stmt_new(ST_BLOCK, loc);
     st->block = block;
     return st;
 }
 
 Stmt* vp_stmt_return(SrcLoc loc, Expr* e)
 {
-    Stmt* st = stmt_new(ST_RETURN);
-    st->loc = loc;
+    Stmt* st = stmt_new(ST_RETURN, loc);
     st->expr = e;
     return st;
 }
 
 /* -- AST declarations ---------------------------------------------- */
 
-Decl* vp_decl_var(SrcLoc loc, Str* name, TypeSpec* spec, Expr* e)
+static Decl* decl_new(DeclKind kind, SrcLoc loc, Str* name)
 {
-    Decl* d = (Decl*)vp_mem_calloc(1, sizeof(*d));
-    d->kind = DECL_VAR;
+    Decl* d = ast_alloc(sizeof(*d));
+    d->kind = kind;
     d->loc = loc;
     d->name = name;
+    return d;
+}
+
+Decl* vp_decl_var(SrcLoc loc, Str* name, TypeSpec* spec, Expr* e)
+{
+    Decl* d = decl_new(DECL_VAR, loc, name);
     d->var.spec = spec;
     d->var.expr = e;
     return d;
@@ -206,44 +205,33 @@ Decl* vp_decl_var(SrcLoc loc, Str* name, TypeSpec* spec, Expr* e)
 
 Decl* vp_decl_fn(SrcLoc loc, TypeSpec* ret, Str* name)
 {
-    Decl* d = (Decl*)vp_mem_calloc(1, sizeof(*d));
-    d->kind = DECL_FN;
-    d->loc = loc;
-    d->name = name;
+    Decl* d = decl_new(DECL_FN, loc, name);;
     d->fn.ret = ret;
     return d;
 }
 
 Decl* vp_decl_type(SrcLoc loc, Str* name, TypeSpec* spec)
 {
-    Decl* d = (Decl*)vp_mem_calloc(1, sizeof(*d));
-    d->kind = DECL_TYPE;
-    d->name = name;
+    Decl* d = decl_new(DECL_TYPE, loc, name);;
     d->ts.spec = spec;
     return d;
 }
 
 Decl* vp_decl_aggr(SrcLoc loc, DeclKind kind, Str* name, Aggregate* agr)
 {
-    Decl* d = (Decl*)vp_mem_calloc(1, sizeof(*d));
-    d->kind = kind;
-    d->loc = loc;
+    Decl* d = decl_new(kind, loc, name);
     d->agr = agr;
-    d->name = name;
     return d;
 }
 
 Decl* vp_decl_enum(Str* name, TypeSpec* spec)
 {
-    Decl* d = (Decl*)vp_mem_calloc(1, sizeof(*d));
-    d->kind = DECL_ENUM;
-    d->enm.spec = spec;
-    return d;
+    return NULL;
 }
 
 Aggregate* vp_aggr_new(SrcLoc loc, AggregateKind kind, AggregateItem* items)
 {
-    Aggregate* ag = (Aggregate*)vp_mem_calloc(1, sizeof(*ag));
+    Aggregate* ag = ast_alloc(sizeof(*ag));
     ag->kind = kind;
     ag->items = items;
     return ag;
@@ -251,37 +239,38 @@ Aggregate* vp_aggr_new(SrcLoc loc, AggregateKind kind, AggregateItem* items)
 
 /* -- AST type specs ------------------------------------------------ */
 
+static TypeSpec* new_typespec(TypeSpecKind kind, SrcLoc loc)
+{
+    TypeSpec* ts = ast_alloc(sizeof(*ts));
+    ts->kind = kind;
+    ts->loc = loc;
+    return ts;
+}
+
 TypeSpec* vp_typespec_name(SrcLoc loc, Str* name)
 {
-    TypeSpec* ts = (TypeSpec*)vp_mem_calloc(1, sizeof(*ts));
-    ts->kind = SPEC_NAME;
-    ts->loc = loc;
+    TypeSpec* ts = new_typespec(SPEC_NAME, loc);
     ts->name = name;
     return ts;
 }
 
 TypeSpec* vp_typespec_type(SrcLoc loc, Type* ty)
 {
-    TypeSpec* ts = (TypeSpec*)vp_mem_calloc(1, sizeof(*ts));
-    ts->kind = SPEC_TYPE;
-    ts->loc = loc;
+    TypeSpec* ts = new_typespec(SPEC_TYPE, loc);
     ts->ty = ty;
     return ts;
 }
 
 TypeSpec* vp_typespec_ptr(SrcLoc loc, TypeSpec* base)
 {
-    TypeSpec* ts = (TypeSpec*)vp_mem_calloc(1, sizeof(*ts));
-    ts->kind = SPEC_PTR;
-    ts->loc = loc;
+    TypeSpec* ts = new_typespec(SPEC_PTR, loc);
     ts->ptr = base;
     return ts;
 }
 
-TypeSpec* vp_typespec_array(SrcLoc loc, TypeSpec* base, Expr* e)
+TypeSpec* vp_typespec_arr(SrcLoc loc, TypeSpec* base, Expr* e)
 {
-    TypeSpec* ts = (TypeSpec*)vp_mem_calloc(1, sizeof(*ts));
-    ts->kind = SPEC_ARRAY;
+    TypeSpec* ts = new_typespec(SPEC_ARRAY, loc);
     ts->arr.base = base;
     ts->arr.expr = e;
     return ts;
@@ -289,8 +278,7 @@ TypeSpec* vp_typespec_array(SrcLoc loc, TypeSpec* base, Expr* e)
 
 TypeSpec* vp_typespec_fn(SrcLoc loc, TypeSpec* ret, TypeSpec** args)
 {
-    TypeSpec* ts = (TypeSpec*)vp_mem_calloc(1, sizeof(*ts));
-    ts->kind = SPEC_FUNC;
+    TypeSpec* ts = new_typespec(SPEC_FUNC, loc);
     ts->fn.ret = ret;
     ts->fn.args = args;
     return ts;

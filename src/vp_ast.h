@@ -10,7 +10,7 @@
 #include "vp_str.h"
 #include "vp_type.h"
 
-enum
+typedef enum TypeSpecKind
 {
     SPEC_NONE,
     SPEC_TYPE,
@@ -18,11 +18,11 @@ enum
     SPEC_FUNC,
     SPEC_ARRAY,
     SPEC_PTR,
-};
+} TypeSpecKind;
 
 typedef struct TypeSpec
 {
-    uint8_t kind;
+    TypeSpecKind kind;
     SrcLoc loc;
     union
     {
@@ -317,7 +317,7 @@ Aggregate* vp_aggr_new(SrcLoc loc, AggregateKind kind, AggregateItem* items);
 TypeSpec* vp_typespec_name(SrcLoc loc, Str* name);
 TypeSpec* vp_typespec_type(SrcLoc loc, Type* ty);
 TypeSpec* vp_typespec_ptr(SrcLoc loc, TypeSpec* base);
-TypeSpec* vp_typespec_array(SrcLoc loc, TypeSpec* base, Expr* e);
+TypeSpec* vp_typespec_arr(SrcLoc loc, TypeSpec* base, Expr* e);
 TypeSpec* vp_typespec_fn(SrcLoc loc, TypeSpec* ret, TypeSpec** args);
 
 #endif

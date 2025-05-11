@@ -7,6 +7,7 @@
 #define _VP_STATE_H
 
 #include "vp_buf.h"
+#include "vp_mem.h"
 #include "vp_type.h"
 #include "vp_tab.h"
 
@@ -21,6 +22,8 @@ typedef struct VpState
     Type** cachearr;
 
     Tab strtab;
+
+    Arena astarena;
 } VpState;
 
 extern VpState* V;
