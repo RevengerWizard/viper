@@ -49,6 +49,7 @@ typedef enum ExprKind
     EX_FALSE,
     EX_NIL,
     EX_INT,
+    EX_UINT,
     EX_NUM,
     EX_STR,
     EX_NAME,
@@ -78,9 +79,8 @@ typedef enum ExprKind
     EX_NEG = EX_UNARY,
     EX_NOT,
     EX_BNOT,
-    EX_REF, /* &x */
+    EX_REF,     /* &x */
     EX_DEREF,   /* *x */
-
     EX_CAST,
     EX_CALL,
     EX_IDX,
@@ -113,6 +113,7 @@ typedef struct Expr
     union
     {
         bool b;
+        uint64_t u;
         int64_t i;
         double n;
         Str* name;
@@ -288,6 +289,7 @@ Expr* vp_expr_false(SrcLoc loc);
 Expr* vp_expr_true(SrcLoc loc);
 Expr* vp_expr_nil(SrcLoc loc);
 Expr* vp_expr_ilit(SrcLoc loc, int64_t i);
+Expr* vp_expr_ulit(SrcLoc loc, uint64_t u);
 Expr* vp_expr_flit(SrcLoc loc, double n);
 Expr* vp_expr_str(SrcLoc loc, Str* str);
 Expr* vp_expr_name(SrcLoc loc, Str* name);

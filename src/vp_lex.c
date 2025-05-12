@@ -66,7 +66,7 @@ static void lex_newline(LexState* ls)
     if(lex_iseol(ls) && ls->c != old)
         lex_next(ls);  /* Skip "\n\r" or "\r\n" */
     if(++ls->linenumber >= VP_MAX_LINE)
-        vp_lex_error(ls, ls->linenumber, "Too many lines");
+        vp_lex_error(ls, "too many lines");
 }
 
 /* Parse a number literal */
@@ -88,7 +88,7 @@ static LexChar lex_number(LexState* ls, LexValue* v)
             if(und)
             {
                 /* Do not allow double underscores */
-                vp_lex_error(ls, ls->linenumber, "Malformed number literal");
+                vp_lex_error(ls, "malformed number literal");
             }
             und = true;
             lex_next(ls);
@@ -105,7 +105,7 @@ static LexChar lex_number(LexState* ls, LexValue* v)
     /* Do not allow leading '_' */
     if(und)
     {
-        vp_lex_error(ls, ls->linenumber, "Malformed number literal");
+        vp_lex_error(ls, "malformed number literal");
     }
     lex_save(ls, '\0');
 
@@ -120,7 +120,7 @@ static LexChar lex_number(LexState* ls, LexValue* v)
         return TK_integer;
     }
     vp_assertX(fmt == STRSCAN_ERROR, "unexpected number format %d", fmt);
-    vp_lex_error(ls, ls->linenumber, "Malformed number literal");
+    vp_lex_error(ls, "malformed number literal");
     return TK_eof;
 }
 
@@ -220,7 +220,7 @@ static LexChar lex_string(LexState* ls, LexValue* val)
             case '\n':
             case '\r':
             {
-                vp_lex_error(ls, ls->linenumber, "Unterminated string");
+                vp_lex_error(ls, "unterminated string");
             }
             case '\\':
             {
@@ -244,7 +244,7 @@ static LexChar lex_string(LexState* ls, LexValue* val)
                         c = lex_hex_escape(ls);
                         if(c == -1)
                         {
-                            vp_lex_error(ls, ls->linenumber, "Incomplete hex escape sequence");
+                            vp_lex_error(ls, "incomplete hex escape sequence");
                         }
                         break;
                     }
@@ -256,7 +256,7 @@ static LexChar lex_string(LexState* ls, LexValue* val)
                         c = lex_unicode_escape(ls, u);
                         if(c == -1)
                         {
-                            vp_lex_error(ls, ls->linenumber, "Incomplete unicode escape sequence");
+                            vp_lex_error(ls, "incomplete unicode escape sequence");
                         }
                         lex_save(ls, c);
                         continue;
@@ -266,7 +266,7 @@ static LexChar lex_string(LexState* ls, LexValue* val)
                         c = lex_dec_escape(ls, c);
                         if(c == -1)
                         {
-                            vp_lex_error(ls, ls->linenumber, "Invalid decimal escape character");
+                            vp_lex_error(ls, "invalid decimal escape character");
                         }
                         lex_save(ls, c);
                         continue;
@@ -298,17 +298,17 @@ static LexChar lex_char(LexState* ls, LexValue* val)
         case LEX_EOF:
         case '\n':
         case '\r':
-            vp_lex_error(ls, ls->linenumber, "Unterminated char");
+            vp_lex_error(ls, "unterminated char");
             break;
         case '\'':
-            vp_lex_error(ls, ls->linenumber, "Char literal cannot be empty");
+            vp_lex_error(ls, "char literal cannot be empty");
             break;
         case '\\':
         {
             c = lex_next(ls);  /* Skip the '\\' */
             switch(ls->c)
             {
-                case LEX_EOF: vp_lex_error(ls, ls->linenumber, "Unterminated char"); break;
+                case LEX_EOF: vp_lex_error(ls, "unterminated char"); break;
                 case '\"': c = '\"'; break;
                 case '\'': c = '\''; break;
                 case '\\': c = '\\'; break;
@@ -325,7 +325,7 @@ static LexChar lex_char(LexState* ls, LexValue* val)
                     c = lex_hex_escape(ls);
                     if(c == -1)
                     {
-                        vp_lex_error(ls, ls->linenumber, "Incomplete hex escape sequence");
+                        vp_lex_error(ls, "incomplete hex escape sequence");
                     }
                     break;
                 }
@@ -334,7 +334,7 @@ static LexChar lex_char(LexState* ls, LexValue* val)
                     c = lex_dec_escape(ls, c);
                     if(c == -1)
                     {
-                        vp_lex_error(ls, ls->linenumber, "Invalid decimal escape character");
+                        vp_lex_error(ls, "invalid decimal escape character");
                     }
                     goto finish;
                 }
@@ -350,7 +350,7 @@ static LexChar lex_char(LexState* ls, LexValue* val)
 finish:
     if(ls->c != '\'')
     {
-        vp_lex_error(ls, ls->linenumber, "Unterminated char");
+        vp_lex_error(ls, "unterminated char");
     }
     lex_next(ls);   /* Skip ' */
     val->i = c;
@@ -473,7 +473,7 @@ static LexToken lex_scan(LexState* ls, LexValue* val)
                     {
                         if(ls->c == LEX_EOF)
                         {
-                            vp_lex_error(ls, ls->linenumber, "Unterminated multi comment");
+                            vp_lex_error(ls, "unterminated multi comment");
                         }
                         if(ls->c == '/' && lex_next(ls) == '*')
                         {
@@ -568,11 +568,11 @@ const char* vp_lex_tok2str(LexState* ls, LexToken t)
 }
 
 /* Lexer error */
-void vp_lex_error(LexState* ls, LexLine line, const char* msg, ...)
+void vp_lex_error(LexState* ls, const char* msg, ...)
 {
     va_list args;
     va_start(args, msg);
-    fprintf(stderr, "%s:%d ", ls->name, line);
+    fprintf(stderr, "%s:%d error: ", ls->name, ls->linenumber);
     vfprintf(stderr, msg, args);
     fputc('\n', stderr);
     va_end(args);

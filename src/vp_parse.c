@@ -49,7 +49,7 @@ void vp_parse_error(SrcLoc loc, const char* msg, ...)
 {
     va_list args;
     va_start(args, msg);
-    fprintf(stderr, "%s:%d ", loc.name, loc.line);
+    fprintf(stderr, "%s:%d error: ", loc.name, loc.line);
     vfprintf(stderr, msg, args);
     fputc('\n', stderr);
     va_end(args);
@@ -68,8 +68,7 @@ static void lex_consume(LexState* ls, LexToken t)
         return;
     }
     const char* tokstr = vp_lex_tok2str(ls, t);
-    const char* prev = vp_lex_tok2str(ls, ls->curr);
-    vp_lex_error(ls, 0, "Expected %s, got %s\n", tokstr, prev);
+    vp_lex_error(ls, "'%s' expected", tokstr);
 }
 
 /* Check for matching token */
@@ -112,7 +111,7 @@ static Expr* expr_lit(LexState* ls)
         case TK_string:
             return vp_expr_str(loc, ls->val.name);
         default:
-            vp_assertX(false, "Unknown literal");
+            vp_assertX(false, "unknown literal");
             break;
     }
     return NULL;    /* unreachable */
@@ -193,7 +192,7 @@ static Expr* expr_unary(LexState* ls)
             kind = EX_NOT;
             break;
         default:
-            vp_assertX(false, "Unknown unary op");
+            vp_assertX(false, "unknown unary op");
             break;
     }
     return vp_expr_unary(loc, kind, expr);
@@ -228,7 +227,7 @@ static Expr* expr_binary(LexState* ls, Expr* lhs)
         case TK_and: kind = EX_AND; break;
         case TK_or: kind = EX_OR; break;
         default:
-            vp_assertX(false, "Unknown binary op");
+            vp_assertX(false, "unknown binary op");
             break;  /* Unreachable */
     }
     return vp_expr_binop(loc, kind, lhs, rhs);
@@ -259,7 +258,7 @@ static Field expr_field(LexState* ls)
         if(lex_match(ls, '='))
         {
             if(e->kind != EX_NAME)
-                vp_parse_error(e->loc, "Expected field name");
+                vp_parse_error(e->loc, "expected field name");
             return (Field){.loc = loc, .kind = FIELD_NAME, .init = e, .name = e->name};
         }
         else
@@ -371,7 +370,7 @@ static Expr* expr_prec(LexState* ls, Prec prec)
     ParsePrefixFn prefix = expr_rule(ls->prev).prefix;
     if(prefix == NULL)
     {
-        vp_parse_error(loc, "Expected expression");
+        vp_parse_error(loc, "expected expression");
     }
 
     Expr* expr = prefix(ls);
@@ -452,7 +451,7 @@ static TypeSpec* parse_type(LexState* ls)
         Type* type = parse_type_builtin(ls->curr);
         if(type == NULL)
         {
-            vp_parse_error(loc, "Unexpected token type");
+            vp_parse_error(loc, "unexpected token type");
         } 
         vp_lex_next(ls);    /* Skip type */
         spec = vp_typespec_type(loc, type);

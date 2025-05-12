@@ -15,7 +15,7 @@ Type* tybool = &(Type){.kind = TY_bool};
 Type* tyuint8 = &(Type){.kind = TY_uint8};
 Type* tyuint16 = &(Type){.kind = TY_uint16};
 Type* tyuint32 = &(Type){.kind = TY_uint32};
-Type* tyuint64 = &(Type){.kind = TY_int64};
+Type* tyuint64 = &(Type){.kind = TY_uint64};
 /* Signed */
 Type* tyint8 = &(Type){.kind = TY_int8};
 Type* tyint16 = &(Type){.kind = TY_int16};

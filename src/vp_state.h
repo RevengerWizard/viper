@@ -25,6 +25,7 @@ typedef struct VpState
 
     Arena astarena;
     Arena typearena;
+    Arena symarena;
 } VpState;
 
 extern VpState* V;

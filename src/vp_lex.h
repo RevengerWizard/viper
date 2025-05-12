@@ -92,7 +92,7 @@ typedef struct LexState
 
 void vp_lex_setup(LexState* ls);
 const char* vp_lex_tok2str(LexState* ls, LexToken t);
-void vp_lex_error(LexState* ls, LexLine line, const char* msg, ...);
+void vp_lex_error(LexState* ls, const char* msg, ...);
 void vp_lex_next(LexState* ls);
 void vp_lex_init();
 

@@ -167,7 +167,7 @@ static void print_typespec(TypeSpec* spec)
             print_typespec(spec->fn.ret);
             break;
         default:
-            vp_assertX(0, "Unknown typespec");
+            vp_assertX(0, "unknown typespec");
             break;
     }
 }
@@ -206,6 +206,12 @@ static void print_ast_expr(Expr* e)
         case EX_NIL:
             printf("nil");
             break;
+        case EX_UINT:
+        {
+            uint64_t u = e->u;
+            printf("%llu", u);
+            break;
+        }
         case EX_INT:
         {
             int64_t i = e->i;
@@ -296,7 +302,7 @@ static void print_ast_expr(Expr* e)
             break;
         }
         default:
-            vp_assertX(0, "Unknown expression");
+            vp_assertX(0, "unknown expression");
             break;
     }
 }
@@ -340,7 +346,7 @@ void print_ast_stmt(Stmt* stm)
             break;
         }
         default:
-            vp_assertX(0, "Unknown statement");
+            vp_assertX(0, "unknown statement");
             break;
     }
 }
@@ -397,7 +403,7 @@ void vp_print_ast(Decl* d)
             printf("}\n");
             break;
         default:
-            vp_assertX(0, "Unknown decl");
+            vp_assertX(0, "unknown decl");
             break;
     }
 }
