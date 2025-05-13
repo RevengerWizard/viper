@@ -29,15 +29,18 @@ fn main() : int32
 {
     //var x : int32 = cast(int32, true);
     var arr2 : int32[] = {1, 2, 3, 4, 5, 6};
-    var arr : int32[4] = {1, 2, 3, 4};
+    var arr : int32[4] = {123 * 89, 2, 3, 4};
     var s : uint8[] = "hello everybody";
     var hello : uint8 = '\x65';
     var c : float = 0xf.f;
     var a : int32 = 3;
-    var b : uint8 = a / 34;
+    var b : uint8 = (34 * 34) / 34;
     a = b * 34 - 4 + 3 - 3;
+    a = 56 * 34 - 4 + 3 - 3;
     var e : int32 = not 1;
     var d : uint64 = 16 >> 1;
-    return 234 + 13 + 3.4 - 23 / 34 == 34;
+    var pi2 = 3.141592 * 2;
+    var f : double = 2 * (1987 + 2 / 45 + 34 * 90);
+    return 2 * (1987 + 2 / 45 + 34 * 90);
     // 2 * (1987 + 2 / 45 - 34 * 90)
 }

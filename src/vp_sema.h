@@ -53,6 +53,7 @@ typedef struct Operand
 {
     Type* ty;
     Val val;
+    bool islit;
     bool isconst;
     bool islval;
 } Operand;

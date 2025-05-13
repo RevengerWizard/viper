@@ -85,10 +85,17 @@ Expr* vp_expr_ulit(SrcLoc loc, uint64_t u)
     return expr;
 }
 
-Expr* vp_expr_flit(SrcLoc loc, double n)
+Expr* vp_expr_nlit(SrcLoc loc, double n)
 {
     Expr* expr = expr_new(EX_NUM, loc);
     expr->n = n;
+    return expr;
+}
+
+Expr* vp_expr_flit(SrcLoc loc, float f)
+{
+    Expr* expr = expr_new(EX_FLO, loc);
+    expr->f = f;
     return expr;
 }
 

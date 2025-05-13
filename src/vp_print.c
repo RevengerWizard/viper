@@ -6,6 +6,7 @@
 #include <stdio.h>
 
 #include "vp_print.h"
+#include "vp_ast.h"
 #include "vp_str.h"
 #include "vp_type.h"
 #include "vp_vec.h"
@@ -222,6 +223,12 @@ static void print_ast_expr(Expr* e)
         {
             double n = e->n;
             printf("%g", n);
+            break;
+        }
+        case EX_FLO:
+        {
+            float f = e->f;
+            printf("%f", f);
             break;
         }
         case EX_STR:

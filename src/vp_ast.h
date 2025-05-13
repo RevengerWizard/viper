@@ -51,6 +51,7 @@ typedef enum ExprKind
     EX_INT,
     EX_UINT,
     EX_NUM,
+    EX_FLO,
     EX_STR,
     EX_NAME,
     EX_COMPOUND,
@@ -116,6 +117,7 @@ typedef struct Expr
         uint64_t u;
         int64_t i;
         double n;
+        float f;
         Str* name;
         struct Expr* unary;
         struct
@@ -290,7 +292,8 @@ Expr* vp_expr_true(SrcLoc loc);
 Expr* vp_expr_nil(SrcLoc loc);
 Expr* vp_expr_ilit(SrcLoc loc, int64_t i);
 Expr* vp_expr_ulit(SrcLoc loc, uint64_t u);
-Expr* vp_expr_flit(SrcLoc loc, double n);
+Expr* vp_expr_nlit(SrcLoc loc, double n);
+Expr* vp_expr_flit(SrcLoc loc, float f);
 Expr* vp_expr_str(SrcLoc loc, Str* str);
 Expr* vp_expr_name(SrcLoc loc, Str* name);
 Expr* vp_expr_comp(SrcLoc loc, Field* fields);
