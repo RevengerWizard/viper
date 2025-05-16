@@ -11,6 +11,7 @@
 #include "vp_type.h"
 #include "vp_vec.h"
 #include "vp_tab.h"
+#include "vp_sema.h"
 
 static int indent = 0;
 
@@ -53,7 +54,7 @@ void vp_print_type(Type* ty)
         case TY_float:
         case TY_double:
         case TY_void:
-            printf("%s", type_name(ty->kind));
+            printf("%s", type_name(ty));
             break;
         case TY_ptr:
             vp_print_type(ty->p);
@@ -81,6 +82,12 @@ void vp_print_type(Type* ty)
             break;
         case TY_union:
         case TY_struct:
+            if(ty->sym)
+            {
+                /* May need something better to avoid stack overflow */
+                printf("%s", str_data(ty->sym->name));
+                break;
+            }
             if(ty->kind == TY_union)
                 printf("union");
             else
@@ -109,10 +116,13 @@ void vp_print_type(Type* ty)
 void vp_print_typecache(void)
 {
     printf("\n-- cache ptr --\n");
-    for(uint32_t i = 0; i < vec_len(V->cacheptr); i++)
+    for(uint32_t i = 0; i < V->cacheptr.size; i++)
     {
-        vp_print_type(V->cacheptr[i]);
-        printf("\n");
+        if(V->cacheptr.keys[i])
+        {
+            vp_print_type((Type*)(uintptr_t)V->cacheptr.vals[i]);
+            printf("\n");
+        }
     }
     printf("\n-- cache arr --\n");
     for(uint32_t i = 0; i < vec_len(V->cachearr); i++)
@@ -140,7 +150,7 @@ static void print_typespec(TypeSpec* spec)
             printf("%s", str_data(spec->name));
             break;
         case SPEC_TYPE:
-            printf("%s", type_name(spec->ty->kind));
+            printf("%s", type_name(spec->ty));
             break;
         case SPEC_PTR:
             print_typespec(spec->ptr);
@@ -207,6 +217,12 @@ static void print_ast_expr(Expr* e)
         case EX_NIL:
             printf("nil");
             break;
+        case EX_CHAR:
+        {
+            int i = e->i;
+            printf("%c", i);
+            break;
+        }
         case EX_UINT:
         {
             uint64_t u = e->u;
@@ -265,6 +281,8 @@ static void print_ast_expr(Expr* e)
             printf("}");
             break;
         }
+        case EX_REF:
+        case EX_DEREF:
         case EX_NEG:
         case EX_NOT:
         case EX_BNOT:
@@ -308,6 +326,28 @@ static void print_ast_expr(Expr* e)
             printf(")");
             break;
         }
+        case EX_CALL:
+        {
+            print_ast_expr(e->call.expr);
+            printf("(");
+            for(uint32_t i = 0; i < vec_len(e->call.args); i++)
+            {
+                Expr* arg = e->call.args[i];
+                print_ast_expr(arg);
+                if(i != vec_len(e->call.args) - 1)
+                {
+                    printf(", ");
+                }
+            }
+            printf(")");
+            break;
+        }
+        case EX_SIZEOF_EX:
+        {
+            printf("sizeof(");
+            print_ast_expr(e->unary);
+            printf(")");
+        }
         default:
             vp_assertX(0, "unknown expression");
             break;
@@ -334,6 +374,12 @@ void print_ast_stmt(Stmt* stm)
         case ST_EXPR:
         {
             print_indent();
+            if(stm->expr->ty)
+            {
+                printf("(");
+                vp_print_type(stm->expr->ty);
+                printf(") ");
+            }
             print_ast_expr(stm->expr);
             printf("\n");
             break;
@@ -379,6 +425,12 @@ void vp_print_ast(Decl* d)
             if(d->var.expr)
             {
                 printf(" = ");
+                if(d->var.expr->ty)
+                {
+                    printf("(");
+                    vp_print_type(d->var.expr->ty);
+                    printf(") ");
+                }
                 print_ast_expr(d->var.expr);
             }
             printf("\n");

@@ -18,6 +18,7 @@
     _(var) _(const) \
     _(not) _(and) _(or) \
     _(type) _(void) _(cast) \
+    _(sizeof) \
     _(bool) \
     _(int8) _(int16) _(int32) _(int64) \
     _(uint8) _(uint16) _(uint32) _(uint64) \
@@ -33,7 +34,7 @@
     __(muleq, *=) __(diveq, /=) __(modeq, %=) \
     __(bandeq, &=) __(boreq, |=) __(bxoreq, ^=) \
     __(lshifteq, <<=) __(rshifteq, >>=) \
-    __(name, <name>) __(string, <string>) \
+    __(name, <name>) __(string, <string>) __(char, <char>) \
     __(integer, <integer>) __(number, <number>) \
     __(eof, <eof>)
 

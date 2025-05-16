@@ -16,7 +16,7 @@ const char* const vp_ast_binop[] = {
 };
 
 const char* const vp_ast_unary[] = {
-    "-", "not ", "~"
+    "-", "not ", "~", "&", "*"
 };
 
 static void* ast_alloc(uint32_t size)
@@ -69,6 +69,13 @@ Expr* vp_expr_true(SrcLoc loc)
 Expr* vp_expr_nil(SrcLoc loc)
 {
     return expr_new(EX_NIL, loc);
+}
+
+Expr* vp_expr_clit(SrcLoc loc, int64_t c)
+{
+    Expr* expr = expr_new(EX_CHAR, loc);
+    expr->i = c;
+    return expr;
 }
 
 Expr* vp_expr_ilit(SrcLoc loc, int64_t i)
@@ -149,6 +156,13 @@ Expr* vp_expr_cast(SrcLoc loc, TypeSpec* spec, Expr* e)
     Expr* expr = expr_new(EX_CAST, loc);
     expr->cast.spec = spec;
     expr->cast.expr = e;
+    return expr;
+}
+
+Expr* vp_expr_sizeofex(SrcLoc loc, Expr* e)
+{
+    Expr* expr = expr_new(EX_SIZEOF_EX, loc);
+    expr->unary = e;
     return expr;
 }
 

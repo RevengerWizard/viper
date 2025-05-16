@@ -354,7 +354,7 @@ finish:
     }
     lex_next(ls);   /* Skip ' */
     val->i = c;
-    return TK_integer;
+    return TK_char;
 }
 
 /* Get next lexical token */
@@ -457,6 +457,7 @@ static LexToken lex_scan(LexState* ls, LexValue* val)
             case '/':
             {
                 lex_next(ls);
+                if(ls->c == '=') { lex_next(ls); return TK_diveq; }
                 if(ls->c == '/')
                 {
                     lex_next(ls);
@@ -464,7 +465,6 @@ static LexToken lex_scan(LexState* ls, LexValue* val)
                         lex_next(ls);
                     continue;
                 }
-                if(ls->c == '=') { lex_next(ls); return TK_diveq; }
                 if(ls->c == '*')
                 {
                     lex_next(ls);
@@ -487,7 +487,7 @@ static LexToken lex_scan(LexState* ls, LexValue* val)
                             nesting--;
                             continue;
                         }
-                        if(lex_iseol(ls))
+                        if(ls->c == '\n')
                             lex_newline(ls);
                         lex_next(ls);
                     }

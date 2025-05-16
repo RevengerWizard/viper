@@ -7,9 +7,11 @@ src/
 ├── vp_parse.c/h      ← parser (produces AST)
 ├── vp_sema.c/h       ← semantic checker
 ├── vp_ast.c/h        ← AST node allocation
+├── vp_mem.c/h        ← memory management
 ├── vp_type.c/h       ← type information
 ├── vp_str.c/h        ← string interning
 ├── vp_tab.c/h        ← hash table handling
+├── vp_map.c/h        ← map handling
 ├── vp_vec.c/h        ← dynamic array handling
 ├── vp_state.c/h      ← global state
 ├── vp_load.c         ← frontend driver: parse + compile

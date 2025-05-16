@@ -104,6 +104,8 @@ static Expr* expr_lit(LexState* ls)
             return vp_expr_false(loc);
         case TK_nil:
             return vp_expr_nil(loc);
+        case TK_char:
+            return vp_expr_clit(loc, ls->val.i);
         case TK_integer:
             return vp_expr_ilit(loc, ls->val.i);
         case TK_number:
@@ -126,7 +128,21 @@ static Expr* expr_group(LexState* ls)
 }
 
 /* Forward declaration */
+static Type* tok2type(LexToken tok);
 static TypeSpec* parse_type(LexState* ls);
+
+/* Parse shorten cast expression T(expr) -> cast(T, expr) */
+static Expr* expr_tycast(LexState* ls)
+{
+    SrcLoc loc = lex_srcloc(ls);
+    Type* type = tok2type(ls->prev);
+    vp_assertX(type, "no type");
+    TypeSpec* spec = vp_typespec_type(loc, type);
+    lex_consume(ls, '(');
+    Expr* e = expr(ls);
+    lex_consume(ls, ')');
+    return vp_expr_cast(loc, spec, e);
+}
 
 /* Parse cast expression */
 static Expr* expr_cast(LexState* ls)
@@ -138,6 +154,16 @@ static Expr* expr_cast(LexState* ls)
     Expr* e = expr(ls);
     lex_consume(ls, ')');
     return vp_expr_cast(loc, spec, e);
+}
+
+/* Parse sizeof expression */
+static Expr* expr_sizeof_ex(LexState* ls)
+{
+    SrcLoc loc = lex_srcloc(ls);
+    lex_consume(ls, '(');
+    Expr* e = expr(ls);
+    lex_consume(ls, ')');
+    return vp_expr_sizeofex(loc, e);
 }
 
 /* Parse call expression */
@@ -185,6 +211,8 @@ static Expr* expr_unary(LexState* ls)
     ExprKind kind = 0;
     switch(tok)
     {
+        case '&': kind = EX_REF; break;
+        case '*': kind = EX_DEREF; break;
         case '-': kind = EX_NEG; break;
         case '~': kind = EX_BNOT; break;
         case '!':
@@ -299,6 +327,7 @@ static ParseRule expr_rule(LexToken t)
         case TK_true:
         case TK_false:
         case TK_nil:
+        case TK_char:
         case TK_integer:
         case TK_number:
         case TK_string:
@@ -313,8 +342,6 @@ static ParseRule expr_rule(LexToken t)
             return RULE(NULL, expr_idx, PREC_CALL);
         case '.':
             return RULE(NULL, expr_dot, PREC_CALL);
-        case TK_cast:
-            return PREFIX(expr_cast);
         /* Unary */
         case TK_not:
         case '!':
@@ -331,7 +358,7 @@ static ParseRule expr_rule(LexToken t)
         case '%':
             return OPERATOR(expr_binary, PREC_FACTOR);
         case '&':
-            return OPERATOR(expr_binary, PREC_BAND);
+            return RULE(expr_unary, expr_binary, PREC_BAND);
         case '|':
             return OPERATOR(expr_binary, PREC_BOR);
         case '^':
@@ -351,6 +378,24 @@ static ParseRule expr_rule(LexToken t)
             return OPERATOR(expr_binary, PREC_AND);
         case TK_or:
             return OPERATOR(expr_binary, PREC_OR);
+        /* Casts */
+        case TK_bool:
+        case TK_uint8:
+        case TK_uint16:
+        case TK_uint32:
+        case TK_uint64:
+        case TK_int8:
+        case TK_int16:
+        case TK_int32:
+        case TK_int64:
+        case TK_float:
+        case TK_double:
+        case TK_void:
+            return PREFIX(expr_tycast);
+        case TK_cast:
+            return PREFIX(expr_cast);
+        case TK_sizeof:
+            return PREFIX(expr_sizeof_ex);
         default:
             return NONE;
     }
@@ -389,7 +434,7 @@ static Expr* expr(LexState* ls)
     return expr_prec(ls, PREC_ASSIGN);
 }
 
-static Type* parse_type_builtin(LexToken tok)
+static Type* tok2type(LexToken tok)
 {
     Type* ty = NULL;
     switch(tok)
@@ -411,6 +456,38 @@ static Type* parse_type_builtin(LexToken tok)
     return ty;
 }
 
+/* Forward declaration */
+static TypeSpec* parse_type_fn(LexState* ls);
+
+/* Parse an array of functions type */
+static TypeSpec* parse_type_fnarr(LexState* ls)
+{
+    SrcLoc loc = lex_srcloc(ls);
+    TypeSpec** arrdims = NULL;
+    while(lex_check(ls, '['))
+    {
+        lex_consume(ls, '[');
+        Expr* size = NULL;
+        if(!lex_check(ls, ']')) size = expr(ls);
+        lex_consume(ls, ']');
+        TypeSpec* arrspec = vp_typespec_arr(loc, NULL, size);
+        vec_push(arrdims, arrspec);
+    }
+    TypeSpec* spec = parse_type_fn(ls);
+    if(arrdims)
+    {
+        /* Apply array dimensions, innermost first */
+        for(int32_t i = vec_len(arrdims) - 1; i >= 0; i--)
+        {
+            TypeSpec* arrspec = arrdims[i];
+            arrspec->arr.base = spec;   /* Element type for this dimension */
+            spec = arrspec; /* Dimension becomes the new type */
+        }
+    }
+    return spec;
+}
+
+/* Parse a function type */
 static TypeSpec* parse_type_fn(LexState* ls)
 {
     SrcLoc loc = lex_srcloc(ls);
@@ -421,6 +498,14 @@ static TypeSpec* parse_type_fn(LexState* ls)
         do
         {
             TypeSpec* spec = parse_type(ls);
+            if(lex_match(ls, ':'))
+            {
+                if(spec->kind != SPEC_NAME)
+                {
+                    vp_parse_error(loc, "Expected function parameter name");
+                }
+                spec = parse_type(ls);
+            }
             vec_push(args, spec);
         }
         while(lex_match(ls, ','));
@@ -431,7 +516,7 @@ static TypeSpec* parse_type_fn(LexState* ls)
     return vp_typespec_fn(loc, ret, args);
 }
 
-/* Parse type information (keyword or name) */
+/* Parse base type information (keyword or name) */
 static TypeSpec* parse_type(LexState* ls)
 {
     TypeSpec* spec = NULL;
@@ -443,12 +528,19 @@ static TypeSpec* parse_type(LexState* ls)
     }
     else if(lex_match(ls, TK_fn))
     {
-        spec = parse_type_fn(ls);
+        if(lex_check(ls, '['))
+        {
+            spec = parse_type_fnarr(ls);
+        }
+        else
+        {
+            spec = parse_type_fn(ls);
+        }
     }
     else
     {
         SrcLoc loc = lex_srcloc(ls);
-        Type* type = parse_type_builtin(ls->curr);
+        Type* type = tok2type(ls->curr);
         if(type == NULL)
         {
             vp_parse_error(loc, "unexpected token type");

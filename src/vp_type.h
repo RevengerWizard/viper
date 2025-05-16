@@ -94,8 +94,7 @@ static inline bool type_issigned(const Type* t)
 
 static inline bool type_isunsigned(const Type* t)
 {
-    return (t->kind >= TY_uint8 && t->kind <= TY_uint64) ||
-            t->kind == TY_ptr;
+    return t->kind >= TY_uint8 && t->kind <= TY_uint64;
 }
 
 static inline bool type_isint(const Type* t)
@@ -111,6 +110,11 @@ static inline bool type_isflo(const Type* t)
 static inline bool type_isnum(const Type* t)
 {
     return type_isint(t) || type_isflo(t);
+}
+
+static inline bool type_isptrto(const Type* t, TypeKind kind)
+{
+    return t->kind == TY_ptr && t->p->kind == kind;
 }
 
 static inline bool type_isptr(const Type* t)
@@ -153,7 +157,7 @@ static inline int type_rank(const Type* t)
     return (t->kind - TY_uint8) + 1;
 }
 
-#define type_name(i) (vp_type_names[(i)])
+#define type_name(i) (vp_type_names[(i)->kind])
 
 extern const char* const vp_type_names[];
 
@@ -161,6 +165,7 @@ uint32_t vp_type_sizeof(Type* t);
 uint32_t vp_type_alignof(Type* t);
 bool vp_type_isconv(Type* dst, Type* src);
 bool vp_type_iscast(Type* dst, Type* src);
+bool vp_type_isptrcomp(Type* lty, Type* rty);
 Type* vp_type_tounsigned(Type* t);
 Type* vp_type_decay(Type* t);
 Type* vp_type_decayempty(Type* t);

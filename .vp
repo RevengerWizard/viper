@@ -1,0 +1,18 @@
+fn nun() : int32 { return 1; }
+
+fn main() : void
+{
+    //var a0 : void = 1;    // err
+    //var a : int32 = int32(4);
+    var b : float = int16(9);
+    var c = -b;
+    var d : float = c;
+    //var e = nil;
+    var e = true;
+    var f : int64 = nun();
+    var g = not 1;
+    //var h = 2.4 - 2;  // ???
+    var i = &f + 8;
+    var j = &b;
+    //var k : int64 = ((f * 2.2) - 22) * 9; // error
+}

@@ -5,6 +5,7 @@
 
 #include "vp_type.h"
 #include "vp_def.h"
+#include "vp_map.h"
 #include "vp_mem.h"
 #include "vp_str.h"
 #include "vp_vec.h"
@@ -41,10 +42,13 @@ static Type* type_alloc(TypeKind kind)
     return t;
 }
 
+/* Get size of type */
 uint32_t vp_type_sizeof(Type* t)
 {
     switch(t->kind)
     {
+        case TY_void:
+            return 0;
         case TY_bool:
         case TY_uint8:
         case TY_int8:
@@ -74,6 +78,7 @@ uint32_t vp_type_sizeof(Type* t)
     return 0;
 }
 
+/* Get type alignment */
 uint32_t vp_type_alignof(Type* t)
 {
     switch(t->kind)
@@ -94,6 +99,7 @@ uint32_t vp_type_alignof(Type* t)
         case TY_double:
         case TY_ptr:
         case TY_func:
+        case TY_nil:
             return 8;
         case TY_array:
             return vp_type_alignof(t->p);
@@ -107,12 +113,51 @@ uint32_t vp_type_alignof(Type* t)
     return 0;
 }
 
+/* Check implicit type cast (dst <- src) is valid */
 bool vp_type_isconv(Type* dst, Type* src)
 {
-    if(dst == src) return true;
-    else if(dst == tyvoid) return true;
-    else if(type_isnum(dst) && type_isnum(src)) return true;
-    else if(type_isptrlike(dst) && type_isnil(src)) return true;
+    if(dst == src)
+        return true;
+    else if(dst == tyvoid)
+        return true;
+    else if(type_isint(dst) && type_isint(src))
+    {
+        /* Same signedness widening */
+        if(type_issigned(dst) == type_issigned(src) &&
+            vp_type_sizeof(src) < vp_type_sizeof(dst))
+        {
+            return true;
+        }
+        return false;
+    }
+    else if(type_isint(src) && type_isflo(dst))
+    {
+        /* Small enough integers to float */
+        if((src->kind <= TY_int16 || src->kind <= TY_uint16) && 
+           dst->kind == TY_float)
+        {
+            return true;
+        }
+        /* Any small/medium integers to double */
+        else if((src->kind <= TY_int32 || src->kind <= TY_uint32) && 
+                dst->kind == TY_double)
+        {
+            return true;
+        }
+        return false;
+    }
+    else if(type_isflo(src) && type_isflo(dst))
+    {
+        return false;
+    }
+    else if(type_isflo(src) && type_isint(dst))
+    {
+        return false;
+    }
+    else if(type_isptrlike(dst) && type_isnil(src))
+    {
+        return true;
+    }
     else if(type_isptr(dst) && type_isptr(src))
     {
         if(type_isaggr(dst->p) && type_isaggr(src->p) && 
@@ -126,18 +171,56 @@ bool vp_type_isconv(Type* dst, Type* src)
             else return src->p == tyvoid;
         }
     }
-    else return false;
+    else
+    {
+        return false;
+    }
 }
 
+/* Check explicit type cast (dst <- src) is valid */
 bool vp_type_iscast(Type* dst, Type* src)
 {
-    if(vp_type_isconv(dst, src)) return true;
-    else if(type_isint(dst)) return type_isptrlike(src);
-    else if(type_isint(src)) return type_isptrlike(dst);
-    else if(type_isptrlike(dst) && type_isptrlike(src)) return true;
-    else return false;
+    if(vp_type_isconv(dst, src))
+    {
+        return true;
+    }
+    else if(type_isint(dst))
+    {
+        return type_isptrlike(src);
+    }
+    else if(type_isint(src))
+    {
+        return type_isptrlike(dst);
+    }
+    else if(type_isptrlike(dst) && type_isptrlike(src))
+    {
+        return true;
+    }
+    else
+    {
+        return false;
+    }
 }
 
+/* Check pointer compatibility */
+bool vp_type_isptrcomp(Type* lty, Type* rty)
+{
+    if(type_isptr(lty) && type_isptr(rty))
+    {
+        Type* ltybase = lty->p;
+        Type* rtybase = rty->p;
+        if(ltybase == rtybase)
+            return true;
+        if((ltybase == tyvoid && rtybase == tyuint8) ||
+            (ltybase == tyuint8 && rtybase == tyvoid))
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+/* Convert integer type to its unsigned version */
 Type* vp_type_tounsigned(Type* t)
 {
     switch(t->kind)
@@ -192,18 +275,12 @@ Type* vp_type_none(struct Sym* sym)
 
 Type* vp_type_ptr(Type* t)
 {
-    Type* ty = NULL;
-    for(uint32_t i = 0; i < vec_len(V->cacheptr); i++)
-    {
-        ty = V->cacheptr[i];
-        if(ty == t)
-            break;
-    }
+    Type* ty = vp_map_get(&V->cacheptr, t);
     if(!ty)
     {
         ty = type_alloc(TY_ptr);
         ty->p = t;
-        vec_push(V->cacheptr, ty);
+        vp_map_put(&V->cacheptr, t, ty);
     }
     return ty;
 }

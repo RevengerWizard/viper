@@ -48,6 +48,7 @@ typedef enum ExprKind
     EX_TRUE,
     EX_FALSE,
     EX_NIL,
+    EX_CHAR,
     EX_INT,
     EX_UINT,
     EX_NUM,
@@ -82,6 +83,8 @@ typedef enum ExprKind
     EX_BNOT,
     EX_REF,     /* &x */
     EX_DEREF,   /* *x */
+    EX_SIZEOF_EX,
+    EX_SIZEOF_TY,
     EX_CAST,
     EX_CALL,
     EX_IDX,
@@ -111,6 +114,7 @@ typedef struct Expr
 {
     ExprKind kind;
     SrcLoc loc;
+    Type* ty;
     union
     {
         bool b;
@@ -290,6 +294,7 @@ Expr* vp_expr_unary(SrcLoc loc, ExprKind kind, Expr* expr);
 Expr* vp_expr_false(SrcLoc loc);
 Expr* vp_expr_true(SrcLoc loc);
 Expr* vp_expr_nil(SrcLoc loc);
+Expr* vp_expr_clit(SrcLoc loc, int64_t c);
 Expr* vp_expr_ilit(SrcLoc loc, int64_t i);
 Expr* vp_expr_ulit(SrcLoc loc, uint64_t u);
 Expr* vp_expr_nlit(SrcLoc loc, double n);
@@ -301,6 +306,7 @@ Expr* vp_expr_call(SrcLoc loc, Expr* e, Expr** args);
 Expr* vp_expr_idx(SrcLoc loc, Expr* e, Expr* idx);
 Expr* vp_expr_field(SrcLoc loc, Expr* e, Str* name);
 Expr* vp_expr_cast(SrcLoc loc, TypeSpec* spec, Expr* e);
+Expr* vp_expr_sizeofex(SrcLoc loc, Expr* e);
 
 /* Statements */
 Stmt* vp_stmt_assign(SrcLoc loc, Expr* lhs, Expr* rhs);

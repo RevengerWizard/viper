@@ -10,6 +10,7 @@
 #include "vp_mem.h"
 #include "vp_type.h"
 #include "vp_tab.h"
+#include "vp_map.h"
 
 typedef const char* (*VpReader)(void* ud, size_t* size);
 
@@ -17,7 +18,7 @@ typedef struct VpState
 {
     SBuf code;
 
-    Type** cacheptr;
+    Map cacheptr;
     Type** cachefunc;
     Type** cachearr;
 
