@@ -1,5 +1,16 @@
 fn nun() : int32 { return 1; }
 
+type Arr = int32[sizeof(double)];
+
+type Arr2 = int32[offsetof(Foo, c)];
+
+struct Foo
+{
+    a : int8;
+    b : bool;
+    c : int32;
+}
+
 fn main() : void
 {
     //var a0 : void = 1;    // err
@@ -15,4 +26,10 @@ fn main() : void
     var i = &f + 8;
     var j = &b;
     //var k : int64 = ((f * 2.2) - 22) * 9; // error
+    var l = sizeof(float);
+    var m : void* = j;
+    var n = alignof(Arr);
+    var o = offsetof(Foo, a);
+    var p : uint64 = sizeof(typeof(true));
+    var q : typeof(*j) = 9;
 }

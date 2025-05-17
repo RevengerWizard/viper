@@ -159,10 +159,25 @@ Expr* vp_expr_cast(SrcLoc loc, TypeSpec* spec, Expr* e)
     return expr;
 }
 
-Expr* vp_expr_sizeofex(SrcLoc loc, Expr* e)
+Expr* vp_expr_sizeof(SrcLoc loc, TypeSpec* spec)
 {
-    Expr* expr = expr_new(EX_SIZEOF_EX, loc);
-    expr->unary = e;
+    Expr* expr = expr_new(EX_SIZEOF, loc);
+    expr->spec = spec;
+    return expr;
+}
+
+Expr* vp_expr_alignof(SrcLoc loc, TypeSpec* spec)
+{
+    Expr* expr = expr_new(EX_ALIGNOF, loc);
+    expr->spec = spec;
+    return expr;
+}
+
+Expr* vp_expr_offsetof(SrcLoc loc, TypeSpec* spec, Str* name)
+{
+    Expr* expr = expr_new(EX_OFFSETOF, loc);
+    expr->ofst.spec = spec;
+    expr->ofst.name = name;
     return expr;
 }
 
@@ -309,5 +324,12 @@ TypeSpec* vp_typespec_fn(SrcLoc loc, TypeSpec* ret, TypeSpec** args)
     TypeSpec* ts = new_typespec(SPEC_FUNC, loc);
     ts->fn.ret = ret;
     ts->fn.args = args;
+    return ts;
+}
+
+TypeSpec* vp_typespec_typeof(SrcLoc loc, Expr* e)
+{
+    TypeSpec* ts = new_typespec(SPEC_TYPEOF, loc);
+    ts->expr = e;
     return ts;
 }

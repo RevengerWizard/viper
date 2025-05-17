@@ -18,6 +18,7 @@ typedef enum TypeSpecKind
     SPEC_FUNC,
     SPEC_ARRAY,
     SPEC_PTR,
+    SPEC_TYPEOF
 } TypeSpecKind;
 
 typedef struct TypeSpec
@@ -29,6 +30,7 @@ typedef struct TypeSpec
         Type* ty;
         Str* name;
         struct TypeSpec* ptr;
+        struct Expr* expr;
         struct
         {
             struct TypeSpec* base;
@@ -83,8 +85,9 @@ typedef enum ExprKind
     EX_BNOT,
     EX_REF,     /* &x */
     EX_DEREF,   /* *x */
-    EX_SIZEOF_EX,
-    EX_SIZEOF_TY,
+    EX_SIZEOF,
+    EX_ALIGNOF,
+    EX_OFFSETOF,
     EX_CAST,
     EX_CALL,
     EX_IDX,
@@ -124,6 +127,7 @@ typedef struct Expr
         float f;
         Str* name;
         struct Expr* unary;
+        TypeSpec* spec;
         struct
         {
             struct Expr* lhs;
@@ -153,6 +157,11 @@ typedef struct Expr
             TypeSpec* spec;
             struct Expr* expr;
         } cast;
+        struct
+        {
+            TypeSpec* spec;
+            Str* name;
+        } ofst;
     };
 } Expr;
 
@@ -306,7 +315,9 @@ Expr* vp_expr_call(SrcLoc loc, Expr* e, Expr** args);
 Expr* vp_expr_idx(SrcLoc loc, Expr* e, Expr* idx);
 Expr* vp_expr_field(SrcLoc loc, Expr* e, Str* name);
 Expr* vp_expr_cast(SrcLoc loc, TypeSpec* spec, Expr* e);
-Expr* vp_expr_sizeofex(SrcLoc loc, Expr* e);
+Expr* vp_expr_sizeof(SrcLoc loc, TypeSpec* spec);
+Expr* vp_expr_alignof(SrcLoc loc, TypeSpec* spec);
+Expr* vp_expr_offsetof(SrcLoc loc, TypeSpec* spec, Str* name);
 
 /* Statements */
 Stmt* vp_stmt_assign(SrcLoc loc, Expr* lhs, Expr* rhs);
@@ -330,5 +341,6 @@ TypeSpec* vp_typespec_type(SrcLoc loc, Type* ty);
 TypeSpec* vp_typespec_ptr(SrcLoc loc, TypeSpec* base);
 TypeSpec* vp_typespec_arr(SrcLoc loc, TypeSpec* base, Expr* e);
 TypeSpec* vp_typespec_fn(SrcLoc loc, TypeSpec* ret, TypeSpec** args);
+TypeSpec* vp_typespec_typeof(SrcLoc loc, Expr* e);
 
 #endif

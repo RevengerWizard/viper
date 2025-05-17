@@ -157,13 +157,36 @@ static Expr* expr_cast(LexState* ls)
 }
 
 /* Parse sizeof expression */
-static Expr* expr_sizeof_ex(LexState* ls)
+static Expr* expr_sizeof(LexState* ls)
 {
     SrcLoc loc = lex_srcloc(ls);
     lex_consume(ls, '(');
-    Expr* e = expr(ls);
+    TypeSpec* spec = parse_type(ls);
     lex_consume(ls, ')');
-    return vp_expr_sizeofex(loc, e);
+    return vp_expr_sizeof(loc, spec);
+}
+
+/* Parse alignof expression */
+static Expr* expr_alignof(LexState* ls)
+{
+    SrcLoc loc = lex_srcloc(ls);
+    lex_consume(ls, '(');
+    TypeSpec* spec = parse_type(ls);
+    lex_consume(ls, ')');
+    return vp_expr_alignof(loc, spec);
+}
+
+/* Parse offsetof expression */
+static Expr* expr_offsetof(LexState* ls)
+{
+    SrcLoc loc = lex_srcloc(ls);
+    lex_consume(ls, '(');
+    TypeSpec* spec = parse_type(ls);
+    lex_consume(ls, ',');
+    lex_consume(ls, TK_name);
+    Str* name = ls->val.name;
+    lex_consume(ls, ')');
+    return vp_expr_offsetof(loc, spec, name);
 }
 
 /* Parse call expression */
@@ -353,6 +376,7 @@ static ParseRule expr_rule(LexToken t)
         case '-':
             return RULE(expr_unary, expr_binary, PREC_TERM);
         case '*':
+            return RULE(expr_unary, expr_binary, PREC_CALL);
         case '/':
             return OPERATOR(expr_binary, PREC_FACTOR);
         case '%':
@@ -395,7 +419,11 @@ static ParseRule expr_rule(LexToken t)
         case TK_cast:
             return PREFIX(expr_cast);
         case TK_sizeof:
-            return PREFIX(expr_sizeof_ex);
+            return PREFIX(expr_sizeof);
+        case TK_alignof:
+            return PREFIX(expr_alignof);
+        case TK_offsetof:
+            return PREFIX(expr_offsetof);
         default:
             return NONE;
     }
@@ -454,6 +482,16 @@ static Type* tok2type(LexToken tok)
     default: break;
     }
     return ty;
+}
+
+/* Parse typeof type */
+static TypeSpec* parse_typeof(LexState* ls)
+{
+    SrcLoc loc = lex_srcloc(ls);
+    lex_consume(ls, '(');
+    Expr* e = expr(ls);
+    lex_consume(ls, ')');
+    return vp_typespec_typeof(loc, e);
 }
 
 /* Forward declaration */
@@ -520,6 +558,11 @@ static TypeSpec* parse_type_fn(LexState* ls)
 static TypeSpec* parse_type(LexState* ls)
 {
     TypeSpec* spec = NULL;
+    if(lex_match(ls, TK_typeof))
+    {
+        return parse_typeof(ls);
+    }
+
     if(lex_match(ls, TK_name))
     {
         SrcLoc loc = lex_srcloc(ls);

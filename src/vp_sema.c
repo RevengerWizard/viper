@@ -854,18 +854,6 @@ static Operand sema_init(Type* ty, Expr* e)
     return opr;
 }
 
-/* Find index from field name */
-static uint32_t field_idx(Type* ty, Str* name)
-{
-    vp_assertX(ty->kind == TY_struct || ty->kind == TY_union, "struct/union");
-    for(uint32_t i = 0; i < vec_len(ty->st.fields); i++)
-    {
-        if(ty->st.fields[i].name == name)
-            return i;
-    }
-    return (uint32_t)-1;
-}
-
 /* Resolve compound literal */
 static Operand sema_expr_comp(Expr* e, Type* ret)
 {
@@ -889,7 +877,7 @@ static Operand sema_expr_comp(Expr* e, Type* ret)
             }
             else if(field->kind == FIELD_NAME)
             {
-                idx = field_idx(ty, field->name);
+                idx = vp_type_fieldidx(ty, field->name);
                 if(idx == ((uint32_t)-1))
                 {
                     vp_parse_error(field->loc, "named field in compound literal does not exist");
@@ -1164,11 +1152,34 @@ static Operand sema_expr(Expr* e, Type* ret)
         case EX_CAST:
             res = sema_expr_cast(e);
             break;
-        case EX_SIZEOF_EX:
+        case EX_SIZEOF:
         {
-            Type* ty = sema_expr(e->unary, ret).ty;
+            Type* ty = sema_typespec(e->spec);
             type_complete(ty);
             res = opr_const(tyuint64, (Val){.u64 = vp_type_sizeof(ty)});
+            break;
+        }
+        case EX_ALIGNOF:
+        {
+            Type* ty = sema_typespec(e->spec);
+            type_complete(ty);
+            res = opr_const(tyuint64, (Val){.u64 = vp_type_alignof(ty)});
+            break;
+        }
+        case EX_OFFSETOF:
+        {
+            Type* ty = sema_typespec(e->spec);
+            type_complete(ty);
+            if(ty->kind != TY_struct && ty->kind != TY_union)
+            {
+                vp_parse_error(e->loc, "offset can only be used with struct/union types");
+            }
+            uint32_t idx = vp_type_fieldidx(ty, e->ofst.name);
+            if(idx == (uint32_t)-1)
+            {
+                vp_parse_error(e->loc, "no field '%s' in type", str_data(e->ofst.name));
+            }
+            res = opr_const(tyuint64, (Val){.u64 = ty->st.fields[idx].offset});
             break;
         }
         default:
@@ -1243,6 +1254,11 @@ static Type* sema_typespec(TypeSpec* spec)
             }
             Type* ret = sema_typespec(spec->fn.ret);
             ty = vp_type_func(ret, args);
+            break;
+        }
+        case SPEC_TYPEOF:
+        {
+            ty = sema_expr(spec->expr, NULL).ty;
             break;
         }
         default:

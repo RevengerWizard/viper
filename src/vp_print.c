@@ -177,6 +177,11 @@ static void print_typespec(TypeSpec* spec)
             printf(") : ");
             print_typespec(spec->fn.ret);
             break;
+        case SPEC_TYPEOF:
+            printf("typeof(");
+            print_ast_expr(spec->expr);
+            printf(")");
+            break;
         default:
             vp_assertX(0, "unknown typespec");
             break;
@@ -342,14 +347,31 @@ static void print_ast_expr(Expr* e)
             printf(")");
             break;
         }
-        case EX_SIZEOF_EX:
+        case EX_SIZEOF:
         {
             printf("sizeof(");
-            print_ast_expr(e->unary);
+            print_typespec(e->spec);
             printf(")");
+            break;
+        }
+        case EX_ALIGNOF:
+        {
+            printf("alignof(");
+            print_typespec(e->spec);
+            printf(")");
+            break;
+        }
+        case EX_OFFSETOF:
+        {
+            printf("offsetof(");
+            print_typespec(e->ofst.spec);
+            printf(", ");
+            printf("%s", str_data(e->ofst.name));
+            printf(")");
+            break;
         }
         default:
-            vp_assertX(0, "unknown expression");
+            vp_assertX(0, "unknown expression %d", e->kind);
             break;
     }
 }

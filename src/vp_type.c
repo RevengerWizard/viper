@@ -167,8 +167,14 @@ bool vp_type_isconv(Type* dst, Type* src)
         }
         else
         {
-            if(dst->p == src->p) return true;
-            else return src->p == tyvoid;
+            if(dst->p == src->p)
+            {
+                return true;
+            }
+            else
+            {
+                return src->p == tyvoid || dst->p == tyvoid;
+            }
         }
     }
     else
@@ -364,4 +370,16 @@ void vp_type_union(Str* name, Type* ty, TypeField* fields)
         ty->st.align = MAX(ty->st.align, vp_type_alignof(it->ty));
     }
     ty->st.fields = fields;
+}
+
+/* Find index of struct/union field name */
+uint32_t vp_type_fieldidx(Type* ty, Str* name)
+{
+    vp_assertX(ty->kind == TY_struct || ty->kind == TY_union, "struct/union");
+    for(uint32_t i = 0; i < vec_len(ty->st.fields); i++)
+    {
+        if(ty->st.fields[i].name == name)
+            return i;
+    }
+    return (uint32_t)-1;
 }
