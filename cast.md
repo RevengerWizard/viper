@@ -17,10 +17,12 @@
 - boolean types: `bool`
 - integer types: `int8`, `uint8`, `int16`, `uint16`, `int32`, `uint32`, `int64`, `uint64`
 - floating types: `float`, `double`
+- numeric types: integer and floating types
 - pointer types: any type of the form `T*`
 - array types: any type of the form `T[N]` or `T[]`
 - struct types: any user-defined struct
 - function types: any function pointer type
+- scalar types: boolean, integer, floating, and pointer types
 
 ### 2. Literal type assignment
 
@@ -32,7 +34,7 @@ Rule L2: context-aware floating literals:
 - in a declaration context `var x : T = expr`, all floating literals in expr adopt type `T`
 - if no context is available, literals default to `float`
 
-Rule L3: string literals have type `uint8*`
+Rule L3: string literals have type `uint8[]`
 
 Rule L4: character literals have type `uint8`
 
@@ -59,24 +61,63 @@ Rule E4-C (unary operators in declaration context): for operations `-` `~`
 ### 4. Expression type resolution outside declaration context
 
 Rule E1 (binary numeric operators): for operations `+` `-` `*` `/` `%` `&` `|` `^` `<<` `>>`
-- both operands must have the same type after applying implicit conversion rules
-- the result has the same type as the operands
-  
+- for `+`:
+    * for numeric types: both operands must have the same type after applying implicit conversion rules
+    * for pointer types: allowed as `ptr + int` or `int + ptr`, resulting in a pointer of the same type as the original pointer
+
+- for `-`:
+    * for numeric types: both operands must have the same type after applying implicit conversion rules
+    * for pointer types: allowed as `ptr - int` resulting in a pointer of the same type as the original pointer
+    * for pointer types: allowed as `ptr - ptr` (same pointer type) resulting in an `int64` representing the difference in elements
+
+- for `*` `/` `%`
+    * only valid for numeric types, both operands must have the same type after applying implicit conversion rules
+
+- for `&` `|` `^`
+    * only valid for integer types, both operands must have the same type after applying implicit conversion rules
+
+- for `<<` `>>`
+    * only valid for integer types, both operands must have the same type after applying implicit conversion rules
+
+- the result type follows the types specified above
+
 Rule E2 (comparison operators): for operations `==` `!=` `<` `>` `<=` `>=`
-- both operands must have the same type after applying implicit conversion rules
+- for `==` `!=`
+    * both operands must have the same type after applying implicit conversion rules
+    * one operand may be a pointer and the other may be `nil`
+
+- for `<` `>` `<=` `>=`
+    * both operands must have the same type after applying implicit conversion rules, or
+    * both operands must be pointers of the same type
+
 - the result has type `bool`
   
 Rule E3 (logical operators): for operations `and` `or`
-- both operands must have type `bool`
+- both operands must be scalar types
+- if operands are not `bool`, they are first converted to `bool` (non-zero is true, zero is false)
 - the result has type `bool`
   
 Rule E4 (unary operators): for operations `-` `~`
-- the operand must be a numeric type
+- for `-`
+    * the operand must be a numeric type
+
+- for `~`
+    * the operand must be an integer type
+
 - the result has the same type as the operand
   
 Rule E5 (unary operator): for operations `!` `not`
-- The operand must have type `bool`
+- the operand must be a scalar type
+- if the operand is not `bool`, it is first converted to `bool` (non-zero is true, zero is false)
 - The result has type `bool`
+
+Rule E6 (address-of operator): for operation `&`
+- applies to any lvalue expression
+- result is a pointer to the operand's type
+
+Rule E7 (dereference operator): for operation `*`
+- the operand must be a pointer type
+- result is the type pointed to by the operand
 
 ### 5. Implicit conversion rules
 

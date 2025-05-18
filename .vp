@@ -32,4 +32,7 @@ fn main() : void
     var o = offsetof(Foo, a);
     var p : uint64 = sizeof(typeof(true));
     var q : typeof(*j) = 9;
+    var num1 : int8 = 16;
+    var num2 : int32 = 3;
+    var res : int32 = num2 + num1 * num1;
 }

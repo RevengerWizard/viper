@@ -468,7 +468,7 @@ static LexToken lex_scan(LexState* ls, LexValue* val)
                 if(ls->c == '*')
                 {
                     lex_next(ls);
-                    int nesting = 1;
+                    uint32_t nesting = 1;
                     while(nesting > 0)
                     {
                         if(ls->c == LEX_EOF)
@@ -488,7 +488,7 @@ static LexToken lex_scan(LexState* ls, LexValue* val)
                             continue;
                         }
                         if(ls->c == '\n')
-                            lex_newline(ls);
+                            ls->linenumber++;
                         lex_next(ls);
                     }
                     continue;
