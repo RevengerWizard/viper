@@ -135,6 +135,7 @@ typedef struct Expr
         } binop;
         struct
         {
+            TypeSpec* spec;
             Field* fields;
         } comp;
         struct
@@ -310,7 +311,7 @@ Expr* vp_expr_nlit(SrcLoc loc, double n);
 Expr* vp_expr_flit(SrcLoc loc, float f);
 Expr* vp_expr_str(SrcLoc loc, Str* str);
 Expr* vp_expr_name(SrcLoc loc, Str* name);
-Expr* vp_expr_comp(SrcLoc loc, Field* fields);
+Expr* vp_expr_comp(SrcLoc loc, TypeSpec* spec, Field* fields);
 Expr* vp_expr_call(SrcLoc loc, Expr* e, Expr** args);
 Expr* vp_expr_idx(SrcLoc loc, Expr* e, Expr* idx);
 Expr* vp_expr_field(SrcLoc loc, Expr* e, Str* name);

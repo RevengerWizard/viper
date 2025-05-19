@@ -284,14 +284,6 @@ static Expr* expr_binary(LexState* ls, Expr* lhs)
     return vp_expr_binop(loc, kind, lhs, rhs);
 }
 
-/* Parse name expression */
-static Expr* expr_name(LexState* ls)
-{
-    SrcLoc loc = lex_srcloc(ls);
-    Str* name = ls->val.name;
-    return vp_expr_name(loc, name);
-}
-
 static Field expr_field(LexState* ls)
 {
     SrcLoc loc = lex_srcloc(ls);
@@ -310,7 +302,8 @@ static Field expr_field(LexState* ls)
         {
             if(e->kind != EX_NAME)
                 vp_parse_error(e->loc, "expected field name");
-            return (Field){.loc = loc, .kind = FIELD_NAME, .init = e, .name = e->name};
+            Expr* init = expr(ls);
+            return (Field){.loc = loc, .kind = FIELD_NAME, .init = init, .name = e->name};
         }
         else
         {
@@ -319,8 +312,7 @@ static Field expr_field(LexState* ls)
     }
 }
 
-/* Parse compound literal expression */
-static Expr* expr_comp(LexState* ls)
+static Expr* expr_comp_type(LexState* ls, TypeSpec* spec)
 {
     SrcLoc loc = lex_srcloc(ls);
     Field* fields = NULL;
@@ -332,7 +324,25 @@ static Expr* expr_comp(LexState* ls)
             break;
     }
     lex_consume(ls, '}');
-    return vp_expr_comp(loc, fields);
+    return vp_expr_comp(loc, spec, fields);
+}
+
+/* Parse compound literal expression */
+static Expr* expr_comp(LexState* ls)
+{
+    return expr_comp_type(ls, NULL);
+}
+
+/* Parse name expression */
+static Expr* expr_name(LexState* ls)
+{
+    SrcLoc loc = lex_srcloc(ls);
+    Str* name = ls->val.name;
+    if(lex_match(ls, '{'))
+    {
+        return expr_comp_type(ls, vp_typespec_name(loc, name));
+    }
+    return vp_expr_name(loc, name);
 }
 
 #define NONE                    (ParseRule){ NULL, NULL, PREC_NONE }

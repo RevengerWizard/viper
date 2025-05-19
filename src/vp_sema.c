@@ -858,12 +858,20 @@ static Operand sema_init(Type* ty, Expr* e)
 static Operand sema_expr_comp(Expr* e, Type* ret)
 {
     vp_assertX(e->kind == EX_COMPOUND, "compound");
-    if(!ret)
+    if(!ret && !e->comp.spec)
     {
         vp_parse_error(e->loc, "implicitly typed compound literal used in context without expected type");
     }
     uint32_t numfields = vec_len(e->comp.fields);
-    Type* ty = ret;
+    Type* ty = NULL;
+    if(e->comp.spec)
+    {
+        ty = sema_typespec(e->comp.spec);
+    }
+    else
+    {
+        ty = ret;
+    }
     type_complete(ty);
     if(type_isaggr(ty))
     {
@@ -891,7 +899,7 @@ static Operand sema_expr_comp(Expr* e, Type* ret)
             Operand res = sema_init(fieldty, field->init);
             if(!opr_conv(&res, fieldty))
             {
-                vp_parse_error(field->loc, "invalid type in compound literal initializer for aggregate type, implicit %s to %s", type_name(res.ty), type_name(fieldty));
+                vp_parse_error(field->loc, "implicit %s to %s", type_name(res.ty), type_name(fieldty));
             }
             //opr_fold(field->loc, &field->init, res);
             idx++;
@@ -932,7 +940,7 @@ static Operand sema_expr_comp(Expr* e, Type* ret)
             Operand res = sema_init(ty->p, field->init);
             if(!opr_conv(&res, ty->p))
             {
-                vp_parse_error(field->loc, "invalid type in compound literal initializer for array type, implicit %s to %s", type_name(res.ty), type_name(ty->p));
+                vp_parse_error(field->loc, "implicit %s to %s", type_name(res.ty), type_name(ty->p));
             }
             //opr_fold(field->loc, &field->init, res);
             maxidx = MAX(maxidx, idx);
@@ -946,7 +954,7 @@ static Operand sema_expr_comp(Expr* e, Type* ret)
     }
     else
     {
-        vp_parse_error(e->loc, "field literal for scalar type");
+        vp_parse_error(e->loc, "compound literal for scalar type %s", type_name(ty));
     }
     return opr_lval(ty);
 }
@@ -1032,7 +1040,7 @@ static Operand sema_expr_cast(Expr* e)
     {
         vp_parse_error(e->loc, "illegal type cast from %s to %s", type_name(opr.ty), type_name(ty));
     }
-    return opr;
+    return opr_lval(opr.ty);
 }
 
 /* Resolve integer literal */
@@ -1102,7 +1110,7 @@ static Operand sema_expr(Expr* e, Type* ret)
             }
             else
             {
-                opr = sema_expr(e->unary, NULL);
+                opr = sema_expr(e->unary, ret);
             }
             if(!opr.islval)
             {
@@ -1190,7 +1198,7 @@ static Operand sema_expr(Expr* e, Type* ret)
     if(res.ty)
     {
         vp_assertX(!e->ty || e->ty == res.ty, "invalid type");
-        if(ret && opr_conv(&res, ret))
+        if(ret && vp_type_isconv(ret, res.ty))
         {
             res.ty = ret;
         }
@@ -1325,7 +1333,7 @@ static void sema_stmt_assign(Stmt* st)
     Operand rop = sema_expr(st->rhs, lop.ty);
     if(!opr_conv(&rop, lop.ty))
     {
-        vp_parse_error(st->loc, "illegal conversion in assignment: %s to %s", type_name(lop.ty), type_name(rop.ty));
+        vp_parse_error(st->loc, "illegal conversion: %s to %s", type_name(lop.ty), type_name(rop.ty));
     }
     //opr_fold(st->loc, &st->rhs, rop);
 }
@@ -1414,7 +1422,7 @@ static Type* sema_var(Decl* d)
             inferty = ty = res.ty;
             if(!opr_conv(&res, declty))
             {
-                vp_parse_error(d->loc, "invalid type in init, implicit %s to %s", type_name(inferty), type_name(declty));
+                vp_parse_error(d->loc, "implicit %s to %s", type_name(inferty), type_name(declty));
             }
             d->var.expr->ty = declty;
         }

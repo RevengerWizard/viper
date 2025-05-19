@@ -120,9 +120,10 @@ Expr* vp_expr_name(SrcLoc loc, Str* name)
     return expr;
 }
 
-Expr* vp_expr_comp(SrcLoc loc, Field* fields)
+Expr* vp_expr_comp(SrcLoc loc, TypeSpec* spec, Field* fields)
 {
     Expr* expr = expr_new(EX_COMPOUND, loc);
+    expr->comp.spec = spec;
     expr->comp.fields = fields;
     return expr;
 }

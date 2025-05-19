@@ -1,52 +1,47 @@
+fn nun() : int32 { return 1; }
+
+type Arr = int32[sizeof(double)];
+
+type Arr2 = int32[offsetof(Foo, c)];
+
 struct Foo
 {
     a : int8;
     b : bool;
-    c : int32[];
+    c : int32;
 }
 
-struct Bar
+struct Type
 {
-    hello : struct {
-        a : void*;
-        b : uint8;
-    }
+    kind : uint8;
 }
 
-type Reader = fn(void*, usize) : char*;
-
-type Funcs = fn[5]() : int32;
-
-enum Tag : uint8
-{
-    TAG_NUM,
-    TAG_INT,
-    TAG_BOOL
-}
-
-type Value = struct {
-    tag : Tag;
-    union
-    {
-        n : double;
-        i : int64;
-        b : bool;
-    }
-}
-
-fn other() : void
-{
-    var a : const int32 = 24;
-}
-
-fn add(a : int32, b : int32) : int32
-{
-    return a + b;    
-}
+var tt : Type* = &Type {kind = 1};
 
 fn main() : void
 {
-    var a = 23;
-    var b = 89;
-    add(a, b);
+    //var a0 : void = 1;    // err
+    //var a : int32 = int32(4);
+    var b : float = int16(9);
+    var c = -b;
+    var d : float = c;
+    //var e = nil;
+    var e = true;
+    var f : int64 = nun();
+    var g = not 1;
+    //var h = 2.4 - 2;  // ???
+    var i = &f + 8;
+    var j = &b;
+    //var k : int64 = ((f * 2.2) - 22) * 9; // error
+    var l = sizeof(float);
+    var m : void* = j;
+    var n = alignof(Arr);
+    var o = offsetof(Foo, a);
+    var p : uint64 = sizeof(typeof(true));
+    var q : typeof(*j) = 9;
+    var num1 : int8 = 16;
+    var num2 : int32 = 3;
+    var res : int32 = num2 + num1 * num1;
+    var r : int32[] = {1, 2, num2};
+    var s : Foo[] = {{a = 1, b = true, c = 1}, {a = 1, b = false, c = 2}};
 }

@@ -24,6 +24,7 @@ typedef struct VpState
 
     Tab strtab;
 
+    Arena strarena;
     Arena astarena;
     Arena typearena;
     Arena symarena;

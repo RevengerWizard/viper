@@ -56,7 +56,7 @@ Str* vp_str_new(const char* chars, uint32_t len)
     {
         return s;
     }
-    s = (Str*)vp_mem_alloc(vp_str_size(len));
+    s = (Str*)vp_arena_alloc(&V->strarena, vp_str_size(len));
     s->reserved = 0;
     s->len = len;
     s->hash = hash;

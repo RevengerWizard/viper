@@ -264,6 +264,11 @@ static void print_ast_expr(Expr* e)
         }
         case EX_COMPOUND:
         {
+            if(e->comp.spec)
+            {
+                print_typespec(e->comp.spec);
+                printf(" ");
+            }
             printf("{");
             for(Field* c = e->comp.fields; c != vec_end(e->comp.fields); c++)
             {
