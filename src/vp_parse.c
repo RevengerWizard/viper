@@ -35,8 +35,8 @@ typedef enum
     PREC_CALL,       /*  () */
 } Prec;
 
-typedef Expr* (*ParsePrefixFn)(LexState* ls); 
-typedef Expr* (*ParseInfixFn)(LexState* ls, Expr* lhs);
+typedef Expr* (*ParsePrefixFn)(LexState* ls, SrcLoc loc);
+typedef Expr* (*ParseInfixFn)(LexState* ls, Expr* lhs, SrcLoc loc);
 
 typedef struct
 {
@@ -60,8 +60,7 @@ void vp_parse_error(SrcLoc loc, const char* msg, ...)
 
     int c;
     uint32_t fline = 1;
-    size_t col = 0;
-    
+
     /* Find the error line */
     while(fline < loc.line && (c = fgetc(V->txtfile)) != EOF)
     {
@@ -69,27 +68,23 @@ void vp_parse_error(SrcLoc loc, const char* msg, ...)
             fline++;
     }
     
-    // If we found the line, read it into tmpbuf
-    if(fline == loc.line)
+    vp_assertX(fline == loc.line, "no error line");
+    while((c = fgetc(V->txtfile)) != EOF && c != '\n')
     {
-        while((c = fgetc(V->txtfile)) != EOF && c != '\n')
-        {
-            vp_buf_putb(&V->tmpbuf, c);
-            col++;
-        }
-        vp_buf_putb(&V->tmpbuf, '\0');  /* Terminate the line */
-        
-        /* Print the line */
-        fputs(V->tmpbuf.b, stderr);
-        fputc('\n', stderr);
-        
-        /* Print the error indicator */
-        for(uint32_t i = 0; i < loc.ofs; i++)
-        {
-            fputc((i < col && V->tmpbuf.b[i] == '\t') ? '\t' : ' ', stderr);
-        }
-        fputs("^\n", stderr);
+        vp_buf_putb(&V->tmpbuf, c);
     }
+    vp_buf_putb(&V->tmpbuf, '\0');  /* Terminate the line */
+    
+    /* Print the line */
+    fputs(V->tmpbuf.b, stderr);
+    fputc('\n', stderr);
+    
+    /* Print the error indicator */
+    for(uint64_t i = 0; i < loc.ofs - 2; i++)
+    {
+        fputc(V->tmpbuf.b[i] == '\t' ? '\t' : ' ', stderr);
+    }
+    fputs("^", stderr);
 
     exit(EXIT_FAILURE);
 }
@@ -139,9 +134,8 @@ static Expr* expr_prec(LexState* ls, Prec prec);
 static Expr* expr(LexState* ls);
 
 /* Parse literal expression */
-static Expr* expr_lit(LexState* ls)
+static Expr* expr_lit(LexState* ls, SrcLoc loc)
 {
-    SrcLoc loc = lex_srcloc(ls);
     switch(ls->prev)
     {
         case TK_true:
@@ -166,7 +160,7 @@ static Expr* expr_lit(LexState* ls)
 }
 
 /* Parse grouping expression */
-static Expr* expr_group(LexState* ls)
+static Expr* expr_group(LexState* ls, SrcLoc loc)
 {
     Expr* e = expr(ls);
     lex_consume(ls, ')');
@@ -178,9 +172,8 @@ static Type* tok2type(LexToken tok);
 static TypeSpec* parse_type(LexState* ls);
 
 /* Parse shorten cast expression T(expr) -> cast(T, expr) */
-static Expr* expr_tycast(LexState* ls)
+static Expr* expr_tycast(LexState* ls, SrcLoc loc)
 {
-    SrcLoc loc = lex_srcloc(ls);
     Type* type = tok2type(ls->prev);
     vp_assertX(type, "no type");
     TypeSpec* spec = vp_typespec_type(loc, type);
@@ -191,9 +184,8 @@ static Expr* expr_tycast(LexState* ls)
 }
 
 /* Parse cast expression */
-static Expr* expr_cast(LexState* ls)
+static Expr* expr_cast(LexState* ls, SrcLoc loc)
 {
-    SrcLoc loc = lex_srcloc(ls);
     lex_consume(ls, '(');
     TypeSpec* spec = parse_type(ls);
     lex_consume(ls, ',');
@@ -203,9 +195,8 @@ static Expr* expr_cast(LexState* ls)
 }
 
 /* Parse sizeof expression */
-static Expr* expr_sizeof(LexState* ls)
+static Expr* expr_sizeof(LexState* ls, SrcLoc loc)
 {
-    SrcLoc loc = lex_srcloc(ls);
     lex_consume(ls, '(');
     TypeSpec* spec = parse_type(ls);
     lex_consume(ls, ')');
@@ -213,9 +204,8 @@ static Expr* expr_sizeof(LexState* ls)
 }
 
 /* Parse alignof expression */
-static Expr* expr_alignof(LexState* ls)
+static Expr* expr_alignof(LexState* ls, SrcLoc loc)
 {
-    SrcLoc loc = lex_srcloc(ls);
     lex_consume(ls, '(');
     TypeSpec* spec = parse_type(ls);
     lex_consume(ls, ')');
@@ -223,9 +213,8 @@ static Expr* expr_alignof(LexState* ls)
 }
 
 /* Parse offsetof expression */
-static Expr* expr_offsetof(LexState* ls)
+static Expr* expr_offsetof(LexState* ls, SrcLoc loc)
 {
-    SrcLoc loc = lex_srcloc(ls);
     lex_consume(ls, '(');
     TypeSpec* spec = parse_type(ls);
     lex_consume(ls, ',');
@@ -235,9 +224,8 @@ static Expr* expr_offsetof(LexState* ls)
 }
 
 /* Parse call expression */
-static Expr* expr_call(LexState* ls, Expr* lhs)
+static Expr* expr_call(LexState* ls, Expr* lhs, SrcLoc loc)
 {
-    SrcLoc loc = lex_srcloc(ls);
     Expr** args = NULL;
     if(!lex_check(ls, ')'))
     {
@@ -253,26 +241,23 @@ static Expr* expr_call(LexState* ls, Expr* lhs)
 }
 
 /* Parse index subscript expression */
-static Expr* expr_idx(LexState* ls, Expr* lhs)
+static Expr* expr_idx(LexState* ls, Expr* lhs, SrcLoc loc)
 {
-    SrcLoc loc = lex_srcloc(ls);
     Expr* idx = expr(ls);
     lex_consume(ls, ']');
     return vp_expr_idx(loc, lhs, idx);
 }
 
 /* Parse named field expression */
-static Expr* expr_dot(LexState* ls, Expr* lhs)
+static Expr* expr_dot(LexState* ls, Expr* lhs, SrcLoc loc)
 {
-    SrcLoc loc = lex_srcloc(ls);
     Str* name = lex_name(ls);
     return vp_expr_field(loc, lhs, name);
 }
 
 /* Parse unary expression */
-static Expr* expr_unary(LexState* ls)
+static Expr* expr_unary(LexState* ls, SrcLoc loc)
 {
-    SrcLoc loc = lex_srcloc(ls);
     LexToken tok = ls->prev;
     Expr* expr = expr_prec(ls, PREC_UNARY);
     ExprKind kind = 0;
@@ -294,9 +279,8 @@ static Expr* expr_unary(LexState* ls)
 }
 
 /* Parse binary expression */
-static Expr* expr_binary(LexState* ls, Expr* lhs)
+static Expr* expr_binary(LexState* ls, Expr* lhs, SrcLoc loc)
 {
-    SrcLoc loc = lex_srcloc(ls);
     LexToken tok = ls->prev;
     ParseRule rule = expr_rule(tok);
     Expr* rhs = expr_prec(ls, (Prec)(rule.prec + 1));
@@ -372,15 +356,14 @@ static Expr* expr_comp_type(LexState* ls, TypeSpec* spec)
 }
 
 /* Parse compound literal expression */
-static Expr* expr_comp(LexState* ls)
+static Expr* expr_comp(LexState* ls, SrcLoc loc)
 {
     return expr_comp_type(ls, NULL);
 }
 
 /* Parse name expression */
-static Expr* expr_name(LexState* ls)
+static Expr* expr_name(LexState* ls, SrcLoc loc)
 {
-    SrcLoc loc = lex_srcloc(ls);
     Str* name = ls->val.name;
     if(lex_match(ls, '{'))
     {
@@ -492,20 +475,21 @@ static ParseRule expr_rule(LexToken t)
 /* Parse precedence */
 static Expr* expr_prec(LexState* ls, Prec prec)
 {
-    vp_lex_next(ls);
     SrcLoc loc = lex_srcloc(ls);
+    vp_lex_next(ls);
     ParsePrefixFn prefix = expr_rule(ls->prev).prefix;
     if(prefix == NULL)
     {
         vp_parse_error(loc, "expected expression");
     }
 
-    Expr* expr = prefix(ls);
+    Expr* expr = prefix(ls, loc);
     while(prec <= expr_rule(ls->curr).prec)
     {
+        loc = lex_srcloc(ls);
         vp_lex_next(ls);
         ParseInfixFn infix = expr_rule(ls->prev).infix;
-        expr = infix(ls, expr);
+        expr = infix(ls, expr, loc);
     }
     return expr;
 }

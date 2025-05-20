@@ -41,6 +41,7 @@ static LexChar lex_more(LexState* ls)
 /* Get next character */
 static LexChar lex_next(LexState* ls)
 {
+    ls->lineofst++;
     return (ls->c = ls->p < ls->pe ? (LexChar)(uint8_t)*ls->p++ : lex_more(ls));
 }
 
@@ -363,7 +364,6 @@ static LexToken lex_scan(LexState* ls, LexValue* val)
     vp_buf_reset(&ls->sb);
     while(true)
     {
-        ls->lineofst++;
         if(vp_char_isident(ls->c))
         {
             /* Numeric literal */
