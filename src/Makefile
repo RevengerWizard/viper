@@ -108,8 +108,7 @@ VPCORE_O = vp_buf.o \
 	vp_strscan.o \
 	vp_state.o vp_asm.o vp_ast.o \
 	vp_str.o vp_type.o vp_vec.o vp_tab.o vp_map.o \
-	vp_print.o \
-	vp_pe.o	    
+	vp_print.o
 
 VP_O = viper.o
 VP_A = libvp.a

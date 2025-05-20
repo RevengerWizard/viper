@@ -6,9 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "vp_buf.h"
 #include "vp_state.h"
-#include "vp_emit.h"
 
 static void print_usage()
 {

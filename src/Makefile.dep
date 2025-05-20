@@ -1,5 +1,5 @@
-viper.o: viper.c vp_buf.h vp_def.h vp_state.h vp_mem.h vp_type.h vp_str.h \
-  vp_tab.h vp_map.h vp_emit.h
+viper.o: viper.c vp_state.h vp_buf.h vp_def.h vp_mem.h vp_type.h vp_str.h \
+  vp_tab.h vp_map.h
 vp_asm.o: vp_asm.c vp_asm.h vp_state.h vp_buf.h vp_def.h vp_mem.h \
   vp_type.h vp_str.h vp_tab.h vp_map.h
 vp_assert.o: vp_assert.c vp_def.h
