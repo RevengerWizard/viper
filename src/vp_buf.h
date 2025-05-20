@@ -6,6 +6,8 @@
 #ifndef _VP_BUF_H
 #define _VP_BUF_H
 
+#include <string.h>
+
 #include "vp_def.h"
 
 typedef struct SBuf
@@ -42,6 +44,11 @@ static inline char* vp_buf_more(SBuf* sb, size_t size)
     if(size > sbuf_left(sb))
         return vp_buf_more2(sb, size);
     return sb->w;
+}
+
+static inline char* vp_buf_wmem(char* p, const void* q, size_t len)
+{
+    return (char*)memcpy(p, q, len) + len;
 }
 
 static inline void vp_buf_putb(SBuf* sb, int c)
