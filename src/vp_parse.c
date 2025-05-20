@@ -84,7 +84,7 @@ void vp_parse_error(SrcLoc loc, const char* msg, ...)
     {
         fputc(V->tmpbuf.b[i] == '\t' ? '\t' : ' ', stderr);
     }
-    fputs("^", stderr);
+    fputs("^\n", stderr);
 
     exit(EXIT_FAILURE);
 }
