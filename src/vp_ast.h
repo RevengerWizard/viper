@@ -241,6 +241,19 @@ typedef struct EnumItem
     Expr* init;
 } EnumItem;
 
+typedef struct NoteArg
+{
+    SrcLoc loc;
+    Expr* e;
+} NoteArg;
+
+typedef struct Note
+{
+    SrcLoc loc;
+    Str* name;
+    NoteArg* args;
+} Note;
+
 typedef enum DeclKind
 {
     DECL_VAR,
@@ -248,7 +261,8 @@ typedef enum DeclKind
     DECL_TYPE,
     DECL_STRUCT,
     DECL_UNION,
-    DECL_ENUM
+    DECL_ENUM,
+    DECL_NOTE
 } DeclKind;
 
 typedef struct Decl
@@ -256,6 +270,7 @@ typedef struct Decl
     DeclKind kind;
     SrcLoc loc;
     Str* name;
+    Note* notes;
     union
     {
         struct
@@ -328,11 +343,12 @@ Stmt* vp_stmt_block(SrcLoc loc, Stmt** block);
 Stmt* vp_stmt_return(SrcLoc loc, Expr* e);
 
 /* Declarations */
-Decl* vp_decl_fn(SrcLoc loc, TypeSpec* ret, Str* name);
+Decl* vp_decl_fn(SrcLoc loc, TypeSpec* ret, Str* name, Param* params, Stmt* body);
 Decl* vp_decl_var(SrcLoc loc, Str* name, TypeSpec* spec, Expr* e);
 Decl* vp_decl_type(SrcLoc loc, Str* name, TypeSpec* spec);
 Decl* vp_decl_aggr(SrcLoc loc, DeclKind kind, Str* name, Aggregate* agr);
 Decl* vp_decl_enum(Str* name, TypeSpec* spec);
+Decl* vp_decl_note(SrcLoc loc, Note* notes);
 
 Aggregate* vp_aggr_new(SrcLoc loc, AggregateKind kind, AggregateItem* items);
 

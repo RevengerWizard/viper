@@ -363,6 +363,7 @@ static LexToken lex_scan(LexState* ls, LexValue* val)
     vp_buf_reset(&ls->sb);
     while(true)
     {
+        ls->lineofst++;
         if(vp_char_isident(ls->c))
         {
             /* Numeric literal */
@@ -393,6 +394,7 @@ static LexToken lex_scan(LexState* ls, LexValue* val)
             case '\r':
             case '\n':
                 lex_newline(ls);
+                ls->lineofst = 1;
                 continue;
             case ' ':
             case '\t':
@@ -529,6 +531,22 @@ static LexToken lex_scan(LexState* ls, LexValue* val)
                 lex_savenext(ls);
                 return lex_char(ls, val);
             }
+            case '#':
+            {
+                lex_next(ls);
+                if(vp_char_isident(ls->c))
+                {
+                    do
+                    {
+                        lex_savenext(ls);
+                    }
+                    while(vp_char_isident(ls->c) || vp_char_isdigit(ls->c));
+                    Str* s = vp_str_new(ls->sb.b, sbuf_len(&ls->sb));
+                    val->name = s;
+                    return TK_note;
+                }
+                return '#';
+            }
             default:
             {
                 LexChar c = ls->c;
@@ -545,6 +563,7 @@ void vp_lex_setup(LexState* ls)
     ls->pe = ls->p = NULL;
     ls->curr = 0;
     ls->linenumber = 1;
+    ls->lineofst = 1;
     lex_next(ls);   /* Read first char */
 }
 

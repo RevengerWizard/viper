@@ -36,7 +36,8 @@ void vp_load(VpState* V, const char* filename)
 {
     FileReaderCtx ctx;
     ctx.fp = fopen(filename, "rb");
-    if(ctx.fp == NULL)
+    V->txtfile = fopen(filename, "r");
+    if(!ctx.fp || !V->txtfile)
     {
         fprintf(stderr, "Cannot open %s\n", filename);
         exit(EXIT_FAILURE);

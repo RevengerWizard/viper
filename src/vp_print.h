@@ -6,6 +6,8 @@
 #ifndef _VP_PRINT_H
 #define _VP_PRINT_H
 
+#include <stdio.h>
+
 #include "vp_ast.h"
 
 void vp_print_strintern(void);

@@ -18,6 +18,10 @@ struct Type
 
 var tt : Type* = &Type {kind = 1};
 
+#staticassert(offsetof(Foo, c) == uint64(2));
+
+var thing : typeof(Type {kind = 1}.kind) = 1;
+
 fn main() : void
 {
     //var a0 : void = 1;    // err
@@ -44,4 +48,6 @@ fn main() : void
     var res : int32 = num2 + num1 * num1;
     var r : int32[] = {1, 2, num2};
     var s : Foo[] = {{a = 1, b = true, c = 1}, {a = 1, b = false, c = 2}};
+
+    #staticassert(offsetof(Foo, c) == uint64(2));
 }

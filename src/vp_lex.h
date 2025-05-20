@@ -34,7 +34,8 @@
     __(muleq, *=) __(diveq, /=) __(modeq, %=) \
     __(bandeq, &=) __(boreq, |=) __(bxoreq, ^=) \
     __(lshifteq, <<=) __(rshifteq, >>=) \
-    __(name, <name>) __(string, <string>) __(char, <char>) \
+    __(name, <name>) __(note, <note>) \
+    __(string, <string>) __(char, <char>) \
     __(integer, <integer>) __(number, <number>) \
     __(eof, <eof>)
 
@@ -50,6 +51,7 @@ enum
 };
 
 typedef uint32_t LexLine;   /* Lexical line */
+typedef uint64_t LexOffset;  /* Lexical line offset */
 
 typedef int LexChar;    /* Lexical character */
 typedef int LexToken;   /* Lexical token */
@@ -58,6 +60,7 @@ typedef int LexToken;   /* Lexical token */
 typedef struct SrcLoc
 {
     LexLine line;   /* Line number */
+    LexOffset ofs;   /* Line number */
     const char* name;   /* File name */
 } SrcLoc;
 
@@ -89,6 +92,7 @@ typedef struct LexState
     LexValue nextval;   /* Lookahead token value */
     const char* name;   /* File name */
     LexLine linenumber; /* Line counter */
+    LexOffset lineofst; /* Line offset */
 } LexState;
 
 void vp_lex_setup(LexState* ls);

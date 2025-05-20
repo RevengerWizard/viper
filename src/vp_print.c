@@ -375,9 +375,31 @@ static void print_ast_expr(Expr* e)
             printf(")");
             break;
         }
+        case EX_FIELD:
+        {
+            print_ast_expr(e->field.expr);
+            printf(".%s", str_data(e->field.name));
+            break;
+        }
         default:
             vp_assertX(0, "unknown expression %d", e->kind);
             break;
+    }
+}
+
+void print_ast_note(Note* note)
+{
+    uint32_t argsnum = vec_len(note->args);
+    if(argsnum)
+    {
+        for(uint32_t i = 0; i < argsnum; i++)
+        {
+            print_ast_expr(note->args[i].e);
+            if(i != vec_len(note->args) - 1)
+            {
+                printf(", ");
+            }
+        }
     }
 }
 
@@ -475,11 +497,15 @@ void vp_print_ast(Decl* d)
                     printf(", ");
                 }
             }
-            printf(")\n{\n");
-            indent++;
-            print_ast_stmt(d->fn.body);
-            indent--;
-            printf("}\n");
+            printf(")");
+            if(d->fn.body)
+            {
+                printf("\n{\n");
+                indent++;
+                print_ast_stmt(d->fn.body);
+                indent--;
+                printf("}\n");
+            }
             break;
         case DECL_STRUCT:
             printf("struct %s\n{\n", str_data(d->name));
@@ -487,6 +513,17 @@ void vp_print_ast(Decl* d)
             print_ast_aggr(d->agr);
             indent--;
             printf("}\n");
+            break;
+        case DECL_NOTE:
+            print_indent();
+            for(uint32_t i = 0; i < vec_len(d->notes); i++)
+            {
+                Note* note = &d->notes[i];
+                Str* name = note->name;
+                printf("#%s", str_data(name));
+                print_ast_note(note);
+                printf("\n");
+            }
             break;
         default:
             vp_assertX(0, "unknown decl");

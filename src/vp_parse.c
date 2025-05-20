@@ -53,11 +53,50 @@ void vp_parse_error(SrcLoc loc, const char* msg, ...)
     vfprintf(stderr, msg, args);
     fputc('\n', stderr);
     va_end(args);
+
+    vp_buf_reset(&V->tmpbuf);
+    
+    rewind(V->txtfile); /* Rewind file at the start */
+
+    int c;
+    uint32_t fline = 1;
+    size_t col = 0;
+    
+    /* Find the error line */
+    while(fline < loc.line && (c = fgetc(V->txtfile)) != EOF)
+    {
+        if(c == '\n')
+            fline++;
+    }
+    
+    // If we found the line, read it into tmpbuf
+    if(fline == loc.line)
+    {
+        while((c = fgetc(V->txtfile)) != EOF && c != '\n')
+        {
+            vp_buf_putb(&V->tmpbuf, c);
+            col++;
+        }
+        vp_buf_putb(&V->tmpbuf, '\0');  /* Terminate the line */
+        
+        /* Print the line */
+        fputs(V->tmpbuf.b, stderr);
+        fputc('\n', stderr);
+        
+        /* Print the error indicator */
+        for(uint32_t i = 0; i < loc.ofs; i++)
+        {
+            fputc((i < col && V->tmpbuf.b[i] == '\t') ? '\t' : ' ', stderr);
+        }
+        fputs("^\n", stderr);
+    }
+
     exit(EXIT_FAILURE);
 }
 
 /* Lexical source position */
-#define lex_srcloc(ls) ((SrcLoc){.line = (ls)->linenumber, .name = (ls)->name})
+#define lex_srcloc(ls) \
+    ((SrcLoc){.line = (ls)->linenumber, .ofs = (ls)->lineofst, .name = (ls)->name})
 
 /* Check for matching token and consume it */
 static void lex_consume(LexState* ls, LexToken t)
@@ -84,6 +123,13 @@ static bool lex_match(LexState* ls, LexToken t)
         return false;
     vp_lex_next(ls);
     return true;
+}
+
+/* Consume a single name and return its name */
+static Str* lex_name(LexState* ls)
+{
+    lex_consume(ls, TK_name);
+    return ls->val.name;
 }
 
 /* Forward declarations */
@@ -183,8 +229,7 @@ static Expr* expr_offsetof(LexState* ls)
     lex_consume(ls, '(');
     TypeSpec* spec = parse_type(ls);
     lex_consume(ls, ',');
-    lex_consume(ls, TK_name);
-    Str* name = ls->val.name;
+    Str* name = lex_name(ls);
     lex_consume(ls, ')');
     return vp_expr_offsetof(loc, spec, name);
 }
@@ -220,8 +265,7 @@ static Expr* expr_idx(LexState* ls, Expr* lhs)
 static Expr* expr_dot(LexState* ls, Expr* lhs)
 {
     SrcLoc loc = lex_srcloc(ls);
-    lex_consume(ls, TK_name);
-    Str* name = ls->val.name;
+    Str* name = lex_name(ls);
     return vp_expr_field(loc, lhs, name);
 }
 
@@ -623,10 +667,44 @@ static TypeSpec* parse_type(LexState* ls)
 /* Forward declaration */
 static Stmt* parse_stmt(LexState* ls);
 
-static Str* parse_name(LexState* ls)
+/* Parse note argument */
+static NoteArg parse_note_arg(LexState* ls)
 {
-    lex_consume(ls, TK_name);
-    return ls->val.name;
+    SrcLoc loc = lex_srcloc(ls);
+    Expr* e = expr(ls);
+    return (NoteArg){.loc = loc, .e = e};
+}
+
+/* Parse a single #note */
+static Note parse_note(LexState* ls)
+{
+    SrcLoc loc = lex_srcloc(ls);
+    Str* name = ls->val.name;
+    NoteArg* args = NULL;
+    if(lex_match(ls, '('))
+    {
+        while(!lex_check(ls, ')'))
+        {
+            NoteArg arg = parse_note_arg(ls);
+            vec_push(args, arg);
+            if(!lex_match(ls, ','))
+                break;
+        }
+        lex_consume(ls, ')');
+    }
+    return (Note){.loc = loc, .name = name, .args = args};
+}
+
+/* Parse multiple # notes */
+static Note* parse_notes(LexState* ls)
+{
+    Note* notes = NULL;
+    while(lex_match(ls, TK_note))
+    {
+        vec_push(notes, parse_note(ls));
+        lex_match(ls, ';');
+    }
+    return notes;
 }
 
 /* Parse code block {} */
@@ -673,7 +751,7 @@ static Param* parse_params(LexState* ls)
         do
         {
             SrcLoc loc = lex_srcloc(ls);
-            Str* name = parse_name(ls);
+            Str* name = lex_name(ls);
             lex_consume(ls, ':');
             TypeSpec* spec = parse_type(ls);
             Param p = (Param){.loc = loc, .name = name, .spec = spec};
@@ -689,8 +767,7 @@ static Decl* parse_typedef(LexState* ls)
 {
     vp_lex_next(ls);    /* Skip 'type' */
     SrcLoc loc = lex_srcloc(ls);
-    lex_consume(ls, TK_name);
-    Str* name = ls->val.name;
+    Str* name = lex_name(ls);
     lex_consume(ls, '=');
     TypeSpec* spec = parse_type(ls);
     lex_consume(ls, ';');
@@ -714,7 +791,7 @@ static AggregateItem parse_aggr_item(LexState* ls)
         Str** names = NULL;
         do
         {
-            Str* name = parse_name(ls);
+            Str* name = lex_name(ls);
             vec_push(names, name);
         }
         while(lex_match(ls, ','));
@@ -750,8 +827,7 @@ static Decl* parse_struct(LexState* ls)
 {
     vp_lex_next(ls);    /* Skip 'struct' */
     SrcLoc loc = lex_srcloc(ls);
-    lex_consume(ls, TK_name);
-    Str* name = ls->val.name;
+    Str* name = lex_name(ls);
     Aggregate* aggr = parse_aggr(ls);
     return vp_decl_aggr(loc, DECL_STRUCT, name, aggr);
 }
@@ -761,18 +837,22 @@ static Decl* parse_fn(LexState* ls)
 {
     vp_lex_next(ls);    /* Skip 'fn' */
     SrcLoc loc = lex_srcloc(ls);
-    lex_consume(ls, TK_name);
-    Str* name = ls->val.name;
+    Str* name = lex_name(ls);
 
     Param* params = parse_params(ls);
     lex_consume(ls, ':');
     TypeSpec* ret = parse_type(ls);
 
-    Decl* decl = vp_decl_fn(loc, ret, name);
-    decl->fn.body = parse_block(ls);
-    decl->fn.params = params;
-
-    return decl;
+    Stmt* body;
+    if(lex_match(ls, ';'))
+    {
+        body = NULL;
+    }
+    else
+    {
+        body = parse_block(ls);
+    }
+    return vp_decl_fn(loc, ret, name, params, body);
 }
 
 /* Parse 'var' */
@@ -780,8 +860,7 @@ static Decl* parse_var(LexState* ls)
 {
     vp_lex_next(ls);    /* Skip 'var' */
     SrcLoc loc = lex_srcloc(ls);
-    lex_consume(ls, TK_name);
-    Str* name = ls->val.name;
+    Str* name = lex_name(ls);
 
     TypeSpec* spec = NULL;
     if(lex_match(ls, ':'))
@@ -829,8 +908,8 @@ static Stmt* parse_stmt(LexState* ls)
     return st;
 }
 
-/* Parse a declaration */
-static Decl* parse_decl(LexState* ls)
+/* Parse multiple declarations */
+static Decl* parse_decl_list(LexState* ls)
 {
     Decl* d = NULL;
     switch(ls->curr)
@@ -853,9 +932,35 @@ static Decl* parse_decl(LexState* ls)
     return d;
 }
 
+/* Parse a declaration */
+static Decl* parse_decl(LexState* ls)
+{
+    SrcLoc loc = lex_srcloc(ls);
+    Decl* d = NULL;
+    Note* notes = parse_notes(ls);
+    if(notes && ls->prev == ';')
+    {
+        d = vp_decl_note(loc, notes);
+    }
+    else
+    {
+        d = parse_decl_list(ls);
+        if(notes)
+        {
+            if(!d)
+            {
+                const char* tokstr = vp_lex_tok2str(ls, ls->curr);
+                vp_parse_error(loc, "declaration expected, got '%s'", tokstr);
+            }
+            d->notes = notes;
+        }
+    }
+    return d;
+}
+
 Decl** vp_parse(VpState* V, LexState* ls)
 {
-    vp_lex_next(ls);    /* Read the first token into "next" */
+    vp_lex_next(ls);    /* Read the first token into ls->curr */
 
     Decl** decls = NULL;
     while(!lex_match(ls, TK_eof))

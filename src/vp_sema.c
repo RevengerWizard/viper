@@ -1036,11 +1036,12 @@ static Operand sema_expr_cast(Expr* e)
     vp_assertX(e->kind == EX_CAST, "cast");
     Type* ty = sema_typespec(e->cast.spec);
     Operand opr = sema_expr_rval(e->cast.expr, ty);
+    bool isconst = opr.isconst;
     if(!opr_cast(&opr, ty))
     {
         vp_parse_error(e->loc, "illegal type cast from %s to %s", type_name(opr.ty), type_name(ty));
     }
-    return opr_lval(opr.ty);
+    return isconst ? opr_const(opr.ty, opr.val) : opr_lval(opr.ty);
 }
 
 /* Resolve integer literal */
@@ -1205,6 +1206,39 @@ static Operand sema_expr(Expr* e, Type* ret)
         e->ty = res.ty;
     }
     return res;
+}
+
+/* Resolve static assert */
+static void sema_staticassert(Note* note)
+{
+    uint32_t argsnum = vec_len(note->args);
+    if(argsnum != 1)
+    {
+        vp_parse_error(note->loc, "#staticassert takes 1 argument");
+    }
+    Operand res = sema_constexpr(note->args[0].e);
+    if(!res.val.u64)
+    {
+        vp_parse_error(note->loc, "#staticassert failed");
+    }
+}
+
+/* Resolve notes */
+static void sema_notes(Note* notes)
+{
+    for(uint32_t i = 0; i < vec_len(notes); i++)
+    {
+        Note* note = &notes[i];
+        Str* name = note->name;
+        if(strncmp(str_data(name), "staticassert", strlen("staticassert")) == 0)
+        {
+            sema_staticassert(note);
+        }
+        else
+        {
+            vp_parse_error(note->loc, "unknown directive #%s", str_data(name));
+        }
+    }
 }
 
 /* Resolve a typespec */
@@ -1375,6 +1409,10 @@ static void sema_stmt(Stmt* st, Type* ret)
                 Type* ty = sema_var(d);
                 sym_push_var(d->name, ty);
             }
+            else if(st->decl->kind == DECL_NOTE)
+            {
+                sema_notes(st->decl->notes);
+            }
             else
             {
                 vp_parse_error(d->loc, "unimplemented local type declarations");
@@ -1393,6 +1431,10 @@ static void sema_fn_body(Sym* sym)
     Decl* d = sym->decl;
     vp_assertX(d->kind == DECL_FN, "fn declaration");
     vp_assertX(sym->state == SYM_DONE, "unresolved symbol");
+    
+    if(!d->fn.body)
+        return;
+
     Sym* scope = sym_enter();   /* Enter scope */
     for(uint32_t i = 0; i < vec_len(d->fn.params); i++)
     {
@@ -1494,9 +1536,16 @@ void vp_sema(Decl** decls)
     for(uint32_t i = 0; i < vec_len(decls); i++)
     {
         Decl* d = decls[i];
-        Sym* sym = sym_decl(d);
-        vp_tab_set(&globs, sym->name, sym);
-        vec_push(syms, sym);
+        if(d->kind == DECL_NOTE)
+        {
+            sema_notes(d->notes);
+        }
+        else
+        {
+            Sym* sym = sym_decl(d);
+            vp_tab_set(&globs, sym->name, sym);
+            vec_push(syms, sym);
+        }
     }
     /* Resolve symbols */
     for(Sym** p = syms; p != vec_end(syms); p++)

@@ -247,10 +247,12 @@ Decl* vp_decl_var(SrcLoc loc, Str* name, TypeSpec* spec, Expr* e)
     return d;
 }
 
-Decl* vp_decl_fn(SrcLoc loc, TypeSpec* ret, Str* name)
+Decl* vp_decl_fn(SrcLoc loc, TypeSpec* ret, Str* name, Param* params, Stmt* body)
 {
     Decl* d = decl_new(DECL_FN, loc, name);;
     d->fn.ret = ret;
+    d->fn.params = params;
+    d->fn.body = body;
     return d;
 }
 
@@ -271,6 +273,13 @@ Decl* vp_decl_aggr(SrcLoc loc, DeclKind kind, Str* name, Aggregate* agr)
 Decl* vp_decl_enum(Str* name, TypeSpec* spec)
 {
     return NULL;
+}
+
+Decl* vp_decl_note(SrcLoc loc, Note* notes)
+{
+    Decl* d = decl_new(DECL_NOTE, loc, NULL);
+    d->notes = notes;
+    return d;
 }
 
 Aggregate* vp_aggr_new(SrcLoc loc, AggregateKind kind, AggregateItem* items)
