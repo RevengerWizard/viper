@@ -10,6 +10,7 @@
 #include "vp_lex.h"
 #include "vp_buf.h"
 #include "vp_char.h"
+#include "vp_err.h"
 #include "vp_str.h"
 #include "vp_strscan.h"
 
@@ -589,13 +590,10 @@ const char* vp_lex_tok2str(LexState* ls, LexToken t)
 /* Lexer error */
 void vp_lex_error(LexState* ls, const char* msg, ...)
 {
-    va_list args;
-    va_start(args, msg);
-    fprintf(stderr, "%s:%d error: ", ls->name, ls->linenumber);
-    vfprintf(stderr, msg, args);
-    fputc('\n', stderr);
-    va_end(args);
-    exit(EXIT_FAILURE);
+    va_list argp;
+    va_start(argp, msg);
+    vp_err_lex(ls->linenumber, ls->lineofst, ls->name, msg, argp);
+    va_end(argp);
 }
 
 /* Return next lexical token */

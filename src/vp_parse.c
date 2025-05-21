@@ -3,14 +3,11 @@
 ** Syntax analyser
 */
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-
 #include "vp_parse.h"
 #include "vp_ast.h"
 #include "vp_def.h"
 #include "vp_lex.h"
+#include "vp_err.h"
 #include "vp_state.h"
 #include "vp_str.h"
 #include "vp_type.h"
@@ -44,50 +41,6 @@ typedef struct
     ParseInfixFn infix;
     Prec prec;
 } ParseRule;
-
-void vp_parse_error(SrcLoc loc, const char* msg, ...)
-{
-    va_list args;
-    va_start(args, msg);
-    fprintf(stderr, "%s:%d error: ", loc.name, loc.line);
-    vfprintf(stderr, msg, args);
-    fputc('\n', stderr);
-    va_end(args);
-
-    vp_buf_reset(&V->tmpbuf);
-    
-    rewind(V->txtfile); /* Rewind file at the start */
-
-    int c;
-    uint32_t fline = 1;
-
-    /* Find the error line */
-    while(fline < loc.line && (c = fgetc(V->txtfile)) != EOF)
-    {
-        if(c == '\n')
-            fline++;
-    }
-    
-    vp_assertX(fline == loc.line, "no error line");
-    while((c = fgetc(V->txtfile)) != EOF && c != '\n')
-    {
-        vp_buf_putb(&V->tmpbuf, c);
-    }
-    vp_buf_putb(&V->tmpbuf, '\0');  /* Terminate the line */
-    
-    /* Print the line */
-    fputs(V->tmpbuf.b, stderr);
-    fputc('\n', stderr);
-    
-    /* Print the error indicator */
-    for(uint64_t i = 0; i < loc.ofs - 2; i++)
-    {
-        fputc(V->tmpbuf.b[i] == '\t' ? '\t' : ' ', stderr);
-    }
-    fputs("^\n", stderr);
-
-    exit(EXIT_FAILURE);
-}
 
 /* Lexical source position */
 #define lex_srcloc(ls) \
@@ -329,7 +282,7 @@ static Field expr_field(LexState* ls)
         if(lex_match(ls, '='))
         {
             if(e->kind != EX_NAME)
-                vp_parse_error(e->loc, "expected field name");
+                vp_err_error(e->loc, "expected field name");
             Expr* init = expr(ls);
             return (Field){.loc = loc, .kind = FIELD_NAME, .init = init, .name = e->name};
         }
@@ -480,7 +433,7 @@ static Expr* expr_prec(LexState* ls, Prec prec)
     ParsePrefixFn prefix = expr_rule(ls->prev).prefix;
     if(prefix == NULL)
     {
-        vp_parse_error(loc, "expected expression");
+        vp_err_error(loc, "expected expression");
     }
 
     Expr* expr = prefix(ls, loc);
@@ -578,7 +531,7 @@ static TypeSpec* parse_type_fn(LexState* ls)
             {
                 if(spec->kind != SPEC_NAME)
                 {
-                    vp_parse_error(loc, "Expected function parameter name");
+                    vp_err_error(loc, "Expected function parameter name");
                 }
                 spec = parse_type(ls);
             }
@@ -624,7 +577,7 @@ static TypeSpec* parse_type(LexState* ls)
         Type* type = tok2type(ls->curr);
         if(type == NULL)
         {
-            vp_parse_error(loc, "unexpected token type");
+            vp_err_error(loc, "unexpected token type");
         } 
         vp_lex_next(ls);    /* Skip type */
         spec = vp_typespec_type(loc, type);
@@ -934,7 +887,7 @@ static Decl* parse_decl(LexState* ls)
             if(!d)
             {
                 const char* tokstr = vp_lex_tok2str(ls, ls->curr);
-                vp_parse_error(loc, "declaration expected, got '%s'", tokstr);
+                vp_err_error(loc, "declaration expected, got '%s'", tokstr);
             }
             d->notes = notes;
         }

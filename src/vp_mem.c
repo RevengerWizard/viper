@@ -17,7 +17,7 @@ void* vp_mem_calloc(size_t num, size_t size)
     void* p = calloc(num, size);
     if(VP_UNLIKELY(!p))
     {
-        fputs("calloc failed", stderr);
+        fputs("calloc failed\n", stderr);
         exit(EXIT_FAILURE);
     }
     return p;
@@ -28,7 +28,7 @@ void* vp_mem_realloc(void* p, size_t size)
     p = realloc(p, size);
     if(VP_UNLIKELY(!p))
     {
-        fputs("realloc failed", stderr);
+        fputs("realloc failed\n", stderr);
         exit(EXIT_FAILURE);
     }
     return p;
@@ -39,7 +39,7 @@ void* vp_mem_alloc(size_t size)
     void* p = malloc(size);
     if(VP_UNLIKELY(!p))
     {
-        fputs("malloc failed", stderr);
+        fputs("malloc failed\n", stderr);
         exit(EXIT_FAILURE);
     }
     return p;
