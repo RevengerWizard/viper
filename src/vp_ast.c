@@ -275,10 +275,10 @@ Decl* vp_decl_enum(Str* name, TypeSpec* spec)
     return NULL;
 }
 
-Decl* vp_decl_note(SrcLoc loc, Note* notes)
+Decl* vp_decl_note(SrcLoc loc, Note note)
 {
     Decl* d = decl_new(DECL_NOTE, loc, NULL);
-    d->notes = notes;
+    d->note = note;
     return d;
 }
 

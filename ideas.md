@@ -62,7 +62,7 @@ typeof sizeof alignof offsetof
 
 ---
 
-notes
+### notes
 
 `#staticassert`
 
@@ -84,7 +84,7 @@ notes
 
 ---
 
-intrinsics
+### intrinsics
 
 `@clz(x)` count leading zeros
 
@@ -96,3 +96,24 @@ intrinsics
 | semantic modifier      | keyword   | changes how code behaves      |
 | builtin/intrinsic func | `@name()` | low-level compiler function   |
 | ABI / linkage modifier | `extern`  | needs parser support          |
+
+---
+
+### casts
+
+`cast`/`type`
+
+`bitcast`
+
+`floatcast`
+
+`intcast`
+
+`ptrcast`
+
+| Cast      | Safety     | Purpose                       | Notes                  |
+| --------- | ---------- | ----------------------------- | ---------------------- |
+| `cast`    | Safe       | Checked conversions           | Default option         |
+| `intcast` | Unsafe-ish | Signed/unsigned or lossy cast | Only for numeric types |
+| `bitcast` | Unsafe     | Bit reinterpretation          | Must match size        |
+| `ptrcast` | Unsafe     | Pointer-type casts            | Use with caution       |

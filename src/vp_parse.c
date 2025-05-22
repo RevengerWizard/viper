@@ -612,10 +612,11 @@ static NoteArg parse_note_arg(LexState* ls)
     return (NoteArg){.loc = loc, .e = e};
 }
 
-/* Parse a single #note */
-static Note parse_note(LexState* ls)
+/* Parse a #note */
+static Decl* parse_note(LexState* ls)
 {
     SrcLoc loc = lex_srcloc(ls);
+    vp_lex_next(ls);    /* Skip #note */
     Str* name = ls->val.name;
     NoteArg* args = NULL;
     if(lex_match(ls, '('))
@@ -629,19 +630,9 @@ static Note parse_note(LexState* ls)
         }
         lex_consume(ls, ')');
     }
-    return (Note){.loc = loc, .name = name, .args = args};
-}
-
-/* Parse multiple # notes */
-static Note* parse_notes(LexState* ls)
-{
-    Note* notes = NULL;
-    while(lex_match(ls, TK_note))
-    {
-        vec_push(notes, parse_note(ls));
-        lex_match(ls, ';');
-    }
-    return notes;
+    lex_consume(ls, ';');
+    Note note = (Note){.loc = loc, .name = name, .args = args};
+    return vp_decl_note(loc, note);
 }
 
 /* Parse code block {} */
@@ -845,12 +836,15 @@ static Stmt* parse_stmt(LexState* ls)
     return st;
 }
 
-/* Parse multiple declarations */
-static Decl* parse_decl_list(LexState* ls)
+/* Parse a declaration */
+static Decl* parse_decl(LexState* ls)
 {
     Decl* d = NULL;
     switch(ls->curr)
     {
+        case TK_note:
+            d = parse_note(ls);
+            break;
         case TK_fn:
             d = parse_fn(ls);
             break;
@@ -865,32 +859,6 @@ static Decl* parse_decl_list(LexState* ls)
             break;
         default:
             break;
-    }
-    return d;
-}
-
-/* Parse a declaration */
-static Decl* parse_decl(LexState* ls)
-{
-    SrcLoc loc = lex_srcloc(ls);
-    Decl* d = NULL;
-    Note* notes = parse_notes(ls);
-    if(notes && ls->prev == ';')
-    {
-        d = vp_decl_note(loc, notes);
-    }
-    else
-    {
-        d = parse_decl_list(ls);
-        if(notes)
-        {
-            if(!d)
-            {
-                const char* tokstr = vp_lex_tok2str(ls, ls->curr);
-                vp_err_error(loc, "declaration expected, got '%s'", tokstr);
-            }
-            d->notes = notes;
-        }
     }
     return d;
 }

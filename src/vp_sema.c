@@ -399,7 +399,7 @@ static bool opr_cast(Operand* opr, Type* ty)
     if(opr->ty == ty)
         return true;
 
-    if(!vp_type_iscast(opr->ty, ty))
+    if(!vp_type_iscast(ty, opr->ty))
         return false;
 
     if(opr->isconst)
@@ -426,34 +426,32 @@ static bool opr_cast(Operand* opr, Type* ty)
     return true;
 }
 
-/* Implicit operand type conversion */
-static bool opr_conv(Operand* opr, Type* ty)
-{
-    if(vp_type_isconv(ty, opr->ty))
-    {
-        opr_cast(opr, ty);
-        opr->islval = false;
-        return true;
-    }
-    return false;
-}
-
 #undef CASE
+
+/* Implicit operand type conversion */
+static void opr_conv(SrcLoc loc, Operand* opr, Type* ty)
+{
+    if(!vp_type_isconv(ty, opr->ty))
+    {
+        vp_err_error(loc, "implicit %s to %s", type_name(opr->ty), type_name(ty));
+    }
+    opr_cast(opr, ty);
+    opr->islval = false;
+}
 
 /* Unify operands of different types */
 static Type* opr_unify(Expr* e, Operand* lop, Operand* rop, Type* ret)
 {
-    if(!ret)
+    if(ret)
     {
-        Type* lty = lop->ty;
-        Type* rty = rop->ty;
-        opr_conv(lop, rty);
-        opr_conv(rop, lty);
+        opr_cast(lop, ret);
+        opr_cast(rop, ret);
     }
     else
     {
-        opr_conv(lop, ret);
-        opr_conv(rop, ret);
+        ret = vp_type_common(lop->ty, rop->ty);        
+        opr_cast(lop, ret);
+        opr_cast(rop, ret);
     }
     if(lop->ty != rop->ty)
     {
@@ -462,56 +460,33 @@ static Type* opr_unify(Expr* e, Operand* lop, Operand* rop, Type* ret)
             "incompatible operand types for '%s': %s and %s",
             opname, type_name(lop->ty), type_name(rop->ty));
     }
-    return lop->ty;
+    return ret;
 }
 
 /* Value unary operator folding */
 static Val val_unary(ExprKind op, Type* ty, Val val)
 {
-    Operand opr = opr_const(ty, val);
-    opr_cast(&opr, ty);
-    if(type_issigned(ty))
-    {
-        opr.val.i64 = fold_unary_i64(op, opr.val.i64);
-    }
-    else if(type_isunsigned(ty))
-    {
-        opr.val.u64 = fold_unary_u64(op, opr.val.u64);
-    }
-    else if(type_isflo(ty))
-    {
-        opr.val.d = fold_unary_f(op, opr.val.d);
-    }
-    else
-    {
-        vp_assertX(0, "unknown type to fold");
-    }
-    opr_cast(&opr, ty);
-    return opr.val;
-}
-
-/* Value of binary operator folding */
-static Val val_binop(ExprKind op, Type* ty, Val lval, Val rval)
-{
-    Operand lop = opr_const(ty, lval);
-    Operand rop = opr_const(ty, rval);
-    opr_cast(&lop, ty);
-    opr_cast(&rop, ty);
-    Operand res;
+    Operand res = opr_const(ty, val);
+    opr_cast(&res, ty);
     if(type_isunsigned(ty))
     {
-        uint64_t val = fold_binop_u64(op, lop.val.u64, rop.val.u64);
-        res = opr_const(ty, (Val){.u64 = val});
+        res.val.u64 = fold_unary_u64(op, res.val.u64);
     }
     else if(type_issigned(ty))
     {
-        int64_t val = fold_binop_i64(op, lop.val.i64, rop.val.i64);
-        res = opr_const(ty, (Val){.i64 = val});
+        res.val.i64 = fold_unary_i64(op, res.val.i64);
     }
     else if(type_isflo(ty))
     {
-        double val = fold_binop_f(op, lop.val.d, rop.val.d);
-        res = opr_const(ty, (Val){.d = val});
+        if(ty->kind == TY_double)
+        {
+            res.val.d = fold_unary_f(op, res.val.d);
+        }
+        else
+        {
+            vp_assertX(ty->kind == TY_float, "float");
+            res.val.f = fold_unary_f(op, res.val.f);
+        }
     }
     else
     {
@@ -521,13 +496,55 @@ static Val val_binop(ExprKind op, Type* ty, Val lval, Val rval)
     return res.val;
 }
 
-/*static void opr_fold(SrcLoc loc, Expr** e, Operand opr)
+/* Value of binary operator folding */
+static Val val_binop(ExprKind op, Type* ty, Val lval, Val rval)
 {
+    Operand lop = opr_const(ty, lval);
+    Operand rop = opr_const(ty, rval);
+    Operand res;
+    opr_cast(&lop, ty);
+    opr_cast(&rop, ty);
+    if(type_isunsigned(ty))
+    {
+        uint64_t u64 = fold_binop_u64(op, lop.val.u64, rop.val.u64);
+        res = opr_const(ty, (Val){.u64 = u64});
+    }
+    else if(type_issigned(ty))
+    {
+        int64_t i64 = fold_binop_i64(op, lop.val.i64, rop.val.i64);
+        res = opr_const(ty, (Val){.i64 = i64});
+    }
+    else if(type_isflo(ty))
+    {
+        if(ty->kind == TY_double)
+        {
+            double d = fold_binop_f(op, lop.val.d, rop.val.d);
+            res = opr_const(ty, (Val){.d = d});
+        }
+        else
+        {
+            vp_assertX(ty->kind == TY_float, "float");
+            float f = fold_binop_f(op, lop.val.f, rop.val.f);
+            res = opr_const(ty, (Val){.f = f});
+        }
+    }
+    else
+    {
+        vp_assertX(0, "unknown type to fold");
+    }
+    opr_cast(&res, ty);
+    return res.val;
+}
+
+/* Apply constant folding to the AST */
+static void opr_fold(SrcLoc loc, Expr** e, Operand opr)
+{
+    Type* ty = opr.ty;
     if(opr.isconst && !opr.islit)
     {
-        if(type_isint(opr.ty))
+        if(type_isint(ty))
         {
-            if(type_issigned(opr.ty))
+            if(type_issigned(ty))
             {
                 *e = vp_expr_ilit(loc, opr.val.i64);
             }
@@ -536,19 +553,20 @@ static Val val_binop(ExprKind op, Type* ty, Val lval, Val rval)
                 *e = vp_expr_ulit(loc, opr.val.u64);
             }
         }
-        else if(type_isflo(opr.ty))
+        else if(type_isflo(ty))
         {
-            if(opr.ty->kind == TY_double)
+            if(ty->kind == TY_double)
             {
                 *e = vp_expr_nlit(loc, opr.val.d);
             }
             else
             {
+                vp_assertX(ty->kind == TY_float, "float");
                 *e = vp_expr_flit(loc, opr.val.f);
             }
         }
     }
-}*/
+}
 
 static Operand opr_unary(ExprKind op, Operand opr)
 {
@@ -580,7 +598,6 @@ static Operand opr_binop(Expr* e, Operand lop, Operand rop, Type* ret)
 
 /* Forward declarations */
 static Operand sema_expr(Expr* e, Type* ret);
-static Type* sema_var(Decl* d);
 
 /* Resolve rval expression */
 static Operand sema_expr_rval(Expr* e, Type* ret)
@@ -698,10 +715,6 @@ static Operand sema_expr_binop(Expr* e, Type* ret)
             if(!type_isnum(rop.ty))
             {
                 vp_err_error(e->loc, "right operand of '%s' must have arithmetic type", opname);
-            }
-            if(rop.isconst && rop.val.u64 == 0)
-            {
-                vp_err_warn(e->loc, "division by 0");
             }
             return opr_binop(e, lop, rop, ret);
         case EX_LE:
@@ -901,11 +914,8 @@ static Operand sema_expr_comp(Expr* e, Type* ret)
             }
             Type* fieldty = ty->st.fields[idx].ty;
             Operand res = sema_init(fieldty, field->init);
-            if(!opr_conv(&res, fieldty))
-            {
-                vp_err_error(field->loc, "implicit %s to %s", type_name(res.ty), type_name(fieldty));
-            }
-            //opr_fold(field->loc, &field->init, res);
+            opr_conv(field->loc, &res, fieldty);
+            opr_fold(field->loc, &field->init, res);
             idx++;
         }
     }
@@ -935,18 +945,15 @@ static Operand sema_expr_comp(Expr* e, Type* ret)
                     vp_err_error(field->loc, "field init index cannot be negative");
                 }
                 idx = opr.val.i32;
-                //opr_fold(field->loc, &field->idx, opr);
+                opr_fold(field->loc, &field->idx, opr);
             }
             if(ty->len && idx >= ty->len)
             {
                 vp_err_error(field->loc, "field init in array compound literal out of range");
             }
             Operand res = sema_init(ty->p, field->init);
-            if(!opr_conv(&res, ty->p))
-            {
-                vp_err_error(field->loc, "implicit %s to %s", type_name(res.ty), type_name(ty->p));
-            }
-            //opr_fold(field->loc, &field->init, res);
+            opr_conv(field->loc, &res, ty->p);
+            opr_fold(field->loc, &field->init, res);
             maxidx = MAX(maxidx, idx);
             idx++;
         }
@@ -986,10 +993,7 @@ static Operand sema_expr_call(Expr* e)
     {
         Type* typaram = fn.ty->fn.params[i];
         Operand arg = sema_expr_rval(e->call.args[i], typaram);
-        if(!opr_conv(&arg, typaram))
-        {
-            vp_err_error(e->loc, "illegal conversion in call argument expression");
-        }
+        opr_conv(e->loc, &arg, typaram);
     }
     return opr_rval(fn.ty->fn.ret);
 }
@@ -1054,11 +1058,35 @@ static Operand sema_expr_int(Expr* e, Type* ret)
     Operand res;
     if(ret && type_isnum(ret))
     {
-        res = opr_lit(ret, (Val){.i64 = e->i});
+        Val val;
+        if(type_isflo(ret))
+        {
+            if(ret->kind == TY_double)
+            {
+                val = (Val){.d = e->i};
+            }
+            else
+            {
+                vp_assertX(ret->kind == TY_float, "float");
+                val = (Val){.f = e->i};
+            }
+        }
+        else
+        {
+            if(type_isunsigned(ret))
+            {
+                val = (Val){.u64 = e->i};
+            }
+            else
+            {
+                val = (Val){.i64 = e->i};
+            }
+        }
+        res = opr_lit(ret, val);
     }
     else
     {
-        res = opr_lit(tyint32, (Val){.i64 = e->i});
+        res = opr_lit(tyint32, (Val){.i32 = e->i});
     }
     return res;
 }
@@ -1069,11 +1097,20 @@ static Operand sema_expr_num(Expr* e, Type* ret)
     Operand res;
     if(ret && type_isflo(ret))
     {
-        res = opr_lit(ret, (Val){.d = e->n});
+        Val val;
+        if(ret->kind == TY_double)
+        {
+            val = (Val){.d = e->n};
+        }
+        else
+        {
+            val = (Val){.f = e->n};
+        }
+        res = opr_lit(ret, val);
     }
     else
     {
-        res = opr_lit(tyfloat, (Val){.d = e->n});
+        res = opr_lit(tyfloat, (Val){.f = e->n});
     }
     return res;
 }
@@ -1203,9 +1240,12 @@ static Operand sema_expr(Expr* e, Type* ret)
     if(res.ty)
     {
         vp_assertX(!e->ty || e->ty == res.ty, "invalid type");
-        if(ret && vp_type_isconv(ret, res.ty))
+        if(e->kind != EX_CAST)
         {
-            res.ty = ret;
+            if(ret && vp_type_isconv(ret, res.ty))
+            {
+                res.ty = ret;
+            }
         }
         e->ty = res.ty;
     }
@@ -1227,21 +1267,17 @@ static void sema_staticassert(Note* note)
     }
 }
 
-/* Resolve notes */
-static void sema_notes(Note* notes)
+/* Resolve note */
+static void sema_note(Note* note)
 {
-    for(uint32_t i = 0; i < vec_len(notes); i++)
+    Str* name = note->name;
+    if(strncmp(str_data(name), "staticassert", strlen("staticassert")) == 0)
     {
-        Note* note = &notes[i];
-        Str* name = note->name;
-        if(strncmp(str_data(name), "staticassert", strlen("staticassert")) == 0)
-        {
-            sema_staticassert(note);
-        }
-        else
-        {
-            vp_err_error(note->loc, "unknown directive #%s", str_data(name));
-        }
+        sema_staticassert(note);
+    }
+    else
+    {
+        vp_err_error(note->loc, "unknown directive #%s", str_data(name));
     }
 }
 
@@ -1283,7 +1319,7 @@ static Type* sema_typespec(TypeSpec* spec)
                 {
                     vp_err_error(spec->loc, "non-positive array length");
                 }
-                //opr_fold(spec->loc, &spec->arr.expr, opr);
+                opr_fold(spec->loc, &spec->arr.expr, opr);
             }
             Type* tyarr = sema_typespec(spec->arr.base);
             type_complete(tyarr);
@@ -1346,6 +1382,7 @@ static Type* sema_fn(Decl* d)
 }
 
 static void sema_stmt(Stmt* st, Type* ret);
+static Type* sema_var(Decl* d);
 
 /* Resolve block of statements */
 static void sema_block(Stmt** stmts, Type* ret)
@@ -1369,11 +1406,8 @@ static void sema_stmt_assign(Stmt* st)
         vp_err_error(st->loc, "cannot assign to non-lvalue");
     }
     Operand rop = sema_expr(st->rhs, lop.ty);
-    if(!opr_conv(&rop, lop.ty))
-    {
-        vp_err_error(st->loc, "illegal conversion: %s to %s", type_name(lop.ty), type_name(rop.ty));
-    }
-    //opr_fold(st->loc, &st->rhs, rop);
+    opr_conv(st->loc, &rop, lop.ty);
+    opr_fold(st->loc, &st->rhs, rop);
 }
 
 /* Resolve a statement */
@@ -1385,11 +1419,8 @@ static void sema_stmt(Stmt* st, Type* ret)
             if(st->expr)
             {
                 Operand res = sema_expr_rval(st->expr, ret);
-                if(!opr_conv(&res, ret))
-                {
-                    vp_err_error(st->expr->loc, "illegal conversion in return expression");
-                }
-                //opr_fold(st->expr->loc, &st->expr, res);
+                opr_conv(st->expr->loc, &res, ret);
+                opr_fold(st->expr->loc, &st->expr, res);
             }
             else if(ret != tyvoid)
             {
@@ -1415,7 +1446,7 @@ static void sema_stmt(Stmt* st, Type* ret)
             }
             else if(st->decl->kind == DECL_NOTE)
             {
-                sema_notes(st->decl->notes);
+                sema_note(&st->decl->note);
             }
             else
             {
@@ -1466,10 +1497,8 @@ static Type* sema_var(Decl* d)
         {
             Operand res = sema_init(declty, d->var.expr);
             inferty = ty = res.ty;
-            if(!opr_conv(&res, declty))
-            {
-                vp_err_error(d->loc, "implicit %s to %s", type_name(inferty), type_name(declty));
-            }
+            opr_conv(d->loc, &res, declty);
+            opr_fold(d->loc, &d->var.expr, res);
             d->var.expr->ty = declty;
         }
     }
@@ -1482,6 +1511,7 @@ static Type* sema_var(Decl* d)
         {
             ty = vp_type_decay(ty);
         }
+        opr_fold(d->loc, &d->var.expr, res);
         d->var.expr->ty = inferty;
     }
     type_complete(ty);
@@ -1497,10 +1527,6 @@ static Type* sema_var(Decl* d)
     {
         vp_err_error(d->loc, "variable of size 0");
     }
-    /*if(d->var.expr)
-    {
-        opr_fold(d->loc, &d->var.expr, rop);
-    }*/
     return ty;
 }
 
@@ -1542,7 +1568,7 @@ void vp_sema(Decl** decls)
         Decl* d = decls[i];
         if(d->kind == DECL_NOTE)
         {
-            sema_notes(d->notes);
+            sema_note(&d->note);
         }
         else
         {

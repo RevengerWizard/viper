@@ -152,20 +152,17 @@ static inline bool type_isfunc(const Type* t)
     return t->kind == TY_func;
 }
 
-static inline int type_rank(const Type* t)
-{
-    return (t->kind - TY_uint8) + 1;
-}
-
 #define type_name(i) (vp_type_names[(i)->kind])
 
 extern const char* const vp_type_names[];
 
+int vp_type_rank(Type* t);
 uint32_t vp_type_sizeof(Type* t);
 uint32_t vp_type_alignof(Type* t);
 bool vp_type_isconv(Type* dst, Type* src);
 bool vp_type_iscast(Type* dst, Type* src);
 bool vp_type_isptrcomp(Type* lty, Type* rty);
+Type* vp_type_common(Type* lty, Type* rty);
 Type* vp_type_tounsigned(Type* t);
 Type* vp_type_decay(Type* t);
 Type* vp_type_decayempty(Type* t);

@@ -243,7 +243,7 @@ static void print_ast_expr(Expr* e)
         case EX_NUM:
         {
             double n = e->n;
-            printf("%g", n);
+            printf("%.14g", n);
             break;
         }
         case EX_FLO:
@@ -516,14 +516,9 @@ void vp_print_ast(Decl* d)
             break;
         case DECL_NOTE:
             print_indent();
-            for(uint32_t i = 0; i < vec_len(d->notes); i++)
-            {
-                Note* note = &d->notes[i];
-                Str* name = note->name;
-                printf("#%s", str_data(name));
-                print_ast_note(note);
-                printf("\n");
-            }
+            printf("#%s", str_data(d->note.name));
+            print_ast_note(&d->note);
+            printf("\n");
             break;
         default:
             vp_assertX(0, "unknown decl");

@@ -18,14 +18,14 @@ struct Type
 
 var tt : Type* = &Type {kind = 1};
 
-//#staticassert(offsetof(Foo, c) != uint64(2) - 1);
+#staticassert(offsetof(Foo, c) == uint64(2));
 
 var thing : typeof(Type {kind = 1}.kind) = 1;
 
 fn main() : void
 {
     //var a0 : void = 1;    // error
-    //var a : int32 = int32(4);
+    var a : int32 = int32(4);
     var b : float = int16(9);
     var c = -b;
     var d : float = c;

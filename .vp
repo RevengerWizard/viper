@@ -1,0 +1,14 @@
+fn main() : int32
+{
+    //var pi2 : float = 3 * 2.141592;
+    //var pi2d : double = 3.1415926535898 * 2;
+    var pi2 = 3.141592 * int16(2);
+    //var f = 2 * (1987 + 2 / 45 + 34 * 90);
+    //var b : float = int16(float(9));
+    //var i = int8(3) + uint64(3);  // error
+    //var i2 = uint8(2) + uint16(4);    // error
+    //var i3 = 4 + uint32(4);   // error
+    var i4 = sizeof(uint64);
+    //var b : int64 = cast(int64*, &i4);
+    var p : void* = &i4;
+}

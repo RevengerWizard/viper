@@ -270,9 +270,9 @@ typedef struct Decl
     DeclKind kind;
     SrcLoc loc;
     Str* name;
-    Note* notes;
     union
     {
+        Note note;
         struct
         {
             TypeSpec* spec;
@@ -348,7 +348,7 @@ Decl* vp_decl_var(SrcLoc loc, Str* name, TypeSpec* spec, Expr* e);
 Decl* vp_decl_type(SrcLoc loc, Str* name, TypeSpec* spec);
 Decl* vp_decl_aggr(SrcLoc loc, DeclKind kind, Str* name, Aggregate* agr);
 Decl* vp_decl_enum(Str* name, TypeSpec* spec);
-Decl* vp_decl_note(SrcLoc loc, Note* notes);
+Decl* vp_decl_note(SrcLoc loc, Note note);
 
 Aggregate* vp_aggr_new(SrcLoc loc, AggregateKind kind, AggregateItem* items);
 

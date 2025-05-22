@@ -31,7 +31,7 @@ fn add(a : int32, b : int32, c : float[12]) : int32
     return a + b;
 }
 
-fn main() : int32
+fn main() : int8
 {
     //var x : int32 = cast(int32, true);
     var arr2 : int32[] = {1, 2, 3, 4, 5, 6};
@@ -45,8 +45,8 @@ fn main() : int32
     a = 56 * 34 - 4 + 3 - 3;
     var e : int32 = not 1;
     var d : uint64 = 16 >> 1;
-    var pi2 = 3.141592 * float(2);
-    var f : double = 2 * (1987 + 2 / 45 + 34 * 90);
+    var pi2 : float = 3.141592 * 2;
+    var f = 2 * (1987 + 2 / 45 + 34 * 90);
     return 2 * (1987 + 2 / 45 + 34 * 90);
     // 2 * (1987 + 2 / 45 - 34 * 90)
 }

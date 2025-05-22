@@ -42,6 +42,28 @@ static Type* type_alloc(TypeKind kind)
     return t;
 }
 
+int vp_type_rank(Type* t)
+{
+    switch(t->kind)
+    {
+        case TY_bool: return 1;
+        /* Unsigned integers */
+        case TY_uint8: return 2;
+        case TY_uint16: return 3;
+        case TY_uint32: return 4;
+        case TY_uint64: return 5;
+        /* Signed integers */
+        case TY_int8: return 6;
+        case TY_int16: return 7;
+        case TY_int32: return 8;
+        case TY_int64: return 9;
+        /* Floating */
+        case TY_float: return 10;
+        case TY_double: return 11;
+        default: vp_assertX(0, "rank"); return 0;
+    }
+}
+
 /* Get size of type */
 uint32_t vp_type_sizeof(Type* t)
 {
@@ -224,6 +246,27 @@ bool vp_type_isptrcomp(Type* lty, Type* rty)
         }
     }
     return false;
+}
+
+/* Find common type for left and right types, if any */
+Type* vp_type_common(Type* lty, Type* rty)
+{
+    if(lty == rty)
+        return lty;
+    
+    bool left = vp_type_isconv(lty, rty);
+    bool right = vp_type_isconv(rty, lty);
+    if(right && !left)   
+        return rty;
+    if(left && !right)
+        return lty;
+    if(right && left)
+    {
+        int lrank = vp_type_rank(lty);
+        int rrank = vp_type_rank(rty);
+        return (rrank > lrank) ? rty : lty;
+    }
+    return lty;
 }
 
 /* Convert integer type to its unsigned version */
