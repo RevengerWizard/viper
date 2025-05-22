@@ -111,9 +111,10 @@ typeof sizeof alignof offsetof
 
 `ptrcast`
 
-| Cast      | Safety     | Purpose                       | Notes                  |
-| --------- | ---------- | ----------------------------- | ---------------------- |
-| `cast`    | Safe       | Checked conversions           | Default option         |
-| `intcast` | Unsafe-ish | Signed/unsigned or lossy cast | Only for numeric types |
-| `bitcast` | Unsafe     | Bit reinterpretation          | Must match size        |
-| `ptrcast` | Unsafe     | Pointer-type casts            | Use with caution       |
+| Cast      | Purpose                       | Notes                  |
+| --------- | ----------------------------- | ---------------------- |
+| `cast`    | Safe, context-based conversions           | Default option         |
+| `floatcast` | Float ↔ int, truncating/overflowing | Only for numeric types |
+| `intcast` | Numeric, lossy, signed ↔ unsigned | Only for numeric types |
+| `bitcast` | Raw bit reinterpretation          | Must match size        |
+| `ptrcast` | Pointer ↔ pointer or int            | Use with caution       |

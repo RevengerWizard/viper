@@ -11,4 +11,9 @@ fn main() : int32
     var i4 = sizeof(uint64);
     //var b : int64 = cast(int64*, &i4);
     var p : void* = &i4;
+    var v : int64 = 21474836489344;
+    var w = int64(9223372036854775807);
+    var y : uint64 = 0xffffffffffffffff - 1 + 1;
+    var x = int64(2);
+    var p = 255e+4;
 }

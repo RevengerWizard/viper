@@ -73,6 +73,7 @@ typedef union LexValue
         int32_t i;
         uint32_t u;
     };
+    int64_t i64;
     uint64_t u64;
     double n;
 } LexValue;

@@ -100,7 +100,7 @@ static Expr* expr_lit(LexState* ls, SrcLoc loc)
         case TK_char:
             return vp_expr_clit(loc, ls->val.i);
         case TK_integer:
-            return vp_expr_ilit(loc, ls->val.i);
+            return vp_expr_ilit(loc, ls->val.i64);
         case TK_number:
             return vp_expr_nlit(loc, ls->val.n);
         case TK_string:

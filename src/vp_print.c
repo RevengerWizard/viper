@@ -417,6 +417,12 @@ void print_ast_stmt(Stmt* stm)
             print_indent();
             print_ast_expr(stm->lhs);
             printf(" = ");
+            if(stm->rhs->ty)
+            {
+                printf("(");
+                vp_print_type(stm->rhs->ty);
+                printf(") ");
+            }
             print_ast_expr(stm->rhs);
             printf("\n");
             break;

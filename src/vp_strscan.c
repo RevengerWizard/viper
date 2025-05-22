@@ -77,18 +77,18 @@ static StrScanFmt strscan_hex(const uint8_t* p, LexValue* o, StrScanFmt fmt, int
         if(x < 0x80000000u + neg &&
             !(x == 0 && neg))
         {
-            o->i = neg ? (int32_t)(~x+1u) : (int32_t)x;
+            o->u64 = neg ? (int32_t)(~x+1u) : (int32_t)x;
             return STRSCAN_INT;  /* Fast path for 32 bit integers. */
         }
     /* fallthrough */
-    case STRSCAN_U32:
-        if(dig > 8) return STRSCAN_ERROR;
-        o->i = neg ? (int32_t)(~x+1u) : (int32_t)x;
-        return STRSCAN_U32;
     case STRSCAN_I64:
     case STRSCAN_U64:
         o->u64 = neg ? ~x+1u : x;
         return fmt;
+    case STRSCAN_U32:
+        if(dig > 8) return STRSCAN_ERROR;
+        o->u64 = neg ? (int32_t)(~x+1u) : (int32_t)x;
+        return STRSCAN_U32;
     default:
         break;
     }
@@ -122,16 +122,16 @@ static StrScanFmt strscan_oct(const uint8_t* p, LexValue* o, StrScanFmt fmt, int
     switch(fmt)
     {
     case STRSCAN_INT:
-        if(x >= 0x80000000u+neg) fmt = STRSCAN_U32;
+        if(x >= 0x80000000u+neg) fmt = STRSCAN_INT;
         /* fallthrough */
-    case STRSCAN_U32:
-        if ((x >> 32)) return STRSCAN_ERROR;
-        o->i = neg ? (int32_t)(~(uint32_t)x+1u) : (int32_t)x;
-        break;
     default:
     case STRSCAN_I64:
     case STRSCAN_U64:
         o->u64 = neg ? ~x+1u : x;
+        break;
+    case STRSCAN_U32:
+        if ((x >> 32)) return STRSCAN_ERROR;
+        o->u64 = neg ? (int32_t)(~(uint32_t)x+1u) : (int32_t)x;
         break;
     }
     return fmt;
@@ -160,18 +160,18 @@ static StrScanFmt strscan_bin(const uint8_t* p, LexValue* o, StrScanFmt fmt, int
         if(x < 0x80000000u + neg &&
             !(x == 0 && neg))
         {
-            o->i = neg ? (int32_t)(~x+1u) : (int32_t)x;
+            o->u64 = neg ? (int32_t)(~x+1u) : (int32_t)x;
             return STRSCAN_INT;  /* Fast path for 32 bit integers. */
         }
     /* fallthrough */
-    case STRSCAN_U32:
-        if(dig > 8) return STRSCAN_ERROR;
-        o->i = neg ? (int32_t)(~x+1u) : (int32_t)x;
-        return STRSCAN_U32;
     case STRSCAN_I64:
     case STRSCAN_U64:
-            o->u64 = neg ? ~x+1u : x;
-            return fmt;
+        o->u64 = neg ? ~x+1u : x;
+        return fmt;
+    case STRSCAN_U32:
+        if(dig > 8) return STRSCAN_ERROR;
+        o->u64 = neg ? (int32_t)(~x+1u) : (int32_t)x;
+        return STRSCAN_U32;
     default:
         break;
     }
@@ -251,18 +251,18 @@ static StrScanFmt strscan_dec(const uint8_t* p, LexValue* o, StrScanFmt fmt, int
             case STRSCAN_INT:
                 if(x < 0x80000000u+neg)
                 {
-                    o->i = neg ? (int32_t)(~x+1u) : (int32_t)x;
+                    o->u64 = neg ? (int32_t)(~x+1u) : (int32_t)x;
                     return STRSCAN_INT;  /* Fast path for 32 bit integers */
                 }
                 /* fallthrough */
-            case STRSCAN_U32:
-                if((x >> 32) != 0) return STRSCAN_ERROR;
-                o->i = neg ? (int32_t)(~x+1u) : (int32_t)x;
-                return STRSCAN_U32;
             case STRSCAN_I64:
             case STRSCAN_U64:
                 o->u64 = neg ? ~x+1u : x;
                 return fmt;
+            case STRSCAN_U32:
+                if((x >> 32) != 0) return STRSCAN_ERROR;
+                o->u64 = neg ? (int32_t)(~x+1u) : (int32_t)x;
+                return STRSCAN_U32;
             default:
                 /* Fast path for plain numbers < 2^63 */
                 if((int64_t)x < 0) break;
@@ -518,7 +518,7 @@ StrScanFmt vp_strscan_scan(const uint8_t* p, size_t len, LexValue* o)
             }
             else
             {
-                o->i = neg ? (int32_t)(~x+1u) : (int32_t)x;
+                o->u64 = neg ? (int32_t)(~x+1u) : (int32_t)x;
                 return STRSCAN_INT;
             }
         }
@@ -533,13 +533,6 @@ StrScanFmt vp_strscan_scan(const uint8_t* p, size_t len, LexValue* o)
         else
             fmt = strscan_dec(sp, o, fmt, ex, neg, dig);
 
-        /* Try to convert number to integer, if requested */
-        if(fmt == STRSCAN_NUM && !((o)->u64 == U64x(80000000,00000000)))
-        {
-            double n = o->n;
-            int32_t i = (int32_t)(n);
-            if(n == (double)i) { o->i = i; return STRSCAN_INT; }
-        }
         return fmt;
     }
 }
