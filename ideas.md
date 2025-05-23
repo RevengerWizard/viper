@@ -1,6 +1,10 @@
 ### integer literals
 
-`u8` `i8` `u16` `i16` `u32` `i32` `u64` `i64` | `u128` `i128`
+`1u8` `1i8` `1u16` `1i16` `1u32` `1i32` `1u64` `1i64` | `1u128` `i128`
+
+`1uz` (usize)
+
+`1iz` (isize)
 
 ---
 
@@ -44,9 +48,9 @@ asm {
 
 ### keywords
 
-typeid
+`typeid`
 
-typeof sizeof alignof offsetof
+`typeof` `sizeof` `alignof` `offsetof`
 
 `unreachable`
 

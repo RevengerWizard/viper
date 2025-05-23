@@ -463,13 +463,110 @@ static Type* opr_unify(Expr* e, Operand* lop, Operand* rop, Type* ret)
     return ret;
 }
 
-/* Value unary operator folding */
-static Val val_unary(ExprKind op, Type* ty, Val val)
+/* Check for overflow of integer literals (default max uint64) */
+static bool val_int_overflows(uint64_t v, Type* ty)
 {
+    switch(ty->kind)
+    {
+        case TY_int8: return v > INT8_MAX;
+        case TY_uint8: return v > UINT8_MAX;
+        case TY_int16: return v > INT16_MAX;
+        case TY_uint16: return v > UINT16_MAX;
+        case TY_int32: return v > INT32_MAX;
+        case TY_uint32: return v > UINT32_MAX;
+        case TY_int64: return v > INT64_MAX;
+        case TY_uint64: return false;
+        default: vp_assertX(0, "not an int"); return false;
+    }
+}
+
+#define CHECKOVF(offunc) \
+    switch(ty->kind) \
+    { \
+    case TY_uint8: {\
+        uint8_t res; \
+        of = offunc(lval.u8, rval.u8, &res); \
+        break; }\
+    case TY_int8: {\
+        int8_t res; \
+        of = offunc(lval.i8, rval.i8, &res); \
+        break; }\
+    case TY_uint16: {\
+        uint16_t res; \
+        of = offunc(lval.u16, rval.u16, &res); \
+        break; }\
+    case TY_int16: {\
+        int16_t res; \
+        of = offunc(lval.i16, rval.i16, &res); \
+        break; }\
+    case TY_uint32: {\
+        uint32_t res; \
+        of = offunc(lval.u32, rval.u32, &res); \
+        break; }\
+    case TY_int32: {\
+        int32_t res; \
+        of = offunc(lval.i32, rval.i32, &res); \
+        break; }\
+    case TY_uint64: {\
+        uint64_t res; \
+        of = offunc(lval.u64, rval.u64, &res); \
+        break; }\
+    case TY_int64: {\
+        int64_t res; \
+        of = offunc(lval.i64, rval.i64, &res); \
+        break; }\
+    default: \
+        break; \
+    }
+
+/* Detect binary operator overflow */
+static void val_binop_overflow(Expr* e, Type* ty, Val lval, Val rval)
+{
+    ExprKind op = e->kind;
+    bool of = false;
+    if(op == EX_ADD)
+    {
+        CHECKOVF(__builtin_add_overflow)
+    }
+    else if(op == EX_SUB)
+    {
+        CHECKOVF(__builtin_sub_overflow)
+    }
+    else if(op == EX_MUL)
+    {
+        CHECKOVF(__builtin_mul_overflow)
+    }
+    if ((op == EX_DIV || op == EX_MOD) &&
+    type_issigned(ty) &&
+    ((ty->kind == TY_int32 && lval.i32 == INT32_MIN && rval.i32 == -1) ||
+     (ty->kind == TY_int64 && lval.i64 == INT64_MIN && rval.i64 == -1)))
+    {
+        of = true;
+    }
+    if((op == EX_LSHIFT || op == EX_RSHIFT) && rval.u64 >= (vp_type_sizeof(ty) * 8))
+    {
+        of = true;
+    }
+    if(of)
+    {
+        vp_err_error(e->loc, "arithmetic operation overflow of '%s'", ast_binname(op));
+    }
+}
+
+#undef CHECKOVF
+
+/* Value unary operator folding */
+static Val val_unary(Expr* e, Type* ty, Val val)
+{
+    ExprKind op = e->kind;
     Operand res = opr_const(ty, val);
     opr_cast(&res, ty);
     if(type_isunsigned(ty))
     {
+        if(op == EX_NEG)
+        {
+            vp_err_error(e->loc, "cannot apply '-' to type '%s'", type_name(ty));
+        }
         res.val.u64 = fold_unary_u64(op, res.val.u64);
     }
     else if(type_issigned(ty))
@@ -497,8 +594,9 @@ static Val val_unary(ExprKind op, Type* ty, Val val)
 }
 
 /* Value of binary operator folding */
-static Val val_binop(ExprKind op, Type* ty, Val lval, Val rval)
+static Val val_binop(Expr* e, Type* ty, Val lval, Val rval)
 {
+    ExprKind op = e->kind;
     Operand lop = opr_const(ty, lval);
     Operand rop = opr_const(ty, rval);
     Operand res;
@@ -506,11 +604,13 @@ static Val val_binop(ExprKind op, Type* ty, Val lval, Val rval)
     opr_cast(&rop, ty);
     if(type_isunsigned(ty))
     {
+        val_binop_overflow(e, ty, lop.val, rop.val);
         uint64_t u64 = fold_binop_u64(op, lop.val.u64, rop.val.u64);
         res = opr_const(ty, (Val){.u64 = u64});
     }
     else if(type_issigned(ty))
     {
+        val_binop_overflow(e, ty, lop.val, rop.val);
         int64_t i64 = fold_binop_i64(op, lop.val.i64, rop.val.i64);
         res = opr_const(ty, (Val){.i64 = i64});
     }
@@ -568,11 +668,11 @@ static void opr_fold(SrcLoc loc, Expr** e, Operand opr)
     }
 }
 
-static Operand opr_unary(ExprKind op, Operand opr)
+static Operand opr_unary(Expr* e, Operand opr)
 {
     if(opr.isconst)
     {
-        return opr_const(opr.ty, val_unary(op, opr.ty, opr.val));
+        return opr_const(opr.ty, val_unary(e, opr.ty, opr.val));
     }
     else
     {
@@ -582,11 +682,10 @@ static Operand opr_unary(ExprKind op, Operand opr)
 
 static Operand opr_binop(Expr* e, Operand lop, Operand rop, Type* ret)
 {
-    ExprKind op = e->kind;
     ret = opr_unify(e, &lop, &rop, ret);
     if(lop.isconst && rop.isconst)
     {
-        return opr_const(ret, val_binop(op, ret, lop.val, rop.val));
+        return opr_const(ret, val_binop(e, ret, lop.val, rop.val));
     }
     else
     {
@@ -621,8 +720,7 @@ static Operand sema_expr_unary(Expr* e, Type* ret)
 {
     Operand opr = sema_expr_rval(e->unary, ret);
     Type* ty = opr.ty;
-    ExprKind op = e->kind;
-    switch(op)
+    switch(e->kind)
     {
         case EX_DEREF:
             if(!type_isptr(ty))
@@ -635,19 +733,19 @@ static Operand sema_expr_unary(Expr* e, Type* ret)
             {
                 vp_err_error(e->loc, "can only use 'not' with scalar types");
             }
-            return opr_unary(op, opr);
+            return opr_unary(e, opr);
         case EX_NEG:
             if(!type_isnum(ty))
             {
                 vp_err_error(e->loc, "can only use unary '-' with arithmetic types");
             }
-            return opr_unary(op, opr);
+            return opr_unary(e, opr);
         case EX_BNOT:
             if(!type_isint(ty))
             {
                 vp_err_error(e->loc, "can only use '~' with integer types");
             }
-            return opr_unary(op, opr);
+            return opr_unary(e, opr);
         default:
             vp_assertX(0, "?");
             break;
@@ -1059,34 +1157,42 @@ static Operand sema_expr_int(Expr* e, Type* ret)
     if(ret && type_isnum(ret))
     {
         Val val;
-        if(type_isflo(ret))
+        if(type_isint(ret))
+        {
+            if(val_int_overflows(e->u, ret))
+            {
+                vp_err_error(e->loc, "literal out of range for '%s'", type_name(ret));
+            }
+            if(type_isunsigned(ret))
+            {
+                val = (Val){.u64 = e->u};
+            }
+            else
+            {
+                val = (Val){.i64 = e->u};
+            }   
+        }
+        else
         {
             if(ret->kind == TY_double)
             {
-                val = (Val){.d = e->i};
+                val = (Val){.d = e->u};
             }
             else
             {
                 vp_assertX(ret->kind == TY_float, "float");
-                val = (Val){.f = e->i};
-            }
-        }
-        else
-        {
-            if(type_isunsigned(ret))
-            {
-                val = (Val){.u64 = e->i};
-            }
-            else
-            {
-                val = (Val){.i64 = e->i};
+                val = (Val){.f = e->u};
             }
         }
         res = opr_lit(ret, val);
     }
     else
     {
-        res = opr_lit(tyint32, (Val){.i32 = e->i});
+        if(val_int_overflows(e->u, tyint32))
+        {
+            vp_err_error(e->loc, "literal out of range for '%s'", type_name(tyint32));
+        }
+        res = opr_lit(tyint32, (Val){.i32 = e->u});
     }
     return res;
 }
@@ -1131,7 +1237,7 @@ static Operand sema_expr(Expr* e, Type* ret)
         case EX_CHAR:
             res = opr_lit(tyuint8, (Val){.u8 = e->i});
             break;
-        case EX_INT:
+        case EX_UINT:
             res = sema_expr_int(e, ret);
             break;
         case EX_NUM:
