@@ -480,43 +480,21 @@ static bool val_int_overflows(uint64_t v, Type* ty)
     }
 }
 
-#define CHECKOVF(offunc) \
-    switch(ty->kind) \
+#define CHECKOVF(op, castty, tt) \
+    if(op == EX_ADD) \
     { \
-    case TY_uint8: {\
-        uint8_t res; \
-        of = offunc(lval.u8, rval.u8, &res); \
-        break; }\
-    case TY_int8: {\
-        int8_t res; \
-        of = offunc(lval.i8, rval.i8, &res); \
-        break; }\
-    case TY_uint16: {\
-        uint16_t res; \
-        of = offunc(lval.u16, rval.u16, &res); \
-        break; }\
-    case TY_int16: {\
-        int16_t res; \
-        of = offunc(lval.i16, rval.i16, &res); \
-        break; }\
-    case TY_uint32: {\
-        uint32_t res; \
-        of = offunc(lval.u32, rval.u32, &res); \
-        break; }\
-    case TY_int32: {\
-        int32_t res; \
-        of = offunc(lval.i32, rval.i32, &res); \
-        break; }\
-    case TY_uint64: {\
-        uint64_t res; \
-        of = offunc(lval.u64, rval.u64, &res); \
-        break; }\
-    case TY_int64: {\
-        int64_t res; \
-        of = offunc(lval.i64, rval.i64, &res); \
-        break; }\
-    default: \
-        break; \
+        castty res; \
+        of = __builtin_add_overflow((castty)lval.tt, (castty)rval.tt, &res); \
+    } \
+    else if(op == EX_SUB) \
+    { \
+        castty res; \
+        of = __builtin_sub_overflow((castty)lval.tt, (castty)rval.tt, &res); \
+    } \
+    else if(op == EX_MUL) \
+    { \
+        castty res; \
+        of = __builtin_mul_overflow((castty)lval.tt, (castty)rval.tt, &res); \
     }
 
 /* Detect binary operator overflow */
@@ -524,17 +502,35 @@ static void val_binop_overflow(Expr* e, Type* ty, Val lval, Val rval)
 {
     ExprKind op = e->kind;
     bool of = false;
-    if(op == EX_ADD)
+    switch(ty->kind)
     {
-        CHECKOVF(__builtin_add_overflow)
-    }
-    else if(op == EX_SUB)
-    {
-        CHECKOVF(__builtin_sub_overflow)
-    }
-    else if(op == EX_MUL)
-    {
-        CHECKOVF(__builtin_mul_overflow)
+        case TY_uint8:
+            CHECKOVF(op, uint8_t, u8)
+            break;
+        case TY_int8:
+            CHECKOVF(op, int8_t, i8)
+            break;
+        case TY_uint16:
+            CHECKOVF(op, uint16_t, u16)
+            break;
+        case TY_int16:
+            CHECKOVF(op, int16_t, i16)
+            break;
+        case TY_uint32:
+            CHECKOVF(op, uint32_t, u32)
+            break;
+        case TY_int32:
+            CHECKOVF(op, int32_t, i32)
+            break;
+        case TY_uint64:
+            CHECKOVF(op, uint64_t, u64)
+            break;
+        case TY_int64:
+            CHECKOVF(op, int64_t, i64)
+            break;
+        default:
+            vp_assertX(0, "not an int");
+            break;
     }
     if ((op == EX_DIV || op == EX_MOD) &&
     type_issigned(ty) &&
@@ -561,7 +557,12 @@ static Val val_unary(Expr* e, Type* ty, Val val)
     ExprKind op = e->kind;
     Operand res = opr_const(ty, val);
     opr_cast(&res, ty);
-    if(type_isunsigned(ty))
+    if(type_isbool(ty))
+    {
+        vp_assertX(e->kind == EX_NOT, "fold ! bool");
+        res.val.b = !res.val.b;
+    }
+    else if(type_isunsigned(ty))
     {
         if(op == EX_NEG)
         {
@@ -642,7 +643,11 @@ static void opr_fold(SrcLoc loc, Expr** e, Operand opr)
     Type* ty = opr.ty;
     if(opr.isconst && !opr.islit)
     {
-        if(type_isint(ty))
+        if(type_isbool(ty))
+        {
+            *e = opr.val.b ? vp_expr_true(loc) : vp_expr_false(loc);
+        }
+        else if(type_isint(ty))
         {
             if(type_issigned(ty))
             {
@@ -1229,7 +1234,7 @@ static Operand sema_expr(Expr* e, Type* ret)
     {
         case EX_TRUE:
         case EX_FALSE:
-            res = opr_rval(tybool);
+            res = opr_lit(tybool, (Val){.b = e->b});
             break;
         case EX_NIL:
             res = opr_rval(tynil);
