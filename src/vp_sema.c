@@ -820,6 +820,16 @@ static Operand sema_expr_binop(Expr* e, Type* ret)
                 vp_err_error(e->loc, "right operand of '%s' must have arithmetic type", opname);
             }
             return opr_binop(e, lop, rop, ret);
+        case EX_MOD:
+            if(!type_isint(lop.ty))
+            {
+                vp_err_error(e->loc, "left operand of '%%' must have integer type");
+            }
+            if(!type_isint(rop.ty))
+            {
+                vp_err_error(e->loc, "right operand of '%%' must have integer type");
+            }
+            return opr_binop(e, lop, rop, ret);
         case EX_LE:
         case EX_LT:
         case EX_GE:
