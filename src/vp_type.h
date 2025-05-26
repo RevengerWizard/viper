@@ -162,6 +162,7 @@ uint32_t vp_type_alignof(Type* t);
 bool vp_type_isconv(Type* dst, Type* src);
 bool vp_type_iscast(Type* dst, Type* src);
 bool vp_type_isptrcomp(Type* lty, Type* rty);
+Type* vp_type_builtin(int i);
 Type* vp_type_common(Type* lty, Type* rty);
 Type* vp_type_tounsigned(Type* t);
 Type* vp_type_decay(Type* t);

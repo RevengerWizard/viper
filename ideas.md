@@ -122,3 +122,24 @@ asm {
 | `intcast` | Numeric, lossy, signed ↔ unsigned | Only for numeric types |
 | `bitcast` | Raw bit reinterpretation          | Must match size        |
 | `ptrcast` | Pointer ↔ pointer or int            | Use with caution       |
+
+float <- int16, uint16, int8, uint8, bool
+double <- int32, uint32, int16, uint16, int8, uint8, bool
+
+uint8 <- bool
+uint16 <- uint8 <- bool
+uint32 <- uint16 <- uint8 <- bool
+uint64 <- uint32 <- uint16 <- uint8 <- bool
+
+int8 <- bool
+int16 <- int8 <- uint8 <- bool
+int32 <- int16 <- uint16 <- int8 <- uint8 <- bool
+int64 <- int32 <- uint32 <- int16 <- uint16 <- int8 <- uint8 <- bool
+
+| Cast Type | Source Types | Target Types | Safety Level |
+|-----------|-------------|--------------|--------------|
+| `cast` | Numeric, bool, void* | Numeric, bool, typed* | **Safe** - No data loss or well-defined behavior |
+| `intcast` | Numeric | Integer only | **Unsafe** - Potential data loss, wrap-around |
+| `floatcast` | Numeric | Float only | **Unsafe** - Truncation, precision loss |
+| `bitcast` | Any | Same-size type | **Unsafe** - Raw reinterpretation |
+| `ptrcast` | Pointer, integer | Pointer, integer | **Unsafe** - Memory safety concerns |

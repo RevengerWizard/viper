@@ -85,6 +85,14 @@ Expr* vp_expr_ilit(SrcLoc loc, int64_t i)
     return expr;
 }
 
+Expr* vp_expr_ulitt(SrcLoc loc, uint64_t u, NumMod mod)
+{
+    Expr* expr = expr_new(EX_UINTT, loc);
+    expr->uintt.u = u;
+    expr->uintt.mod = mod;
+    return expr;
+}
+
 Expr* vp_expr_ulit(SrcLoc loc, uint64_t u)
 {
     Expr* expr = expr_new(EX_UINT, loc);

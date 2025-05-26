@@ -100,7 +100,15 @@ static Expr* expr_lit(LexState* ls, SrcLoc loc)
         case TK_char:
             return vp_expr_clit(loc, ls->val.i);
         case TK_integer:
+        {
+            if(ls->mod != NUM_NONE)
+            {
+                Expr* e = vp_expr_ulitt(loc, ls->val.u64, ls->mod);
+                ls->mod = NUM_NONE;
+                return e;
+            }
             return vp_expr_ulit(loc, ls->val.u64);
+        }
         case TK_number:
             return vp_expr_nlit(loc, ls->val.n);
         case TK_string:

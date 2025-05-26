@@ -319,9 +319,9 @@ static double fold_binop_f(ExprKind op, double l, double r)
 /* -- Operand types ------------------------------------------------- */
 
 /* Literal value operand */
-static Operand opr_lit(Type* ty, Val val)
+static Operand opr_lit(Type* ty, Val val, bool untyped)
 {
-    return (Operand){.ty = ty, .val = val, .islit = true, .isconst = true};
+    return (Operand){.ty = ty, .val = val, .islit = true, .isconst = true, .untyped = untyped};
 }
 
 /* Constant value operand */
@@ -439,45 +439,57 @@ static void opr_conv(SrcLoc loc, Operand* opr, Type* ty)
     opr->islval = false;
 }
 
-/* Unify operands of different types */
-static Type* opr_unify(Expr* e, Operand* lop, Operand* rop, Type* ret)
-{
-    if(ret)
-    {
-        opr_cast(lop, ret);
-        opr_cast(rop, ret);
-    }
-    else
-    {
-        ret = vp_type_common(lop->ty, rop->ty);        
-        opr_cast(lop, ret);
-        opr_cast(rop, ret);
-    }
-    if(lop->ty != rop->ty)
-    {
-        const char* opname = ast_binname(e->kind);
-        vp_err_error(e->loc, 
-            "incompatible operand types for '%s': %s and %s",
-            opname, type_name(lop->ty), type_name(rop->ty));
-    }
-    return ret;
-}
-
-/* Check for overflow of integer literals (default max uint64) */
-static bool val_int_overflows(uint64_t v, Type* ty)
+/* Check for overflow of integer literals, signed or unsigned */
+static bool val_overflow(uint64_t v, Type* ty)
 {
     switch(ty->kind)
     {
-        case TY_int8: return v > INT8_MAX;
+        /* Unsigned */
         case TY_uint8: return v > UINT8_MAX;
-        case TY_int16: return v > INT16_MAX;
         case TY_uint16: return v > UINT16_MAX;
-        case TY_int32: return v > INT32_MAX;
         case TY_uint32: return v > UINT32_MAX;
-        case TY_int64: return v > INT64_MAX;
         case TY_uint64: return false;
+        /* Signed */
+        case TY_int8: return ((int64_t)v) < INT8_MIN  || ((int64_t)v) > INT8_MAX;
+        case TY_int16: return ((int64_t)v) < INT16_MIN || ((int64_t)v) > INT16_MAX;
+        case TY_int32: return ((int64_t)v) < INT32_MIN || ((int64_t)v) > INT32_MAX;
+        case TY_int64: return false;
         default: vp_assertX(0, "not an int"); return false;
     }
+}
+
+/* Get value from type, overflow checking */
+static Val val_fromtype(SrcLoc loc, Type* ret, uint64_t u64)
+{
+    Val val;
+    if(type_isint(ret))
+    {
+        if(val_overflow(u64, ret))
+        {
+            vp_err_error(loc, "literal out of range for '%s'", type_name(ret));
+        }
+        if(type_isunsigned(ret))
+        { 
+            val = (Val){.u64 = u64};
+        }
+        else
+        {
+            val = (Val){.i64 = u64};
+        }
+    }
+    else
+    {
+        if(ret->kind == TY_double)
+        {
+            val = (Val){.d = u64};
+        }
+        else
+        {
+            vp_assertX(ret->kind == TY_float, "float");
+            val = (Val){.f = u64};
+        }
+    }
+    return val;
 }
 
 #define CHECKOVF(op, castty, tt) \
@@ -641,8 +653,17 @@ static Val val_binop(Expr* e, Type* ty, Val lval, Val rval)
 static void opr_fold(SrcLoc loc, Expr** e, Operand opr)
 {
     Type* ty = opr.ty;
-    if(opr.isconst && !opr.islit)
+    if(opr.isconst)
     {
+        if(opr.islit)
+        {
+            if(opr.untyped)
+            {
+                opr.untyped = false;
+                opr.val = val_fromtype(loc, opr.ty, opr.val.u64);
+            }
+            return;
+        }
         if(type_isbool(ty))
         {
             *e = opr.val.b ? vp_expr_true(loc) : vp_expr_false(loc);
@@ -675,6 +696,11 @@ static void opr_fold(SrcLoc loc, Expr** e, Operand opr)
 
 static Operand opr_unary(Expr* e, Operand opr)
 {
+    if(opr.untyped)
+    {
+        opr.untyped = false;
+        opr.val = val_fromtype(e->loc, opr.ty, opr.val.u64);
+    }
     if(opr.isconst)
     {
         return opr_const(opr.ty, val_unary(e, opr.ty, opr.val));
@@ -687,7 +713,36 @@ static Operand opr_unary(Expr* e, Operand opr)
 
 static Operand opr_binop(Expr* e, Operand lop, Operand rop, Type* ret)
 {
-    ret = opr_unify(e, &lop, &rop, ret);
+    if(lop.untyped && !rop.untyped)
+    {
+        /* Left is untyped, right is typed */
+        lop.ty = rop.ty;
+        lop.untyped = false;
+        lop.val = val_fromtype(e->loc, rop.ty, lop.val.u64);
+    }
+    else if(rop.untyped && !lop.untyped)
+    {
+        /* Right is untyped, left is typed */
+        rop.ty = lop.ty;
+        rop.untyped = false;
+        rop.val = val_fromtype(e->loc, lop.ty, rop.val.u64);
+    }
+    else if(lop.untyped && rop.untyped)
+    {
+        lop.untyped = false;
+        rop.untyped = false;
+        lop.val = val_fromtype(e->loc, lop.ty, lop.val.u64);
+        rop.val = val_fromtype(e->loc, rop.ty, rop.val.u64);
+    }
+
+    /* Unify operands of different types */
+    if(!ret)
+    {
+        ret = vp_type_common(lop.ty, rop.ty);
+    }
+    opr_conv(e->loc, &lop, ret);
+    opr_conv(e->loc, &rop, ret);
+
     if(lop.isconst && rop.isconst)
     {
         return opr_const(ret, val_binop(e, ret, lop.val, rop.val));
@@ -1166,48 +1221,28 @@ static Operand sema_expr_cast(Expr* e)
 }
 
 /* Resolve integer literal */
-static Operand sema_expr_int(Expr* e, Type* ret)
+static Operand sema_expr_int(Expr* e, Type* ret, uint64_t u64)
 {
     Operand res;
+    Type* ity = tyint32;
+    bool untyped = true;
+    if(e->kind == EX_UINTT)
+    {
+        ity = vp_type_builtin(e->uintt.mod);
+        untyped = false;
+        if(ret && ity != ret)
+        {
+            vp_err_error(e->loc, "mismatched types");
+        }
+    }
     if(ret && type_isnum(ret))
     {
-        Val val;
-        if(type_isint(ret))
-        {
-            if(val_int_overflows(e->u, ret))
-            {
-                vp_err_error(e->loc, "literal out of range for '%s'", type_name(ret));
-            }
-            if(type_isunsigned(ret))
-            {
-                val = (Val){.u64 = e->u};
-            }
-            else
-            {
-                val = (Val){.i64 = e->u};
-            }   
-        }
-        else
-        {
-            if(ret->kind == TY_double)
-            {
-                val = (Val){.d = e->u};
-            }
-            else
-            {
-                vp_assertX(ret->kind == TY_float, "float");
-                val = (Val){.f = e->u};
-            }
-        }
-        res = opr_lit(ret, val);
+        Val val = val_fromtype(e->loc, ret, u64);
+        res = opr_lit(ret, val, false);
     }
     else
     {
-        if(val_int_overflows(e->u, tyint32))
-        {
-            vp_err_error(e->loc, "literal out of range for '%s'", type_name(tyint32));
-        }
-        res = opr_lit(tyint32, (Val){.i32 = e->u});
+        res = opr_lit(ity, (Val){.u64 = u64}, untyped);
     }
     return res;
 }
@@ -1227,11 +1262,11 @@ static Operand sema_expr_num(Expr* e, Type* ret)
         {
             val = (Val){.f = e->n};
         }
-        res = opr_lit(ret, val);
+        res = opr_lit(ret, val, false);
     }
     else
     {
-        res = opr_lit(tyfloat, (Val){.f = e->n});
+        res = opr_lit(tyfloat, (Val){.f = e->n}, false);
     }
     return res;
 }
@@ -1244,16 +1279,19 @@ static Operand sema_expr(Expr* e, Type* ret)
     {
         case EX_TRUE:
         case EX_FALSE:
-            res = opr_lit(tybool, (Val){.b = e->b});
+            res = opr_lit(tybool, (Val){.b = e->b}, false);
             break;
         case EX_NIL:
             res = opr_rval(tynil);
             break;
         case EX_CHAR:
-            res = opr_lit(tyuint8, (Val){.u8 = e->i});
+            res = opr_lit(tyuint8, (Val){.u8 = e->i}, false);
+            break;
+        case EX_UINTT:
+            res = sema_expr_int(e, ret, e->uintt.u);
             break;
         case EX_UINT:
-            res = sema_expr_int(e, ret);
+            res = sema_expr_int(e, ret, e->u);
             break;
         case EX_NUM:
             res = sema_expr_num(e, ret);

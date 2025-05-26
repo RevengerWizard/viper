@@ -71,6 +71,50 @@ static void lex_newline(LexState* ls)
         vp_lex_error(ls, "too many lines");
 }
 
+/* Parse literal suffix modifier */
+static void lex_nummod(LexState* ls)
+{
+    if(ls->c == 'u' || ls->c == 'i')
+    {
+        LexChar sign = ls->c;
+        lex_next(ls);
+        if(ls->c == '8')
+        {
+            lex_next(ls);
+            ls->mod = (sign == 'u') ? NUM_U8 : NUM_I8;
+            return;
+        }
+        else if(ls->c == '1' || ls->c == '3' || ls->c == '6')
+        {
+            LexChar dig = ls->c;
+            lex_next(ls);
+            if(dig == '1' && ls->c == '6')
+            {
+                lex_next(ls);
+                ls->mod = (sign == 'u') ? NUM_U16 : NUM_I16;
+                return;
+            }
+            else if(dig == '3' && ls->c == '2')
+            {
+                lex_next(ls);
+                ls->mod = (sign == 'u') ? NUM_U32: NUM_I32;
+                return;
+            }
+            else if(dig == '6' && ls->c == '4')
+            {
+                lex_next(ls);
+                ls->mod = (sign == 'u') ? NUM_U64 : NUM_I64;
+                return;
+            }
+        }
+    }
+    else
+    {
+        return;
+    }
+    vp_lex_error(ls, "invalid suffix");
+}
+
 /* Parse a number literal */
 static LexChar lex_number(LexState* ls, LexValue* v)
 {
@@ -81,7 +125,8 @@ static LexChar lex_number(LexState* ls, LexValue* v)
     vp_assertX(vp_char_isdigit(ls->c), "bad usage");
     if((c = ls->c) == '0' && (lex_savenext(ls) | 0x20) == 'x')
         xp = 'p';
-    while(vp_char_isident(ls->c) || ls->c == '.' ||
+    while((vp_char_isident(ls->c) && (ls->c != 'u' && ls->c != 'i')) 
+            || ls->c == '.' ||
            ((ls->c == '-' || ls->c == '+') && (c | 0x20) == xp))
     {
         /* Ignore underscores */
@@ -110,9 +155,9 @@ static LexChar lex_number(LexState* ls, LexValue* v)
         vp_lex_error(ls, "malformed number literal");
     }
     lex_save(ls, '\0');
-
+    
     fmt = vp_strscan_scan((const uint8_t*)ls->sb.b, sbuf_len(&ls->sb) - 1, v);
-
+    lex_nummod(ls);
     if(fmt == STRSCAN_NUM)
     {
         return TK_number;
@@ -565,6 +610,7 @@ void vp_lex_setup(LexState* ls)
     ls->curr = 0;
     ls->linenumber = 1;
     ls->lineofst = 1;
+    ls->mod = NUM_NONE;
     lex_next(ls);   /* Read first char */
 }
 

@@ -17,8 +17,9 @@ struct Type
 }
 
 var tt : Type* = &Type {kind = 1};
+//var tt : Type* = &cast(Type, {kind = 1});
 
-#staticassert(offsetof(Foo, c) == uint64(2));
+#staticassert(offsetof(Foo, c) == 2);
 
 var thing : typeof(Type {kind = 1}.kind) = 1;
 
@@ -30,7 +31,7 @@ fn main() : void
     var c = -b;
     var d : float = c;
     //var e = nil;  // error
-    var zero : float = d / 0;   // warn
+    //var zero : float = d / 0;   // warn
     var e = true;
     var f : int64 = nun();
     var g = not 1;
@@ -53,5 +54,5 @@ fn main() : void
     var s : Foo[] = {{a = 1, b = true, c = 1}, {a = 1, b = false, c = 2}};
     //var b : int32 = false;    // error
 
-    #staticassert(offsetof(Foo, c) == uint64(2));
+    #staticassert(offsetof(Foo, c) == 2);
 }

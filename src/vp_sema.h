@@ -56,6 +56,7 @@ typedef struct Operand
     bool islit;
     bool isconst;
     bool islval;
+    bool untyped;
 } Operand;
 
 void vp_sema(Decl** decls);

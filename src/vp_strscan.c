@@ -26,7 +26,7 @@
 #define casecmp(c, k) (((c) | 0x20) == k)
 
 /* Final conversion to double */
-static void strscan_double(uint64_t x, LexValue* o, int32_t ex2, int32_t neg)
+static void strscan_double(uint64_t x, LexValue* o, int32_t ex2)
 {
     double n;
 
@@ -46,13 +46,12 @@ static void strscan_double(uint64_t x, LexValue* o, int32_t ex2, int32_t neg)
     /* Convert to double using a signed int64_t conversion, then rescale */
     vp_assertX((int64_t)x >= 0, "bad double conversion");
     n = (double)(int64_t)x;
-    if(neg) n = -n;
     if(ex2) n = ldexp(n, ex2);
     o->n = n;
 }
 
 /* Parse hexadecimal number */
-static StrScanFmt strscan_hex(const uint8_t* p, LexValue* o, StrScanFmt fmt, int32_t ex2, int32_t neg, uint32_t dig)
+static StrScanFmt strscan_hex(const uint8_t* p, LexValue* o, StrScanFmt fmt, int32_t ex2, uint32_t dig)
 {
     uint64_t x = 0;
     uint32_t i;
@@ -74,20 +73,19 @@ static StrScanFmt strscan_hex(const uint8_t* p, LexValue* o, StrScanFmt fmt, int
     switch(fmt)
     {
     case STRSCAN_INT:
-        if(x < 0x80000000u + neg &&
-            !(x == 0 && neg))
+        if(x < 0x80000000u)
         {
-            o->u64 = neg ? (int32_t)(~x+1u) : (int32_t)x;
+            o->u64 = (int32_t)x;
             return STRSCAN_INT;  /* Fast path for 32 bit integers. */
         }
     /* fallthrough */
     case STRSCAN_I64:
     case STRSCAN_U64:
-        o->u64 = neg ? ~x+1u : x;
+        o->u64 = x;
         return fmt;
     case STRSCAN_U32:
         if(dig > 8) return STRSCAN_ERROR;
-        o->u64 = neg ? (int32_t)(~x+1u) : (int32_t)x;
+        o->u64 = (int32_t)x;
         return STRSCAN_U32;
     default:
         break;
@@ -99,12 +97,12 @@ static StrScanFmt strscan_hex(const uint8_t* p, LexValue* o, StrScanFmt fmt, int
         x = (x >> 2) | (x & 3);
         ex2 += 2;
     }
-    strscan_double(x, o, ex2, neg);
+    strscan_double(x, o, ex2);
     return fmt;
 }
 
 /* Parse octal number */
-static StrScanFmt strscan_oct(const uint8_t* p, LexValue* o, StrScanFmt fmt, int32_t ex2, int32_t neg, uint32_t dig)
+static StrScanFmt strscan_oct(const uint8_t* p, LexValue* o, StrScanFmt fmt, int32_t ex2, uint32_t dig)
 {
     uint64_t x = 0;
 
@@ -122,23 +120,23 @@ static StrScanFmt strscan_oct(const uint8_t* p, LexValue* o, StrScanFmt fmt, int
     switch(fmt)
     {
     case STRSCAN_INT:
-        if(x >= 0x80000000u+neg) fmt = STRSCAN_INT;
+        if(x >= 0x80000000u) fmt = STRSCAN_INT;
         /* fallthrough */
     default:
     case STRSCAN_I64:
     case STRSCAN_U64:
-        o->u64 = neg ? ~x+1u : x;
+        o->u64 = x;
         break;
     case STRSCAN_U32:
         if ((x >> 32)) return STRSCAN_ERROR;
-        o->u64 = neg ? (int32_t)(~(uint32_t)x+1u) : (int32_t)x;
+        o->u64 = (int32_t)x;
         break;
     }
     return fmt;
 }
 
 /* Parse binary number */
-static StrScanFmt strscan_bin(const uint8_t* p, LexValue* o, StrScanFmt fmt, int32_t ex2, int32_t neg, uint32_t dig)
+static StrScanFmt strscan_bin(const uint8_t* p, LexValue* o, StrScanFmt fmt, int32_t ex2, uint32_t dig)
 {
     uint64_t x = 0;
     uint32_t i;
@@ -157,20 +155,19 @@ static StrScanFmt strscan_bin(const uint8_t* p, LexValue* o, StrScanFmt fmt, int
     switch(fmt)
     {
     case STRSCAN_INT:
-        if(x < 0x80000000u + neg &&
-            !(x == 0 && neg))
+        if(x < 0x80000000u)
         {
-            o->u64 = neg ? (int32_t)(~x+1u) : (int32_t)x;
+            o->u64 = (int32_t)x;
             return STRSCAN_INT;  /* Fast path for 32 bit integers. */
         }
     /* fallthrough */
     case STRSCAN_I64:
     case STRSCAN_U64:
-        o->u64 = neg ? ~x+1u : x;
+        o->u64 = x;
         return fmt;
     case STRSCAN_U32:
         if(dig > 8) return STRSCAN_ERROR;
-        o->u64 = neg ? (int32_t)(~x+1u) : (int32_t)x;
+        o->u64 = (int32_t)x;
         return STRSCAN_U32;
     default:
         break;
@@ -179,7 +176,7 @@ static StrScanFmt strscan_bin(const uint8_t* p, LexValue* o, StrScanFmt fmt, int
 }
 
 /* Parse decimal number */
-static StrScanFmt strscan_dec(const uint8_t* p, LexValue* o, StrScanFmt fmt, int32_t ex10, int32_t neg, uint32_t dig)
+static StrScanFmt strscan_dec(const uint8_t* p, LexValue* o, StrScanFmt fmt, int32_t ex10, uint32_t dig)
 {
     uint8_t xi[STRSCAN_DDIG], *xip = xi;
 
@@ -249,25 +246,24 @@ static StrScanFmt strscan_dec(const uint8_t* p, LexValue* o, StrScanFmt fmt, int
             switch(fmt)
             {
             case STRSCAN_INT:
-                if(x < 0x80000000u+neg)
+                if(x < 0x80000000u)
                 {
-                    o->u64 = neg ? (int32_t)(~x+1u) : (int32_t)x;
+                    o->u64 = (int32_t)x;
                     return STRSCAN_INT;  /* Fast path for 32 bit integers */
                 }
                 /* fallthrough */
             case STRSCAN_I64:
             case STRSCAN_U64:
-                o->u64 = neg ? ~x+1u : x;
+                o->u64 = x;
                 return fmt;
             case STRSCAN_U32:
                 if((x >> 32) != 0) return STRSCAN_ERROR;
-                o->u64 = neg ? (int32_t)(~x+1u) : (int32_t)x;
+                o->u64 = (int32_t)x;
                 return STRSCAN_U32;
             default:
                 /* Fast path for plain numbers < 2^63 */
                 if((int64_t)x < 0) break;
                 n = (double)(int64_t)x;
-                if(neg) n = -n;
                 o->n = n;
                 return fmt;
             }
@@ -292,15 +288,12 @@ static StrScanFmt strscan_dec(const uint8_t* p, LexValue* o, StrScanFmt fmt, int
         /* Handle simple overflow/underflow */
         if(idig > 310 / 2)
         {
-            if(neg)
-                o->n = -INFINITY;
-            else
-                o->n = INFINITY;
+            o->n = INFINITY;
             return fmt;
         }
         else if(idig < -326 / 2)
         {
-            o->n = neg ? -0.0 : 0.0;
+            o->n = 0.0;
             return fmt;
         }
 
@@ -391,7 +384,7 @@ static StrScanFmt strscan_dec(const uint8_t* p, LexValue* o, StrScanFmt fmt, int
                 } 
                 while (i != lo);
             }
-            strscan_double(x, o, ex2, neg);
+            strscan_double(x, o, ex2);
         }
     }
     return fmt;
@@ -400,7 +393,6 @@ static StrScanFmt strscan_dec(const uint8_t* p, LexValue* o, StrScanFmt fmt, int
 /* Scan string containing a number. Returns format. Returns value in o */
 StrScanFmt vp_strscan_scan(const uint8_t* p, size_t len, LexValue* o)
 {
-    int32_t neg = 0;
     const uint8_t* pe = p + len;
 
     /* Parse regular number */
@@ -509,29 +501,21 @@ StrScanFmt vp_strscan_scan(const uint8_t* p, size_t len, LexValue* o)
 
         /* Fast path for decimal 32 bit integers */
         if(fmt == STRSCAN_INT && base == 10 &&
-            (dig < 10 || (dig == 10 && *sp <= '2' && x < 0x80000000u + neg))) 
+            (dig < 10 || (dig == 10 && *sp <= '2' && x < 0x80000000u))) 
         {
-            if(x == 0 && neg) 
-            {
-                o->n = -0.0;
-                return STRSCAN_NUM;
-            }
-            else
-            {
-                o->u64 = neg ? (int32_t)(~x+1u) : (int32_t)x;
-                return STRSCAN_INT;
-            }
+            o->u64 = (int32_t)x;
+            return STRSCAN_INT;
         }
 
         /* Dispatch to base-specific parser */
         if(base == 16)
-            fmt = strscan_hex(sp, o, fmt, ex, neg, dig);
+            fmt = strscan_hex(sp, o, fmt, ex, dig);
         else if(base == 8)
-            fmt = strscan_oct(sp, o, fmt, ex, neg, dig);
+            fmt = strscan_oct(sp, o, fmt, ex, dig);
         else if(base == 2)
-            fmt = strscan_bin(sp, o, fmt, ex, neg, dig);
+            fmt = strscan_bin(sp, o, fmt, ex, dig);
         else
-            fmt = strscan_dec(sp, o, fmt, ex, neg, dig);
+            fmt = strscan_dec(sp, o, fmt, ex, dig);
 
         return fmt;
     }

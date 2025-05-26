@@ -140,6 +140,16 @@ void vp_print_typecache(void)
 
 /* -- AST printing -------------------------------------------------- */
 
+static void print_ast_type(Type* ty)
+{
+    if(ty)
+    {
+        printf("(");
+        vp_print_type(ty);
+        printf(") ");
+    }
+}
+
 static void print_ast_expr(Expr* e);
 
 static void print_typespec(TypeSpec* spec)
@@ -226,6 +236,12 @@ static void print_ast_expr(Expr* e)
         {
             int i = e->i;
             printf("%c", i);
+            break;
+        }
+        case EX_UINTT:
+        {
+            uint64_t u = e->uintt.u;
+            printf("%llu", u);
             break;
         }
         case EX_UINT:
@@ -417,24 +433,14 @@ void print_ast_stmt(Stmt* stm)
             print_indent();
             print_ast_expr(stm->lhs);
             printf(" = ");
-            if(stm->rhs->ty)
-            {
-                printf("(");
-                vp_print_type(stm->rhs->ty);
-                printf(") ");
-            }
+            print_ast_type(stm->rhs->ty);
             print_ast_expr(stm->rhs);
             printf("\n");
             break;
         case ST_EXPR:
         {
             print_indent();
-            if(stm->expr->ty)
-            {
-                printf("(");
-                vp_print_type(stm->expr->ty);
-                printf(") ");
-            }
+            print_ast_type(stm->expr->ty);
             print_ast_expr(stm->expr);
             printf("\n");
             break;
@@ -480,12 +486,7 @@ void vp_print_ast(Decl* d)
             if(d->var.expr)
             {
                 printf(" = ");
-                if(d->var.expr->ty)
-                {
-                    printf("(");
-                    vp_print_type(d->var.expr->ty);
-                    printf(") ");
-                }
+                print_ast_type(d->var.expr->ty);
                 print_ast_expr(d->var.expr);
             }
             printf("\n");

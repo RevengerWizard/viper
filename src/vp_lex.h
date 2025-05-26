@@ -78,6 +78,19 @@ typedef union LexValue
     double n;
 } LexValue;
 
+typedef enum
+{
+    NUM_NONE = 0,
+    NUM_U8 = TY_uint8,
+    NUM_U16,
+    NUM_U32,
+    NUM_U64,
+    NUM_I8,
+    NUM_I16,
+    NUM_I32,
+    NUM_I64
+} NumMod;
+
 /* Viper lexer state */
 typedef struct LexState
 {
@@ -91,6 +104,7 @@ typedef struct LexState
     LexToken curr;  /* Lookahead token */
     LexValue val;   /* Current token value */
     LexValue nextval;   /* Lookahead token value */
+    NumMod mod;    /* Literal suffix modifier */
     const char* name;   /* File name */
     LexLine linenumber; /* Line counter */
     LexOffset lineofst; /* Line offset */

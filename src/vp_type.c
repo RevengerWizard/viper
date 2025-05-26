@@ -155,26 +155,24 @@ bool vp_type_isconv(Type* dst, Type* src)
     else if(type_isint(src) && type_isflo(dst))
     {
         /* Small enough integers to float */
-        if((src->kind <= TY_int16 || src->kind <= TY_uint16) && 
-           dst->kind == TY_float)
+        if((vp_type_sizeof(src) <= 4) && dst->kind == TY_float)
         {
             return true;
         }
         /* Any small/medium integers to double */
-        else if((src->kind <= TY_int32 || src->kind <= TY_uint32) && 
-                dst->kind == TY_double)
+        else if((vp_type_sizeof(src) <= 8) && dst->kind == TY_double)
         {
             return true;
         }
-        return false;
-    }
-    else if(type_isflo(src) && type_isflo(dst))
-    {
         return false;
     }
     else if(type_isflo(src) && type_isint(dst))
     {
         return false;
+    }
+    else if(type_isflo(src) && type_isflo(dst))
+    {
+        return dst == src;
     }
     else if(type_isptrlike(dst) && type_isnil(src))
     {
@@ -246,6 +244,24 @@ bool vp_type_isptrcomp(Type* lty, Type* rty)
         }
     }
     return false;
+}
+
+/* Get builtin type from index */
+Type* vp_type_builtin(int i)
+{
+    switch(i)
+    {
+        case TY_bool: return tybool;
+        case TY_uint8: return tyuint8;
+        case TY_uint16: return tyuint16;
+        case TY_uint32: return tyuint32;
+        case TY_uint64: return tyuint64;
+        case TY_int8: return tyint8;
+        case TY_int16: return tyint16;
+        case TY_int32: return tyint32;
+        case TY_int64: return tyint64;
+        default: vp_assertX(0, "? %d", i); return NULL;
+    }
 }
 
 /* Find common type for left and right types, if any */

@@ -144,39 +144,67 @@ Rule C7: no implicit conversions between pointer types except:
 
 Rule C8: no implicit conversions between array types
 
-### 6. Explicit cast rules
+### 6. Cast type hierarchy
 
-Rule X1: explicit casts can convert between any numeric types
+Viper provides four levels of type conversions:
 
-Rule X2: explicit casts can convert between any pointer types
+#### Level 1: implicit conversions (automatic)
 
-Rule X3: explicit casts can convert between numeric and pointer types
+- no cast required
+- governed by implicit conversion rules C1-C8
+- only fully safe conversions
 
-Rule X4: explicit casts between incompatible types ?
+#### Level 2: explicit conversions
 
-### 7. Assignment rules
+Syntax: `cast(T, expr)` or `T(expr)`
+
+Rule S1: `cast` performs well-defined conversions that are not safe enough to be implicit
+
+Rule S2: `cast` is valid for:
+- any numeric type to any other numeric type (with defined overflow/truncation behavior)
+- `void*` to any pointer type
+- `bool` to numeric types (false = 0, true = 1)
+- numeric types to `bool` (0 = false, non-zero = true)
+
+Rule S3: `cast` preserves value semantics where possible, with predictable behavior for edge cases
+
+#### Level 3: specialized conversions
+
+Syntax: `intcast(T, expr)`, `floatcast(T, expr)`, `bitcast(T, expr)`, `ptrcast(T, expr)`
+
+Rule U1: `intcast` - for lossy integer conversions
+- converts between any integer types
+- handles signed ↔ unsigned conversions with wrap-around semantics
+- target type must be an integer type
+- source type must be an integer type
+
+Rule U2: `floatcast` - for float ↔ integer conversions with truncation/overflow
+- converts between floating-point and integer types with truncation
+- handles overflow by platform-defined behavior
+- target type must be numeric
+- source type must be numeric
+- at least one source or target must be a floating-point type
+
+Rule U3: `bitcast` - for raw bit reinterpretation
+- reinterprets bit pattern without conversion
+- source and target types must have identical size
+- no value conversion is performed
+- commonly used for type punning
+
+Rule U4: `ptrcast` - for pointer and address conversions
+- converts between any pointer types
+- converts between pointers and integer types
+- converts between function pointer types
+- target or source must be a pointer type or integer type used as address
+
+#### Level 4: assignment and context rules
 
 Rule A1: for variable declarations `var x : T = expr`
 - the entire expr is evaluated in context of type `T`
 - literals adopt type `T`
-- no explicit cast is required
-- if expr contains non-literal subexpressions of incompatible types, explicit casts are still required for those
+- implicit conversions apply automatically
+- explicit casts required for non-implicit conversions
 
-Rule A2: for expression `x = expr` where `x` has type `T`
+Rule A2: for assignment x = expr where x has type T
 - if expr's type is not `T`, an implicit conversion must be valid by rules C1-C8
-- otherwise, an explicit cast is required
-
-## Examples
-
-`var x : uint64 = 16 >> 1`
-
-1. compiler identifies declaration type `uint64` for variable x
-2. according to Rule A1, the expression `16 >> 1` is evaluated in context of type `uint64`:
-- the literals `16` and `1` are typed as `uint64` (Rule L1)
-- the shift operation `>>` produces a `uint64` result
-3. the result is already `uint64`, no explicit cast needed
-
-`var x : uint8 = (34 * 34) / 34`
-- declaration context is `uint8`
-- all literals are typed as `uint8`
-- result is `uint8`, no cast needed
+- otherwise, an explicit cast of appropriate level is required

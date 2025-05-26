@@ -2,7 +2,7 @@ fn main() : int32
 {
     //var pi2 : float = 3 * 2.141592;
     //var pi2d : double = 3.1415926535898 * 2;
-    var pi2 = 3.141592 * int16(2);
+    var pi2 = 3.141592 * 2i16;
     //var f = 2 * (1987 + 2 / 45 + 34 * 90);
     //var b : float = int16(float(9));
     //var i = int8(3) + uint64(3);  // error
@@ -12,7 +12,7 @@ fn main() : int32
     //var b : int64 = cast(int64*, &i4);
     var p : void* = &i4;
     var v : int64 = 21474836489344;
-    var w = int64(9223372036854775807);
+    var w = 9223372036854775807u64;
     //var y : uint64 = 0xffffffffffffffff - 1 + 2;
     var x = int64(2);
     var p = 255e+4;
@@ -36,11 +36,20 @@ fn main() : int32
     var bu64 : uint64 = ~18446744073709551615;
 
     var a : int32 = -2147483647 - 1;
+    //var a : int32 = (-2147483647 - 1) % -1;
     var a : int32 = 2147483647 + -1;
     //var ashf : uint8 = 1 << 8;
-    var i99 = sizeof(int32)*uint64(8)-uint64(1);
+    var i99 = sizeof(int32)*8-1;
     var p8 : uint8 = 127 + 127;
     var p64 : int64 = 9223372036854775807 + 0;
 
     var b : bool = not not true;
+
+    var p : void*;
+    var ip : int32* = p;
+
+    //var x : uint32 = uint32(-1);
+
+    var a = 34i8 - 1;
+    var x = ~346+1i32;
 }
