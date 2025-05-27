@@ -10,13 +10,12 @@
 #include "vp_def.h"
 #include "vp_mem.h"
 #include "vp_err.h"
-#include "vp_print.h"
 #include "vp_str.h"
 #include "vp_tab.h"
 #include "vp_type.h"
 #include "vp_vec.h"
 
-#include "vp_print.h"
+#include "vp_dump.h"
 
 #define MAX_LOCAL_SYMS 1024
 
@@ -1753,7 +1752,7 @@ void vp_sema(Decl** decls)
 
     for(uint32_t i = 0; i < vec_len(decls); i++)
     {
-        vp_print_ast(decls[i]);
+        vp_dump_ast(decls[i]);
     }
-    vp_print_typecache();
+    vp_dump_typecache();
 }
