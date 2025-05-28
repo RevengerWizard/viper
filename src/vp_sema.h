@@ -34,6 +34,12 @@ typedef struct Sym
     Type* type;
 } Sym;
 
+typedef struct Scope
+{
+    struct Scope* parent;
+    Sym** locals;
+} Scope;
+
 typedef union Val
 {
     bool b;

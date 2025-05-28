@@ -22,8 +22,8 @@
 Sym** sorted;
 Tab globs;
 Sym** syms;
-Sym localsyms[MAX_LOCAL_SYMS];
-Sym* localend = localsyms;
+
+Scope* currscope = NULL;
 
 /* -- Symbols ------------------------------------------------------- */
 
@@ -37,40 +37,44 @@ static Sym* sym_new(SymKind kind, Str* name, Decl* d)
     return sym;
 }
 
-static void sym_push_var(Str* name, Type* ty)
-{
-    if(localend == localsyms + MAX_LOCAL_SYMS)
-    {
-        vp_assertX(0, "too many local symbols");
-    }
-    *localend++ = (Sym){
-        .name = name,
-        .kind = SYM_VAR,
-        .state = SYM_DONE,
-        .type = ty,
-    };
-}
-
 /* Enter scope */
-static Sym* sym_enter()
+static Scope* scope_enter()
 {
-    return localend;
+    Scope* sc = vp_arena_alloc(&V->symarena, sizeof(*sc));
+    sc->parent = currscope;
+    sc->locals = NULL;
+    currscope = sc;
+    return sc;
 }
 
 /* Leave scope */
-static void sym_leave(Sym* sym)
+static void scope_leave(Scope* sc)
 {
-    localend = sym;
+    vp_assertX(currscope == sc, "scope mismatch");
+    currscope = currscope->parent;
 }
 
-/* Get a local or global symbol */
-static Sym* sym_get(Str* name)
+/* Add local to current scope */
+static void scope_add(Str* name, Type* ty)
 {
-    for(Sym* it = localend; it != localsyms; it--)
+    vp_assertX(currscope, "no scope");
+    Sym* sym = sym_new(SYM_VAR, name, NULL);
+    sym->state = SYM_DONE;
+    sym->type = ty;
+    vec_push(currscope->locals, sym);
+}
+
+/* Find a symbol in local or global scope */
+static Sym* scope_find(Str* name)
+{
+    for(Scope* scope = currscope; scope != NULL; scope = scope->parent)
     {
-        Sym* sym = it - 1;
-        if(sym->name == name)
-            return sym;
+        for(uint32_t i = 0; i < vec_len(scope->locals); i++)
+        {
+            Sym* sym = scope->locals[i];
+            if(sym->name == name)
+                return sym;
+        }
     }
     return vp_tab_get(&globs, name);
 }
@@ -81,7 +85,7 @@ static Type* sema_typespec(TypeSpec* spec);
 /* Find and resolve a local/global symbol */
 static Sym* sym_name(Str* name)
 {
-    Sym* sym = sym_get(name);
+    Sym* sym = scope_find(name);
     if(!sym)
         return NULL;
     sema_resolve(sym);
@@ -1545,13 +1549,13 @@ static Type* sema_var(Decl* d);
 /* Resolve block of statements */
 static void sema_block(Stmt** stmts, Type* ret)
 {
-    Sym* scope = sym_enter();   /* Enter scope */
+    Scope* scope = scope_enter();   /* Enter scope */
     for(uint32_t i = 0; i < vec_len(stmts); i++)
     {
         Stmt* st = stmts[i];
         sema_stmt(st, ret);
     }
-    sym_leave(scope);   /* Leave scope */
+    scope_leave(scope);   /* Leave scope */
 }
 
 /* Resolve assignment */
@@ -1600,7 +1604,7 @@ static void sema_stmt(Stmt* st, Type* ret)
             if(st->decl->kind == DECL_VAR)
             {
                 Type* ty = sema_var(d);
-                sym_push_var(d->name, ty);
+                scope_add(d->name, ty);
             }
             else if(st->decl->kind == DECL_NOTE)
             {
@@ -1628,17 +1632,17 @@ static void sema_fn_body(Sym* sym)
     if(!d->fn.body)
         return;
 
-    Sym* scope = sym_enter();   /* Enter scope */
+    Scope* scope = scope_enter();   /* Enter scope */
     for(uint32_t i = 0; i < vec_len(d->fn.params); i++)
     {
         Param* param = &d->fn.params[i];
-        sym_push_var(param->name, sema_typespec(param->spec));
+        scope_add(param->name, sema_typespec(param->spec));
     }
     for(uint32_t i = 0; i < vec_len(d->fn.body->block); i++)
     {
         sema_stmt(d->fn.body->block[i], sema_typespec(d->fn.ret));
     }
-    sym_leave(scope);   /* Leave scope */
+    scope_leave(scope);   /* Leave scope */
 }
 
 /* Resolve var declaration */
