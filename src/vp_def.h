@@ -21,6 +21,9 @@
 
 #define VP_MIN_SBUF 32
 
+#define UNUSED(x) ((void)x)
+#define ARRSIZE(arr) (sizeof(arr) / sizeof(*(arr)))
+
 #define MIN(x, y) ((x) <= (y) ? (x) : (y))
 #define MAX(x, y) ((x) >= (y) ? (x) : (y))
 #define CLAMP_MAX(x, max) MIN(x, max)
@@ -66,6 +69,17 @@ static VP_AINLINE uint32_t vp_fls(uint32_t x)
 #define VP_LIKELY(x) (x)
 #define VP_UNLIKELY(x) (x)
 #endif
+
+/* Most significant bit */
+static VP_AINLINE uint32_t vp_msb(uint32_t x)
+{
+    uint32_t bit;
+    for(bit = 0;; ++bit)
+    {
+        x >>= 1;
+        if(x <= 0) return bit;
+    }
+}
 
 #if defined(VIPER_USE_ASSERT)
 void vp_assert_fail(const char* file, int line, const char* func, const char* fmt, ...);

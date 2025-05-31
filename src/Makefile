@@ -8,7 +8,7 @@ CCOPT = #-O2
 
 CCDEBUG = -O0 -g3
 
-CCWARN = -Wall
+CCWARN = -Wall #-Wextra
 
 XCFLAGS = -DVIPER_USE_ASSERT
 
@@ -100,15 +100,13 @@ endif
 # Files and pathnames
 ##############################################################################
 
-VPCORE_O = vp_buf.o \
-	vp_assert.o \
-	vp_mem.o \
-	vp_char.o vp_lex.o vp_load.o vp_parse.o \
-	vp_sema.o vp_err.o \
-	vp_strscan.o \
-	vp_state.o vp_asm.o vp_ast.o \
-	vp_str.o vp_type.o vp_vec.o vp_tab.o vp_map.o \
-	vp_dump.o
+VPCORE_O = vp_assert.o vp_mem.o vp_buf.o \
+	vp_str.o vp_vec.o vp_tab.o vp_map.o vp_type.o \
+	vp_char.o vp_strscan.o \
+	vp_lex.o vp_parse.o vp_ast.o \
+	vp_load.o vp_sema.o vp_err.o \
+	vp_codegen.o vp_ir.o vp_var.o vp_regalloc.o vp_asm.o \
+	vp_dump.o vp_state.o
 
 VP_O = viper.o
 VP_A = libvp.a

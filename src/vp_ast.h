@@ -9,6 +9,7 @@
 #include "vp_lex.h"
 #include "vp_str.h"
 #include "vp_type.h"
+#include "vp_var.h"
 
 typedef enum TypeSpecKind
 {
@@ -93,6 +94,7 @@ typedef enum ExprKind
     EX_CALL,
     EX_IDX,
     EX_FIELD,
+    EX__MAX
 } ExprKind;
 
 typedef enum FieldKind
@@ -126,9 +128,14 @@ typedef struct Expr
         int64_t i;
         double n;
         float f;
-        Str* name;
+        Str* str;
         struct Expr* unary;
         TypeSpec* spec;
+        struct
+        {
+            Str* name;
+            Scope* scope;
+        };
         struct
         {
             uint64_t u;
@@ -288,11 +295,13 @@ typedef struct Decl
             TypeSpec* ret;
             Param* params;
             Stmt* body;
+            Scope** scopes;
         } fn;
         struct
         {
             TypeSpec* spec;
             Expr* expr;
+            VarInfo* vi;
         } var;
         Aggregate* agr;
         struct

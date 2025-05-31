@@ -6,6 +6,9 @@ src/
 ├── vp_strscan.c/h    ← number scanning
 ├── vp_parse.c/h      ← parser (produces AST)
 ├── vp_sema.c/h       ← semantic checker
+├── vp_codegen.c/h    ← code generation (AST → IR)
+├── vp_ir.c/h         ← intermediate representation
+├── vp_regalloc.c/h   ← register allocation
 ├── vp_ast.c/h        ← AST node allocation
 ├── vp_mem.c/h        ← memory management
 ├── vp_type.c/h       ← type information
@@ -15,5 +18,5 @@ src/
 ├── vp_vec.c/h        ← dynamic array handling
 ├── vp_state.c/h      ← global state
 ├── vp_load.c         ← frontend driver: parse + compile
-├── vp_print.c/h      ← data structure print
+├── vp_dump.c/h       ← data structure print
 ├── viper.c           ← CLI main

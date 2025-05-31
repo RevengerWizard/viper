@@ -13,17 +13,16 @@
 #include "vp_str.h"
 #include "vp_tab.h"
 #include "vp_type.h"
+#include "vp_var.h"
 #include "vp_vec.h"
 
 #include "vp_dump.h"
 
-#define MAX_LOCAL_SYMS 1024
-
 Sym** sorted;
-Tab globs;
+Tab globsyms;
 Sym** syms;
-
-Scope* currscope = NULL;
+Sym** localsyms;
+Decl* currfn;
 
 /* -- Symbols ------------------------------------------------------- */
 
@@ -37,6 +36,43 @@ static Sym* sym_new(SymKind kind, Str* name, Decl* d)
     return sym;
 }
 
+/* Add symbol to local scope */
+static void sym_add(Str* name, Type* ty)
+{
+    Sym* sym = sym_new(SYM_VAR, name, NULL);
+    sym->state = SYM_DONE;
+    sym->type = ty;
+    vec_push(localsyms, sym);
+}
+
+/* Enter symbol scope */
+static uint32_t sym_enter()
+{
+    return vec_len(localsyms);
+}
+
+/* Leave symbol scope */
+static void sym_leave(uint32_t len)
+{
+    if(localsyms)
+    {
+        vec_hdr(localsyms)->len = len;
+    }
+}
+
+static Sym* sym_find(Str* name)
+{
+    uint32_t len = vec_len(localsyms);
+    for(uint32_t i = len; i > 0; i--)
+    {
+        Sym* sym = localsyms[i - 1];
+        if(sym->name == name)
+            return sym;
+    }
+    return vp_tab_get(&globsyms, name);
+}
+
+#if 0
 /* Enter scope */
 static Scope* scope_enter()
 {
@@ -79,13 +115,15 @@ static Sym* scope_find(Str* name)
     return vp_tab_get(&globs, name);
 }
 
+#endif
+
 static void sema_resolve(Sym* sym);
 static Type* sema_typespec(TypeSpec* spec);
 
 /* Find and resolve a local/global symbol */
 static Sym* sym_name(Str* name)
 {
-    Sym* sym = scope_find(name);
+    Sym* sym = sym_find(name);
     if(!sym)
         return NULL;
     sema_resolve(sym);
@@ -122,24 +160,8 @@ static Sym* sym_decl(Decl* d)
     return sym;
 }
 
-/* This probably should be improved */
-static bool field_duplicates(TypeField* fields)
-{
-    for(uint32_t i = 0; i < vec_len(fields); i++)
-    {
-        for(uint32_t j = i + 1; j < vec_len(fields); j++)
-        {
-            if(fields[i].name == fields[j].name)
-            {
-                return true;
-            }
-        }
-    }
-    return false;
-}
-
-/* Complete a (symbolic) type */
-static void type_complete(Type* ty)
+/* Complete a symbolic type */
+static void sym_complete(Type* ty)
 {
     if(ty->kind == TY_name)
     {
@@ -158,7 +180,7 @@ static void type_complete(Type* ty)
         AggregateItem* item = &d->agr->items[i];
         Type* tyitem = sema_typespec(item->type);
         tyitem = vp_type_decayempty(tyitem);
-        type_complete(tyitem);
+        sym_complete(tyitem);
         if(vp_type_sizeof(tyitem) == 0)
         {
             if(tyitem->kind != TY_array || vp_type_sizeof(tyitem->p) == 0)
@@ -175,7 +197,7 @@ static void type_complete(Type* ty)
     {
         vp_err_error(d->loc, "no fields");
     }
-    if(field_duplicates(fields))
+    if(vp_type_isdupfield(fields))
     {
         vp_err_error(d->loc, "duplicate fields");
     }
@@ -832,12 +854,12 @@ static Operand sema_expr_binop(Expr* e, Type* ret)
             }
             else if(type_isptr(lop.ty) && type_isint(rop.ty))
             {
-                type_complete(lop.ty->p);
+                sym_complete(lop.ty->p);
                 return opr_rval(lop.ty);
             }
             else if(type_isptr(rop.ty) && type_isint(lop.ty))
             {
-                type_complete(rop.ty->p);
+                sym_complete(rop.ty->p);
                 return opr_rval(rop.ty);
             }
             else
@@ -1007,6 +1029,7 @@ static Operand sema_expr_name(Expr* e)
     {
         vp_err_error(e->loc, "unresolved name '%s'", str_data(e->name));
     }
+    e->scope = V->currscope;
     if(sym->kind == SYM_VAR)
         return opr_lval(sym->type);
     else if(sym->kind == SYM_FN)
@@ -1060,7 +1083,7 @@ static Operand sema_expr_comp(Expr* e, Type* ret)
     {
         ty = ret;
     }
-    type_complete(ty);
+    sym_complete(ty);
     if(type_isaggr(ty))
     {
         uint32_t idx = 0;
@@ -1130,7 +1153,7 @@ static Operand sema_expr_comp(Expr* e, Type* ret)
         }
         if(ty->len == 0)
         {
-            type_complete(ty->p);
+            sym_complete(ty->p);
             ty = vp_type_arr(ty->p, maxidx + 1);
         }
     }
@@ -1192,7 +1215,7 @@ static Operand sema_expr_field(Expr* e)
     vp_assertX(e->kind == EX_FIELD, "field");
     Operand lop = sema_expr(e->field.expr, NULL);
     Type* ty = lop.ty;
-    type_complete(ty);
+    sym_complete(ty);
     if(ty->kind != TY_struct && ty->kind != TY_union)
     {
         vp_err_error(e->loc, "can only access fields on struct/union types");
@@ -1300,7 +1323,7 @@ static Operand sema_expr(Expr* e, Type* ret)
             res = sema_expr_num(e, ret);
             break;
         case EX_STR:
-            res = opr_rval(vp_type_arr(tyuint8, e->name->len + 1));
+            res = opr_rval(vp_type_arr(tyuint8, e->str->len + 1));
             break;
         case EX_NAME:
             res = sema_expr_name(e);
@@ -1367,21 +1390,21 @@ static Operand sema_expr(Expr* e, Type* ret)
         case EX_SIZEOF:
         {
             Type* ty = sema_typespec(e->spec);
-            type_complete(ty);
+            sym_complete(ty);
             res = opr_const(tyuint64, (Val){.u64 = vp_type_sizeof(ty)});
             break;
         }
         case EX_ALIGNOF:
         {
             Type* ty = sema_typespec(e->spec);
-            type_complete(ty);
+            sym_complete(ty);
             res = opr_const(tyuint64, (Val){.u64 = vp_type_alignof(ty)});
             break;
         }
         case EX_OFFSETOF:
         {
             Type* ty = sema_typespec(e->spec);
-            type_complete(ty);
+            sym_complete(ty);
             if(ty->kind != TY_struct && ty->kind != TY_union)
             {
                 vp_err_error(e->loc, "offset can only be used with struct/union types");
@@ -1484,7 +1507,7 @@ static Type* sema_typespec(TypeSpec* spec)
                 opr_fold(spec->loc, &spec->arr.expr, opr);
             }
             Type* tyarr = sema_typespec(spec->arr.base);
-            type_complete(tyarr);
+            sym_complete(tyarr);
             ty = vp_type_arr(tyarr, len);
             break;
         }
@@ -1528,7 +1551,7 @@ static Type* sema_fn(Decl* d)
     {
         Type* typaram = sema_typespec(d->fn.params[i].spec);
         typaram = vp_type_decayempty(typaram);
-        type_complete(typaram);
+        sym_complete(typaram);
         if(typaram == tyvoid)
         {
             vp_err_error(d->loc, "function parameter type cannot be 'void'");
@@ -1549,13 +1572,17 @@ static Type* sema_var(Decl* d);
 /* Resolve block of statements */
 static void sema_block(Stmt** stmts, Type* ret)
 {
-    Scope* scope = scope_enter();   /* Enter scope */
+    Scope* scope = vp_scope_begin();
+    vec_push(currfn->fn.scopes, scope);
+
+    uint32_t len = sym_enter();
     for(uint32_t i = 0; i < vec_len(stmts); i++)
     {
         Stmt* st = stmts[i];
         sema_stmt(st, ret);
     }
-    scope_leave(scope);   /* Leave scope */
+    sym_leave(len);
+    vp_scope_end();
 }
 
 /* Resolve assignment */
@@ -1567,7 +1594,7 @@ static void sema_stmt_assign(Stmt* st)
     {
         vp_err_error(st->loc, "cannot assign to non-lvalue");
     }
-    Operand rop = sema_expr(st->rhs, lop.ty);
+    Operand rop = sema_expr_rval(st->rhs, lop.ty);
     opr_conv(st->loc, &rop, lop.ty);
     opr_fold(st->loc, &st->rhs, rop);
 }
@@ -1604,7 +1631,7 @@ static void sema_stmt(Stmt* st, Type* ret)
             if(st->decl->kind == DECL_VAR)
             {
                 Type* ty = sema_var(d);
-                scope_add(d->name, ty);
+                sym_add(d->name, ty);
             }
             else if(st->decl->kind == DECL_NOTE)
             {
@@ -1632,17 +1659,23 @@ static void sema_fn_body(Sym* sym)
     if(!d->fn.body)
         return;
 
-    Scope* scope = scope_enter();   /* Enter scope */
+    Scope* scope = vp_scope_begin();
+    vec_push(d->fn.scopes, scope);
+    currfn = d;
+
+    uint32_t len = sym_enter();
     for(uint32_t i = 0; i < vec_len(d->fn.params); i++)
     {
         Param* param = &d->fn.params[i];
-        scope_add(param->name, sema_typespec(param->spec));
+        sym_add(param->name, sema_typespec(param->spec));
     }
+    Type* ret = sema_typespec(d->fn.ret);
     for(uint32_t i = 0; i < vec_len(d->fn.body->block); i++)
     {
-        sema_stmt(d->fn.body->block[i], sema_typespec(d->fn.ret));
+        sema_stmt(d->fn.body->block[i], ret);
     }
-    scope_leave(scope);   /* Leave scope */
+    sym_leave(len);
+    vp_scope_end();
 }
 
 /* Resolve var declaration */
@@ -1676,7 +1709,7 @@ static Type* sema_var(Decl* d)
         opr_fold(d->loc, &d->var.expr, res);
         d->var.expr->ty = inferty;
     }
-    type_complete(ty);
+    sym_complete(ty);
     if(!d->var.expr || type_isptr(inferty))
     {
         ty = vp_type_decayempty(ty);
@@ -1689,6 +1722,7 @@ static Type* sema_var(Decl* d)
     {
         vp_err_error(d->loc, "variable of size 0");
     }
+    d->var.vi = vp_scope_add(V->currscope, d->name, ty);
     return ty;
 }
 
@@ -1735,7 +1769,7 @@ void vp_sema(Decl** decls)
         else
         {
             Sym* sym = sym_decl(d);
-            vp_tab_set(&globs, sym->name, sym);
+            vp_tab_set(&globsyms, sym->name, sym);
             vec_push(syms, sym);
         }
     }
@@ -1746,7 +1780,7 @@ void vp_sema(Decl** decls)
         sema_resolve(sym);
         if(sym->kind == SYM_TYPE)
         {
-            type_complete(sym->type);
+            sym_complete(sym->type);
         }
         else if(sym->kind == SYM_FN)
         {
@@ -1758,5 +1792,5 @@ void vp_sema(Decl** decls)
     {
         vp_dump_ast(decls[i]);
     }
-    vp_dump_typecache();
+    //vp_dump_typecache();
 }

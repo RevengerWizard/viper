@@ -9,7 +9,9 @@
 #include <stdio.h>
 
 #include "vp_buf.h"
+#include "vp_ir.h"
 #include "vp_mem.h"
+#include "vp_regalloc.h"
 #include "vp_type.h"
 #include "vp_tab.h"
 #include "vp_map.h"
@@ -27,6 +29,12 @@ typedef struct VpState
     Arena astarena;
     Arena typearena;
     Arena symarena;
+    Tab globtab;
+    struct Scope* globscope;
+    struct Scope* currscope;
+    RegAlloc* ra;
+    IR** irs;
+    Arena irarena;
     FILE* txtfile;
     SBuf tmpbuf;
 } VpState;

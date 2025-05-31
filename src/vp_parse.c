@@ -123,6 +123,7 @@ static Expr* expr_lit(LexState* ls, SrcLoc loc)
 /* Parse grouping expression */
 static Expr* expr_group(LexState* ls, SrcLoc loc)
 {
+    UNUSED(loc);
     Expr* e = expr(ls);
     lex_consume(ls, ')');
     return e;
@@ -319,6 +320,7 @@ static Expr* expr_comp_type(LexState* ls, TypeSpec* spec)
 /* Parse compound literal expression */
 static Expr* expr_comp(LexState* ls, SrcLoc loc)
 {
+    UNUSED(loc);
     return expr_comp_type(ls, NULL);
 }
 
@@ -873,6 +875,7 @@ static Decl* parse_decl(LexState* ls)
 
 Decl** vp_parse(VpState* V, LexState* ls)
 {
+    UNUSED(V);
     vp_lex_next(ls);    /* Read the first token into ls->curr */
 
     Decl** decls = NULL;

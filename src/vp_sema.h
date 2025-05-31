@@ -34,12 +34,6 @@ typedef struct Sym
     Type* type;
 } Sym;
 
-typedef struct Scope
-{
-    struct Scope* parent;
-    Sym** locals;
-} Scope;
-
 typedef union Val
 {
     bool b;
@@ -48,9 +42,9 @@ typedef union Val
     uint16_t u16;
     int16_t i16;
     uint32_t u32;
-    uint32_t i32;
+    int32_t i32;
     uint64_t u64;
-    uint64_t i64;
+    int64_t i64;
     float f;
     double d;
 } Val;

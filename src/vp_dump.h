@@ -10,6 +10,7 @@
 
 #include "vp_ast.h"
 
+void vp_dump_ir(void);
 void vp_dump_strintern(void);
 void vp_dump_type(Type* t);
 void vp_dump_typecache(void);

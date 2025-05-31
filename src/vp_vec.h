@@ -15,6 +15,7 @@ typedef struct VecHeader
     char data[];
 } VecHeader;
 
+#define vec_t(type) type*
 #define vec_hdr(v) ((VecHeader*)((char*)(v) - offsetof(VecHeader, data)))
 
 #define vec_len(v) ((v) ? vec_hdr(v)->len : 0)

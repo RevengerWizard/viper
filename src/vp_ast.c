@@ -117,7 +117,7 @@ Expr* vp_expr_flit(SrcLoc loc, float f)
 Expr* vp_expr_str(SrcLoc loc, Str* str)
 {
     Expr* expr = expr_new(EX_STR, loc);
-    expr->name = str;
+    expr->str = str;
     return expr;
 }
 
@@ -252,6 +252,7 @@ Decl* vp_decl_var(SrcLoc loc, Str* name, TypeSpec* spec, Expr* e)
     Decl* d = decl_new(DECL_VAR, loc, name);
     d->var.spec = spec;
     d->var.expr = e;
+    d->var.vi = NULL;
     return d;
 }
 
@@ -261,6 +262,7 @@ Decl* vp_decl_fn(SrcLoc loc, TypeSpec* ret, Str* name, Param* params, Stmt* body
     d->fn.ret = ret;
     d->fn.params = params;
     d->fn.body = body;
+    d->fn.scopes = NULL;
     return d;
 }
 

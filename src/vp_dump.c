@@ -7,6 +7,7 @@
 
 #include "vp_dump.h"
 #include "vp_ast.h"
+#include "vp_ir.h"
 #include "vp_str.h"
 #include "vp_type.h"
 #include "vp_vec.h"
@@ -20,7 +21,114 @@ static void dump_indent()
     printf("%.*s", 4*indent, "                                                                      ");
 }
 
-/* -- String interning printing ------------------------------------- */
+/* -- IR dump ------------------------------------------------------- */
+
+static void dump_vreg(VReg* vr)
+{
+    vp_assertX(vr, "empty vreg");
+    if(vr->flag & VRF_CONST)
+    {
+        if(vr->flag & VRF_NUM)
+        {
+            if(vr->vsize == VRegSize4)
+                printf("%ff", vr->n);
+            else
+                printf("%.14gf", vr->n);
+        }
+        else if(vr->flag & VRF_INT)
+            printf("#%lli", vr->i64);
+        else
+            printf("#%llu", vr->u64);
+    }
+    else
+    {
+        printf("v%d", vr->virt);
+    }
+}
+
+static const char* const kcond[] = {
+    NULL, NULL, "EQ", "NEQ", "LT", "LE", "GT", "GE",
+    NULL, NULL, "EQ", "NEQ", "LT", "LE", "GT", "GE"};
+
+static const char* const kbinop[] = {
+    "ADD", "SUB", "MUL", "DIV", "MOD",
+    "BAND", "BOR", "BXOR", "LSHIFT", "RSHIFT"
+};
+
+void vp_dump_ir(void)
+{
+    for(uint32_t i = 0; i < vec_len(V->irs); i++)
+    {
+        IR* ir = V->irs[i];
+        switch(ir->kind)
+        {
+            case IR_ADD:
+            case IR_SUB:
+            case IR_MUL:
+            case IR_DIV:
+            case IR_MOD:
+            case IR_BAND:
+            case IR_BOR:
+            case IR_BXOR:
+            case IR_LSHIFT:
+            case IR_RSHIFT:
+                printf("%s ", kbinop[ir->kind - IR_ADD]);
+                dump_vreg(ir->dst);
+                printf(", ");
+                dump_vreg(ir->src1);
+                printf(", ");
+                dump_vreg(ir->src2);
+                printf("\n");
+                break;
+            case IR_BOFS:
+                printf("BOFS ");
+                dump_vreg(ir->dst);
+                printf("\n");
+                break;
+            case IR_IOFS:
+                printf("IOFS ");
+                dump_vreg(ir->dst);
+                printf(", &%s", str_data(ir->label));
+                printf("\n");
+                break;
+            case IR_STORE:
+                printf("STORE [");
+                dump_vreg(ir->src2);
+                printf("], ");
+                dump_vreg(ir->src1);
+                printf("\n");
+                break;
+            case IR_LOAD:
+                printf("LOAD ");
+                dump_vreg(ir->dst);
+                printf(", [");
+                dump_vreg(ir->src1);
+                printf("]\n");
+                break;
+            case IR_MOV:
+                printf("MOV ");
+                dump_vreg(ir->dst);
+                printf(", ");
+                dump_vreg(ir->src1);
+                printf("\n");
+                break;
+            case IR_COND:
+                printf("%s ", kcond[ir->cond & (COND_MASK | COND_UNSIGNED)]);
+                dump_vreg(ir->dst);
+                printf(", ");
+                dump_vreg(ir->src1);
+                printf(", ");
+                dump_vreg(ir->src2);
+                printf("\n");
+                break;
+            default:
+                vp_assertX(0, "unknown ir %d", ir->kind);
+                break;
+        }
+    }
+}
+
+/* -- String interning dump ----------------------------------------- */
 
 void vp_dump_strintern(void)
 {
@@ -36,7 +144,7 @@ void vp_dump_strintern(void)
     }
 }
 
-/* -- Type printing ------------------------------------------------- */
+/* -- Type dump ----------------------------------------------------- */
 
 void vp_dump_type(Type* ty)
 {
@@ -138,7 +246,7 @@ void vp_dump_typecache(void)
     }
 }
 
-/* -- AST printing -------------------------------------------------- */
+/* -- AST dump ------------------------------------------------------ */
 
 static void dump_ast_type(Type* ty)
 {
@@ -431,6 +539,7 @@ static void dump_ast_stmt(Stmt* stm)
             break;
         case ST_ASSIGN:
             dump_indent();
+            dump_ast_type(stm->lhs->ty);
             dump_ast_expr(stm->lhs);
             printf(" = ");
             dump_ast_type(stm->rhs->ty);

@@ -246,6 +246,22 @@ bool vp_type_isptrcomp(Type* lty, Type* rty)
     return false;
 }
 
+/* Check if struct/union has duplicate fields */
+bool vp_type_isdupfield(TypeField* fields)
+{
+    for(uint32_t i = 0; i < vec_len(fields); i++)
+    {
+        for(uint32_t j = i + 1; j < vec_len(fields); j++)
+        {
+            if(fields[i].name == fields[j].name)
+            {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 /* Get builtin type from index */
 Type* vp_type_builtin(int i)
 {

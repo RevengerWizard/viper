@@ -617,6 +617,7 @@ void vp_lex_setup(LexState* ls)
 /* Convert token to string */
 const char* vp_lex_tok2str(LexState* ls, LexToken t)
 {
+    UNUSED(ls);
     static char buf[32];
     if(t > TK_OFS)
         return lex_tokennames[t - TK_OFS - 1];
