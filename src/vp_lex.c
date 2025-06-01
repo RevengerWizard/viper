@@ -647,9 +647,9 @@ void vp_lex_error(LexState* ls, const char* msg, ...)
 void vp_lex_next(LexState* ls)
 {
     ls->prev = ls->curr;
-    ls->nextval = ls->val;
+    ls->val = ls->nextval;
     if(ls->prev == TK_eof) return;
-    ls->curr = lex_scan(ls, &ls->val);
+    ls->curr = lex_scan(ls, &ls->nextval);
 }
 
 /* Initialize strings for reserved words */

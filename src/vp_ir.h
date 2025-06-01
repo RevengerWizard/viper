@@ -69,8 +69,8 @@ typedef enum IrKind
     IR_RSHIFT,
     /* Unary operators */
     IR_NEG,
-    IR_BNOT,
     IR_NOT,
+    IR_BNOT,
 } IrKind;
 
 /* Condition flags (lower bits) */
@@ -115,6 +115,8 @@ IR* vp_ir_store(VReg* dst, VReg* src);
 IR* vp_ir_load(VReg* src, VRegSize vsize);
 IR* vp_ir_ret(VReg* src);
 IR* vp_ir_cond(VReg* src1, VReg* src2, CondKind cond);
+IR* vp_ir_jmp();
+void vp_ir_cjmp(VReg* src1, VReg* src2, CondKind cond);
 VReg* vp_ir_binop(IrKind kind, VReg* src1, VReg* src2, VRegSize vsize);
 VReg* vp_ir_unary(IrKind kind, VReg* src, VRegSize vsize);
 

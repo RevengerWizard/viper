@@ -938,7 +938,7 @@ static Operand sema_expr_binop(Expr* e, Type* ret)
             if(type_isnum(lop.ty) && type_isnum(rop.ty))
             {
                 Operand res = opr_binop(e, lop, rop, ret);
-                opr_cast(&res, tyint32);
+                opr_cast(&res, tybool);
                 return res;
             }
             else if(type_isptr(lop.ty) && type_isptr(rop.ty))
@@ -947,12 +947,12 @@ static Operand sema_expr_binop(Expr* e, Type* ret)
                 {
                     vp_err_error(e->loc, "cannot compare pointers of different types");
                 }
-                return opr_rval(tyint32);
+                return opr_rval(tybool);
             }
             else if((type_isnil(lop.ty) && type_isptr(rop.ty)) ||
-                    (type_isnil(rop.ty) && type_isptr(lop.ty)))
+                    (type_isptr(lop.ty) && type_isnil(rop.ty)))
             {
-                return opr_rval(tyint32);
+                return opr_rval(tybool);
             }
             else
             {
@@ -989,25 +989,7 @@ static Operand sema_expr_binop(Expr* e, Type* ret)
         case EX_OR:
             if(type_isscalar(lop.ty) && type_isscalar(rop.ty))
             {
-                if(lop.isconst && rop.isconst)
-                {
-                    opr_cast(&lop, tybool);
-                    opr_cast(&rop, tybool);
-                    bool i;
-                    if(op == EX_AND)
-                    {
-                        i = lop.val.b && rop.val.b;
-                    }
-                    else
-                    {
-                        i = lop.val.b || rop.val.b;
-                    }
-                    return opr_const(tyint32, (Val){.i32 = i});
-                }
-                else
-                {
-                    return opr_rval(tyint32);
-                }
+                return opr_binop(e, lop, rop, ret);
             }
             else
             {

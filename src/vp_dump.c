@@ -47,8 +47,8 @@ static void dump_vreg(VReg* vr)
 }
 
 static const char* const kcond[] = {
-    NULL, NULL, "EQ", "NEQ", "LT", "LE", "GT", "GE",
-    NULL, NULL, "EQ", "NEQ", "LT", "LE", "GT", "GE"};
+    NULL, "MP", "EQ", "NEQ", "LT", "LE", "GT", "GE",
+    NULL, "MP", "EQ", "NEQ", "LT", "LE", "GT", "GE"};
 
 static const char* const kbinop[] = {
     "ADD", "SUB", "MUL", "DIV", "MOD",
@@ -121,6 +121,19 @@ void vp_dump_ir(void)
                 dump_vreg(ir->src2);
                 printf("\n");
                 break;
+            case IR_JMP:
+            {
+                printf("J%s ", kcond[ir->cond & (COND_MASK | COND_UNSIGNED)]);
+                if(ir->cond != COND_ANY && ir->cond != COND_NONE)
+                {
+                    dump_vreg(ir->src1);
+                    printf(", ");
+                    dump_vreg(ir->src2);
+                    printf(", ");
+                }
+                printf(".label\n");
+                break;
+            }
             default:
                 vp_assertX(0, "unknown ir %d", ir->kind);
                 break;

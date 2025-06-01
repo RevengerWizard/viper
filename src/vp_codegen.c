@@ -81,16 +81,11 @@ static VReg* gen_binop(Expr* e)
     return vp_ir_binop(e->kind + (IR_ADD - EX_ADD), lhs, rhs, vp_vsize(e->ty));
 }
 
-static VReg* gen_neg(Expr* e)
+static VReg* gen_unary(Expr* e)
 {
+    vp_assertX(EX_NEG <= e->kind && e->kind <= EX_BNOT, "not a unary operator");
     VReg* src = gen_expr(e->unary);
-    return vp_ir_unary(IR_NEG, src, vp_vsize(e->ty));
-}
-
-static VReg* gen_bnot(Expr* e)
-{
-    VReg* src = gen_expr(e->unary);
-    return vp_ir_unary(IR_BNOT, src, vp_vsize(e->ty));
+    return vp_ir_unary(e->kind + (IR_NEG - EX_NEG), src, vp_vsize(e->ty));
 }
 
 typedef struct CmpExpr
@@ -99,28 +94,66 @@ typedef struct CmpExpr
     VReg* lhs, *rhs;
 } CmpExpr;
 
-static CmpExpr gen_cmp(ExprKind kind, Expr* lhs, Expr* rhs)
+static CmpExpr gen_cmp(Expr* e, Expr* lhs, Expr* rhs)
 {
-    vp_assertX(lhs->ty == rhs->ty, "not equal types");
-    vp_assertX(EX_EQ <= kind && kind <= EX_GE, "cmp expression");
-    CondKind cond = kind + (COND_EQ - EX_EQ);
+    vp_assertX(EX_EQ <= e->kind && e->kind <= EX_GE, "cmp expression");
+    CondKind cond = e->kind + (COND_EQ - EX_EQ);
 
     uint8_t flag = 0;
-    if(type_isunsigned(lhs->ty))
+    if(type_isunsigned(e->ty))
         flag = COND_UNSIGNED;
-    if(type_isflo(lhs->ty))
+    if(type_isflo(e->ty))
         flag |= COND_NUM;
 
     VReg* vlhs = gen_expr(lhs);
     VReg* vrhs = gen_expr(rhs);
-    vp_assertX(type_isscalar(lhs->ty), "complex type");
+    vp_assertX(type_isscalar(e->ty), "complex type");
     return (CmpExpr){.cond = cond | flag, .lhs = vlhs, .rhs = vrhs};
 }
 
 static VReg* gen_cond(Expr* e)
 {
-    CmpExpr cmp = gen_cmp(e->kind, e->binop.lhs, e->binop.rhs);
+    CmpExpr cmp = gen_cmp(e, e->binop.lhs, e->binop.rhs);
     return vp_ir_cond(cmp.lhs, cmp.rhs, cmp.cond)->dst;
+}
+
+static void gen_cond_jmp(Expr* e)
+{
+    ExprKind ck = e->kind;
+    switch(ck)
+    {
+        case EX_EQ:
+        case EX_NOTEQ:
+        case EX_LT:
+        case EX_LE:
+        case EX_GT:
+        case EX_GE:
+        {
+            CmpExpr cmp = gen_cmp(e, e->binop.lhs, e->binop.rhs);
+            vp_ir_cjmp(cmp.lhs, cmp.rhs, cmp.cond);
+            vp_ir_jmp();
+            break;
+        }
+        case EX_AND:
+        {
+            gen_cond_jmp(e->binop.lhs);
+            gen_cond_jmp(e->binop.rhs);
+            break;
+        }
+        case EX_OR:
+        {
+            gen_cond_jmp(e->binop.lhs);
+            gen_cond_jmp(e->binop.rhs);
+            break;
+        }
+        default:
+        {
+            VReg* src1 = gen_expr(e);
+            VReg* src2 = vp_vreg_ku(0, vp_vsize(e->ty));
+            vp_ir_cjmp(src1, src2, COND_NEQ);
+            break;
+        }
+    }
 }
 
 static VReg* gen_ref(Expr* e)
@@ -167,6 +200,16 @@ static VReg* gen_lval(Expr* e)
     return gen_ref(e);
 }
 
+static VReg* gen_logical(Expr* e)
+{
+    gen_cond_jmp(e);
+    VReg* dst = vp_vreg_new(tybool);
+    vp_ir_mov(dst, vp_vreg_ku(true, VRegSize1));
+    vp_ir_jmp();
+    vp_ir_mov(dst, vp_vreg_ku(false, VRegSize1));
+    return dst;
+}
+
 typedef VReg* (*GenExprFn)(Expr*);
 static const GenExprFn table[] = {
     [EX_NIL] = gen_nil,
@@ -178,11 +221,12 @@ static const GenExprFn table[] = {
     [EX_MUL] = gen_binop, [EX_DIV] = gen_binop, [EX_MOD] = gen_binop,
     [EX_BAND] = gen_binop, [EX_BOR] = gen_binop, [EX_BXOR] = gen_binop,
     [EX_LSHIFT] = gen_binop, [EX_RSHIFT] = gen_binop,
-    [EX_NEG] = gen_neg, [EX_BNOT] = gen_bnot,
+    [EX_NEG] = gen_unary, [EX_BNOT] = gen_unary, [EX_NOT] = gen_unary,
     [EX_EQ] = gen_cond, [EX_NOTEQ] = gen_cond,
     [EX_LE] = gen_cond, [EX_LT] = gen_cond,
     [EX_GE] = gen_cond, [EX_GT] = gen_cond,
     [EX_REF] = gen_addr, [EX_DEREF] = gen_deref,
+    [EX_AND] = gen_logical, [EX_OR] = gen_logical,
 };
 
 static VReg* gen_expr(Expr* e)

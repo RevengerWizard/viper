@@ -87,6 +87,7 @@ uint32_t vp_type_sizeof(Type* t)
         case TY_double:
         case TY_ptr:
         case TY_func:
+        case TY_nil:
             return 8;
         case TY_array:
             return vp_type_sizeof(t->p) * t->len;

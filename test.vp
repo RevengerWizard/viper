@@ -4,13 +4,16 @@ fn main() : void
 {
     var a : int16 = 34;
     var b : int16 = 98;
-    var c = a + b;
-    var pi2 : float = 3 * 2.141592;
-    var d = pi2 + c;
-    var y = x;
-    x = true;
+    //var c = a + b;
+    //var pi2 : float = 3 * 2.141592;
+    //var d = pi2 + c;
+    //var y = x;
+    //x = true;
 
     var p : int16* = &a;
     *p = 3;
-    var p1 : int16 = *p;
+
+    var e = p != nil;
+    //var d = a != 0;
+    var d = a and b;
 }

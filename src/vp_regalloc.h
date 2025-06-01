@@ -25,11 +25,23 @@ VReg* vp_vreg_ku(uint64_t u64, VRegSize vsize);
 VReg* vp_vreg_ki(int64_t i64, VRegSize vsize);
 VReg* vp_vreg_kf(double n, VRegSize vsize);
 
+static inline uint8_t vp_vflag(Type* ty)
+{
+    if(type_isflo(ty))
+        return VRF_NUM;
+    return 0;
+}
+
 /* Convert type size to virtual register size */
 static inline VRegSize vp_vsize(Type* ty)
 {
     uint32_t size = vp_type_sizeof(ty);
     return vp_msb(size);
+}
+
+static inline VReg* vp_vreg_new(Type* ty)
+{
+    return vp_regalloc_spawn(vp_vsize(ty), vp_vflag(ty));
 }
 
 #endif

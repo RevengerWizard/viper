@@ -74,6 +74,24 @@ IR* vp_ir_cond(VReg* src1, VReg* src2, CondKind cond)
     return ir;
 }
 
+IR* vp_ir_jmp()
+{
+    IR* ir = ir_new(IR_JMP);
+    ir->cond = COND_ANY;
+    return ir;
+}
+
+/* Conditional jump */
+void vp_ir_cjmp(VReg* src1, VReg* src2, CondKind cond)
+{
+    if((cond & COND_MASK) == COND_NONE)
+        return;
+    IR* ir = ir_new(IR_JMP);
+    ir->src1 = src1;
+    ir->src2 = src2;
+    ir->cond = cond;
+}
+
 VReg* vp_ir_binop(IrKind kind, VReg* src1, VReg* src2, VRegSize vsize)
 {
     VReg* dst = vp_regalloc_spawn(vsize, src1->flag);
