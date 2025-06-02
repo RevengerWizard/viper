@@ -55,88 +55,117 @@ static const char* const kbinop[] = {
     "BAND", "BOR", "BXOR", "LSHIFT", "RSHIFT"
 };
 
-void vp_dump_ir(void)
+static void dump_ir(IR* ir)
 {
-    for(uint32_t i = 0; i < vec_len(V->irs); i++)
+    switch(ir->kind)
     {
-        IR* ir = V->irs[i];
-        switch(ir->kind)
+        case IR_ADD:
+        case IR_SUB:
+        case IR_MUL:
+        case IR_DIV:
+        case IR_MOD:
+        case IR_BAND:
+        case IR_BOR:
+        case IR_BXOR:
+        case IR_LSHIFT:
+        case IR_RSHIFT:
+            printf("%s ", kbinop[ir->kind - IR_ADD]);
+            dump_vreg(ir->dst);
+            printf(", ");
+            dump_vreg(ir->src1);
+            printf(", ");
+            dump_vreg(ir->src2);
+            printf("\n");
+            break;
+        case IR_BOFS:
+            printf("BOFS ");
+            dump_vreg(ir->dst);
+            printf("\n");
+            break;
+        case IR_IOFS:
+            printf("IOFS ");
+            dump_vreg(ir->dst);
+            printf(", &%s", str_data(ir->label));
+            printf("\n");
+            break;
+        case IR_STORE:
+            printf("STORE [");
+            dump_vreg(ir->src2);
+            printf("], ");
+            dump_vreg(ir->src1);
+            printf("\n");
+            break;
+        case IR_LOAD:
+            printf("LOAD ");
+            dump_vreg(ir->dst);
+            printf(", [");
+            dump_vreg(ir->src1);
+            printf("]\n");
+            break;
+        case IR_MOV:
+            printf("MOV ");
+            dump_vreg(ir->dst);
+            printf(", ");
+            dump_vreg(ir->src1);
+            printf("\n");
+            break;
+        case IR_COND:
+            printf("%s ", kcond[ir->cond & (COND_MASK | COND_UNSIGNED)]);
+            dump_vreg(ir->dst);
+            printf(", ");
+            dump_vreg(ir->src1);
+            printf(", ");
+            dump_vreg(ir->src2);
+            printf("\n");
+            break;
+        case IR_JMP:
         {
-            case IR_ADD:
-            case IR_SUB:
-            case IR_MUL:
-            case IR_DIV:
-            case IR_MOD:
-            case IR_BAND:
-            case IR_BOR:
-            case IR_BXOR:
-            case IR_LSHIFT:
-            case IR_RSHIFT:
-                printf("%s ", kbinop[ir->kind - IR_ADD]);
-                dump_vreg(ir->dst);
-                printf(", ");
-                dump_vreg(ir->src1);
-                printf(", ");
-                dump_vreg(ir->src2);
-                printf("\n");
-                break;
-            case IR_BOFS:
-                printf("BOFS ");
-                dump_vreg(ir->dst);
-                printf("\n");
-                break;
-            case IR_IOFS:
-                printf("IOFS ");
-                dump_vreg(ir->dst);
-                printf(", &%s", str_data(ir->label));
-                printf("\n");
-                break;
-            case IR_STORE:
-                printf("STORE [");
-                dump_vreg(ir->src2);
-                printf("], ");
-                dump_vreg(ir->src1);
-                printf("\n");
-                break;
-            case IR_LOAD:
-                printf("LOAD ");
-                dump_vreg(ir->dst);
-                printf(", [");
-                dump_vreg(ir->src1);
-                printf("]\n");
-                break;
-            case IR_MOV:
-                printf("MOV ");
-                dump_vreg(ir->dst);
-                printf(", ");
-                dump_vreg(ir->src1);
-                printf("\n");
-                break;
-            case IR_COND:
-                printf("%s ", kcond[ir->cond & (COND_MASK | COND_UNSIGNED)]);
-                dump_vreg(ir->dst);
-                printf(", ");
-                dump_vreg(ir->src1);
-                printf(", ");
-                dump_vreg(ir->src2);
-                printf("\n");
-                break;
-            case IR_JMP:
+            printf("J%s ", kcond[ir->jmp.cond & (COND_MASK | COND_UNSIGNED)]);
+            if(ir->jmp.cond != COND_ANY && ir->jmp.cond != COND_NONE)
             {
-                printf("J%s ", kcond[ir->cond & (COND_MASK | COND_UNSIGNED)]);
-                if(ir->cond != COND_ANY && ir->cond != COND_NONE)
-                {
-                    dump_vreg(ir->src1);
-                    printf(", ");
-                    dump_vreg(ir->src2);
-                    printf(", ");
-                }
-                printf(".label\n");
-                break;
+                dump_vreg(ir->src1);
+                printf(", ");
+                dump_vreg(ir->src2);
+                printf(", ");
             }
-            default:
-                vp_assertX(0, "unknown ir %d", ir->kind);
-                break;
+            printf("%.*s\n", ir->jmp.bb->label->len, str_data(ir->jmp.bb->label));
+            break;
+        }
+        default:
+            vp_assertX(0, "unknown ir %d", ir->kind);
+            break;
+    }
+}
+
+void vp_dump_bb(Decl* d)
+{
+    for(uint32_t i = 0; i < vec_len(d->fn.scopes); i++)
+    {
+        Scope* scope = d->fn.scopes[i];
+        if(scope->vars == NULL)
+            continue;
+        for(uint32_t j = 0; j < vec_len(scope->vars); j++)
+        {
+            VarInfo* vi = scope->vars[j];
+            VReg* vreg = vi->vreg;
+            if(vreg == NULL)
+                continue;
+            printf("v%d (flag=%x): %.*s : ", vreg->virt, vreg->flag, vi->name->len, str_data(vi->name));
+            vp_dump_type(vi->type);
+            printf("\n");
+        }
+    }
+
+    BB** bbs = d->fn.bbs;
+    printf("BB: #%d\n", vec_len(bbs));
+    for(uint32_t i = 0; i < vec_len(bbs); i++)
+    {
+        BB* bb = bbs[i];
+        printf("%.*s:\n", bb->label->len, str_data(bb->label));
+        for(uint32_t j = 0; j < vec_len(bb->irs); j++)
+        {
+            IR* ir = bb->irs[j];
+            dump_ir(ir);
         }
     }
 }

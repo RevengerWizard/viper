@@ -6,6 +6,7 @@
 #ifndef _VP_AST_H
 #define _VP_AST_H
 
+#include "vp_ir.h"
 #include "vp_lex.h"
 #include "vp_str.h"
 #include "vp_type.h"
@@ -296,6 +297,7 @@ typedef struct Decl
             Param* params;
             Stmt* body;
             Scope** scopes;
+            BB** bbs;
         } fn;
         struct
         {

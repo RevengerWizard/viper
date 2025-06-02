@@ -104,8 +104,21 @@ typedef struct IR
     {
         CondKind cond;
         Str* label;
+        struct
+        {
+            struct BB* bb;
+            CondKind cond; 
+        } jmp;
     };
 } IR;
+
+/* Basic blocks */
+typedef struct BB
+{
+    struct BB* next;
+    Str* label;
+    IR** irs;
+} BB;
 
 /* IR instructions */
 IR* vp_ir_bofs();
@@ -115,13 +128,19 @@ IR* vp_ir_store(VReg* dst, VReg* src);
 IR* vp_ir_load(VReg* src, VRegSize vsize);
 IR* vp_ir_ret(VReg* src);
 IR* vp_ir_cond(VReg* src1, VReg* src2, CondKind cond);
-IR* vp_ir_jmp();
-void vp_ir_cjmp(VReg* src1, VReg* src2, CondKind cond);
+IR* vp_ir_jmp(BB* bb);
+void vp_ir_cjmp(VReg* src1, VReg* src2, CondKind cond, BB* bb);
 VReg* vp_ir_binop(IrKind kind, VReg* src1, VReg* src2, VRegSize vsize);
 VReg* vp_ir_unary(IrKind kind, VReg* src, VRegSize vsize);
 
 /* Conditions */
 CondKind vp_cond_swap(CondKind cond);
 CondKind vp_cond_invert(CondKind cond);
+
+/* Basic blocks */
+BB* vp_bb_new();
+void vp_bb_setcurr(BB* bb);
+
+Str* vp_label_new();
 
 #endif

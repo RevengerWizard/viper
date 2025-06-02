@@ -989,7 +989,9 @@ static Operand sema_expr_binop(Expr* e, Type* ret)
         case EX_OR:
             if(type_isscalar(lop.ty) && type_isscalar(rop.ty))
             {
-                return opr_binop(e, lop, rop, ret);
+                Operand res = opr_binop(e, lop, rop, ret);
+                res.ty = tybool;
+                return res;
             }
             else
             {
@@ -1210,7 +1212,7 @@ static Operand sema_expr_field(Expr* e)
             return lop.islval ? opr_lval(field->ty) : opr_rval(field->ty);
         }
     }
-    vp_err_error(e->loc, "no field named '%s'", e->field.name);
+    vp_err_error(e->loc, "no field named '%s'", str_data(e->field.name));
     return (Operand){};
 }
 

@@ -263,6 +263,7 @@ Decl* vp_decl_fn(SrcLoc loc, TypeSpec* ret, Str* name, Param* params, Stmt* body
     d->fn.params = params;
     d->fn.body = body;
     d->fn.scopes = NULL;
+    d->fn.bbs = NULL;
     return d;
 }
 

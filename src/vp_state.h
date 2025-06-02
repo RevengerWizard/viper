@@ -32,8 +32,9 @@ typedef struct VpState
     Tab globtab;
     struct Scope* globscope;
     struct Scope* currscope;
+    BB* bb;
+    struct Decl* currfn;
     RegAlloc* ra;
-    IR** irs;
     Arena irarena;
     FILE* txtfile;
     SBuf tmpbuf;

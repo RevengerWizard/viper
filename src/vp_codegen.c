@@ -88,6 +88,12 @@ static VReg* gen_unary(Expr* e)
     return vp_ir_unary(e->kind + (IR_NEG - EX_NEG), src, vp_vsize(e->ty));
 }
 
+static VReg* gen_field(Expr* e)
+{
+    VReg* base = gen_expr(e->field.expr);
+    return NULL;
+}
+
 typedef struct CmpExpr
 {
     CondKind cond;
@@ -117,40 +123,46 @@ static VReg* gen_cond(Expr* e)
     return vp_ir_cond(cmp.lhs, cmp.rhs, cmp.cond)->dst;
 }
 
-static void gen_cond_jmp(Expr* e)
+static void gen_cond_jmp(Expr* e, BB* tbb, BB* fbb)
 {
     ExprKind ck = e->kind;
     switch(ck)
     {
-        case EX_EQ:
-        case EX_NOTEQ:
-        case EX_LT:
-        case EX_LE:
-        case EX_GT:
-        case EX_GE:
+        case EX_EQ: case EX_NOTEQ:
+        case EX_LT: case EX_LE:
+        case EX_GT: case EX_GE:
         {
             CmpExpr cmp = gen_cmp(e, e->binop.lhs, e->binop.rhs);
-            vp_ir_cjmp(cmp.lhs, cmp.rhs, cmp.cond);
-            vp_ir_jmp();
+            vp_ir_cjmp(cmp.lhs, cmp.rhs, cmp.cond, tbb);
+            BB* bb1 = vp_bb_new();
+            vp_bb_setcurr(bb1);
+            vp_ir_jmp(fbb);
             break;
         }
         case EX_AND:
         {
-            gen_cond_jmp(e->binop.lhs);
-            gen_cond_jmp(e->binop.rhs);
+            BB* bb1 = vp_bb_new();
+            gen_cond_jmp(e->binop.lhs, bb1, fbb);
+            vp_bb_setcurr(bb1);
+            gen_cond_jmp(e->binop.rhs, tbb, fbb);
             break;
         }
         case EX_OR:
         {
-            gen_cond_jmp(e->binop.lhs);
-            gen_cond_jmp(e->binop.rhs);
+            BB* bb1 = vp_bb_new();
+            gen_cond_jmp(e->binop.lhs, tbb, bb1);
+            vp_bb_setcurr(bb1);
+            gen_cond_jmp(e->binop.rhs, tbb, fbb);
             break;
         }
         default:
         {
             VReg* src1 = gen_expr(e);
             VReg* src2 = vp_vreg_ku(0, vp_vsize(e->ty));
-            vp_ir_cjmp(src1, src2, COND_NEQ);
+            vp_ir_cjmp(src1, src2, COND_NEQ, tbb);
+            BB* bb1 = vp_bb_new();
+            vp_bb_setcurr(bb1);
+            vp_ir_jmp(fbb);
             break;
         }
     }
@@ -202,11 +214,17 @@ static VReg* gen_lval(Expr* e)
 
 static VReg* gen_logical(Expr* e)
 {
-    gen_cond_jmp(e);
+    BB* tbb = vp_bb_new();  /* True branch */
+    BB* fbb = vp_bb_new();  /* False branch */
+    BB* nbb = vp_bb_new();  /* Continuation block */
+    gen_cond_jmp(e, tbb, fbb);
+    vp_bb_setcurr(tbb);
     VReg* dst = vp_vreg_new(tybool);
     vp_ir_mov(dst, vp_vreg_ku(true, VRegSize1));
-    vp_ir_jmp();
+    vp_ir_jmp(nbb);
+    vp_bb_setcurr(fbb);
     vp_ir_mov(dst, vp_vreg_ku(false, VRegSize1));
+    vp_bb_setcurr(nbb);
     return dst;
 }
 
@@ -227,6 +245,7 @@ static const GenExprFn table[] = {
     [EX_GE] = gen_cond, [EX_GT] = gen_cond,
     [EX_REF] = gen_addr, [EX_DEREF] = gen_deref,
     [EX_AND] = gen_logical, [EX_OR] = gen_logical,
+    [EX_FIELD] = gen_field,
 };
 
 static VReg* gen_expr(Expr* e)
@@ -288,6 +307,9 @@ static void gen_stmt(Stmt* st)
 static void gen_fn(Decl* d)
 {
     V->ra = vp_regalloc_new();
+    V->currfn = d;
+    BB* bb = vp_bb_new();
+    vp_bb_setcurr(bb);
 
     for(uint32_t i = 0; i < vec_len(d->fn.scopes); i++)
     {
@@ -297,7 +319,6 @@ static void gen_fn(Decl* d)
         for(uint32_t j = 0; j < vec_len(scope->vars); j++)
         {
             VarInfo* vi = scope->vars[j];
-            //printf("var %s\n", str_data(vi->name));
             VReg* vreg = vp_regalloc_spawn(vp_vsize(vi->type), 0);
             vi->vreg = vreg;
         }
@@ -307,6 +328,8 @@ static void gen_fn(Decl* d)
     {
         gen_stmt(d->fn.body->block[i]);
     }
+
+    vp_dump_bb(d);
 }
 
 void vp_codegen(Decl** decls)
@@ -319,6 +342,4 @@ void vp_codegen(Decl** decls)
         if(d->kind == DECL_FN)
             gen_fn(d);
     }
-
-    vp_dump_ir();
 }
