@@ -1,19 +1,49 @@
-var x = false;
+struct Foo
+{
+    a : int32;
+    b : bool;
+    c : double;
+}
+
+/*var x = false;
+
+fn add(a : int32, b : int32) : int32
+{
+    return a + b;
+}*/
 
 fn main() : void
 {
-    var a : int16 = 34;
-    var b : int16 = 98;
+    //var f = Foo {a = 123, b = false, c = 23.3434};
+    //var f : Foo* = &{};
+    //*cast(int32*, f + 0) = 123;
+    //*cast(bool*, f + 4) = 0;
+    //*cast(double*, f + 8) = 23.3434;
+
+    //var fa = f.a;
+    //var fb = f.b;
+    //var fc = f.c;
+
+    var f2 : Foo[3] = {{a = 34, b = false, c = 1.34343}, {a = 0, b = true, c = 92.2323}, {a = -2323, b = false, c = -0.2323}};
+    f2[2];
+
+    //var res = add(1, 2);
+
+    //var f2 : Foo[3] = {};
+    //f2[0] = {a = 3, b = true, c = 2.23};
+
+    //var a : int16 = 34;
+    //var b : int16 = 98;
     //var c = a + b;
     //var pi2 : float = 3 * 2.141592;
     //var d = pi2 + c;
     //var y = x;
     //x = true;
 
-    var p : int16* = &a;
-    *p = 3;
+    //var p : int16* = &a;
+    //*p = 3;
 
-    var e = p != nil;
+    //var e = p != nil;
     //var d = a != 0;
-    var d = a and b;
+    //var d = a and b;
 }

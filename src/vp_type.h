@@ -175,5 +175,6 @@ Type* vp_type_func(Type* ret, Type** params);
 void vp_type_struct(Str* name, Type* ty, TypeField* fields);
 void vp_type_union(Str* name, Type* ty, TypeField* fields);
 uint32_t vp_type_fieldidx(Type* ty, Str* name);
+uint32_t vp_type_offset(Type* ty, Str* name);
 
 #endif

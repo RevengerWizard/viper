@@ -6,6 +6,7 @@
 #include "vp_var.h"
 #include "vp_mem.h"
 #include "vp_state.h"
+#include "vp_str.h"
 #include "vp_tab.h"
 #include "vp_type.h"
 #include "vp_vec.h"
@@ -61,6 +62,7 @@ Scope* vp_scope_begin()
 
 void vp_scope_end()
 {
+    vp_assertX(!vp_scope_isglob(V->currscope), "broken scope");
     V->currscope = V->currscope->parent;
 }
 

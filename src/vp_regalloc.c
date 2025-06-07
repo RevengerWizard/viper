@@ -29,6 +29,7 @@ VReg* vp_regalloc_spawn(VRegSize vsize, uint8_t vflag)
         vr->vreg = vr;
         vr->virt = vec_len(ra->vregs);
         vr->phys = 0;
+        vr->fi.ofs = 0;
         vec_push(ra->vregs, vr);
     }
     else

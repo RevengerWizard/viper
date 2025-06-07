@@ -19,6 +19,7 @@ typedef struct VarInfo
     Type* type;
     uint8_t storage;
     VReg* vreg;
+    FrameInfo* fi;
 } VarInfo;
 
 typedef struct Scope

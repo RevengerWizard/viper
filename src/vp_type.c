@@ -421,15 +421,19 @@ void vp_type_struct(Str* name, Type* ty, TypeField* fields)
     ty->kind = TY_struct;
     ty->st.name = name;
     ty->st.fields = fields;
+    ty->st.align = 0;
     ty->st.size = 0;
     for(TypeField* it = fields; it != vec_end(fields); it++)
     {
-        vp_assertX(IS_POW2(vp_type_alignof(it->ty)), "power of 2");
+        uint32_t align = vp_type_alignof(it->ty);
+        vp_assertX(IS_POW2(align), "power of 2");
+        ty->st.size = ALIGN_UP(ty->st.size, align);
         it->offset = ty->st.size;
-        ty->st.size = vp_type_sizeof(it->ty) + ALIGN_UP(ty->st.size, vp_type_alignof(it->ty));
-        ty->st.align = MAX(ty->st.align, vp_type_alignof(it->ty));
+        ty->st.size += vp_type_sizeof(it->ty);
+        ty->st.align = MAX(ty->st.align, align);
     }
     ty->st.fields = fields;
+    ty->st.size = ALIGN_UP(ty->st.size, ty->st.align);
 }
 
 void vp_type_union(Str* name, Type* ty, TypeField* fields)
@@ -458,4 +462,17 @@ uint32_t vp_type_fieldidx(Type* ty, Str* name)
             return i;
     }
     return (uint32_t)-1;
+}
+
+/* Get offset of a field already present */
+uint32_t vp_type_offset(Type* ty, Str* name)
+{
+    vp_assertX(ty->kind == TY_struct || ty->kind == TY_union, "struct/union");
+    for(uint32_t i = 0; i < vec_len(ty->st.fields); i++)
+    {
+        if(ty->st.fields[i].name == name)
+            return ty->st.fields[i].offset;
+    }
+    vp_assertX(0, "uknown field '%s'", str_data(name));
+    return 0;
 }

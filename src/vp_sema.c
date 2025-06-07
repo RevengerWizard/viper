@@ -716,6 +716,7 @@ static void opr_fold(SrcLoc loc, Expr** e, Operand opr)
                 *e = vp_expr_flit(loc, opr.val.f);
             }
         }
+        (*e)->ty = ty;
     }
 }
 
@@ -857,7 +858,7 @@ static Operand sema_expr_binop(Expr* e, Type* ret)
                 sym_complete(lop.ty->p);
                 return opr_rval(lop.ty);
             }
-            else if(type_isptr(rop.ty) && type_isint(lop.ty))
+            else if(type_isint(lop.ty) && type_isptr(rop.ty))
             {
                 sym_complete(rop.ty->p);
                 return opr_rval(rop.ty);
@@ -1013,7 +1014,9 @@ static Operand sema_expr_name(Expr* e)
     {
         vp_err_error(e->loc, "unresolved name '%s'", str_data(e->name));
     }
-    e->scope = V->currscope;
+    Scope* scope;
+    vp_scope_find(V->currscope, e->name, &scope);
+    e->scope = scope;
     if(sym->kind == SYM_VAR)
         return opr_lval(sym->type);
     else if(sym->kind == SYM_FN)
@@ -1173,6 +1176,7 @@ static Operand sema_expr_call(Expr* e)
         Operand arg = sema_expr_rval(e->call.args[i], typaram);
         opr_conv(e->loc, &arg, typaram);
     }
+    e->ty = fn.ty->fn.ret;
     return opr_rval(fn.ty->fn.ret);
 }
 
@@ -1530,6 +1534,7 @@ static Type* sema_typedef(Decl* d)
 static Type* sema_fn(Decl* d)
 {
     vp_assertX(d->kind == DECL_FN, "fn declaration");
+    
     Type** params = NULL;
     for(uint32_t i = 0; i < vec_len(d->fn.params); i++)
     {
@@ -1558,8 +1563,8 @@ static void sema_block(Stmt** stmts, Type* ret)
 {
     Scope* scope = vp_scope_begin();
     vec_push(currfn->fn.scopes, scope);
-
     uint32_t len = sym_enter();
+
     for(uint32_t i = 0; i < vec_len(stmts); i++)
     {
         Stmt* st = stmts[i];
@@ -1643,6 +1648,9 @@ static void sema_fn_body(Sym* sym)
     if(!d->fn.body)
         return;
 
+    /* Add function name to global scope */
+    vp_scope_add(V->globscope, d->name, sym->type);
+
     Scope* scope = vp_scope_begin();
     vec_push(d->fn.scopes, scope);
     currfn = d;
@@ -1651,7 +1659,10 @@ static void sema_fn_body(Sym* sym)
     for(uint32_t i = 0; i < vec_len(d->fn.params); i++)
     {
         Param* param = &d->fn.params[i];
-        sym_add(param->name, sema_typespec(param->spec));
+        Type* pty = sema_typespec(param->spec);
+        sym_add(param->name, pty);
+
+        vp_scope_add(V->currscope, param->name, pty);
     }
     Type* ret = sema_typespec(d->fn.ret);
     for(uint32_t i = 0; i < vec_len(d->fn.body->block); i++)

@@ -11,6 +11,13 @@
 #include "vp_vec.h"
 #include "vp_regalloc.h"
 
+FrameInfo* vp_frameinfo_new()
+{
+    FrameInfo* fi = vp_mem_alloc(sizeof(*fi));
+    fi->ofs = 0;
+    return fi;
+}
+
 static IR* ir_new(IrKind kind)
 {
     IR* ir = vp_arena_alloc(&V->irarena, sizeof(*ir));
@@ -23,10 +30,13 @@ static IR* ir_new(IrKind kind)
     return ir;
 }
 
-IR* vp_ir_bofs()
+IR* vp_ir_bofs(FrameInfo* fi)
 {
+    vp_assertX(fi, "no frame info");
     IR* ir = ir_new(IR_BOFS);
     ir->dst = vp_regalloc_spawn(VRegSize8, 0);
+    ir->bofs.fi = fi;
+    ir->bofs.ofs = 0;
     return ir;
 }
 
@@ -99,9 +109,44 @@ void vp_ir_cjmp(VReg* src1, VReg* src2, CondKind cond, BB* bb)
     ir->jmp.cond = cond;
 }
 
+/* Zero memory */
+IR* vp_ir_memzero(VReg* dst, uint32_t size)
+{
+    IR* ir = ir_new(IR_MEMZERO);
+    ir->dst = dst;
+    ir->mem.size = size;
+    return ir;
+}
+
+IR* vp_ir_memcpy(VReg* dst, VReg* src, uint32_t size)
+{
+    IR* ir = ir_new(IR_MEMCPY);
+    ir->dst = dst;
+    ir->src1 = src;
+    ir->mem.size = size;
+    return ir;
+}
+
+IR* vp_ir_call(IRCallInfo* ci, VReg* dst, VReg* freg)
+{
+    IR* ir = ir_new(IR_CALL);
+    ir->call = ci;
+    ir->dst = dst;
+    ir->src1 = freg;
+    return ir;
+}
+
+IR* vp_ir_cast(VReg* src, VRegSize dstsize)
+{
+    IR* ir = ir_new(IR_CAST);
+    ir->src1 = src;
+    ir->dst = vp_regalloc_spawn(dstsize, 0);
+    return ir;
+}
+
 VReg* vp_ir_binop(IrKind kind, VReg* src1, VReg* src2, VRegSize vsize)
 {
-    VReg* dst = vp_regalloc_spawn(vsize, src1->flag);
+    VReg* dst = vp_regalloc_spawn(vsize, 0);
     IR* ir = ir_new(kind);
     ir->dst = dst;
     ir->src1 = src1;
@@ -111,11 +156,21 @@ VReg* vp_ir_binop(IrKind kind, VReg* src1, VReg* src2, VRegSize vsize)
 
 VReg* vp_ir_unary(IrKind kind, VReg* src, VRegSize vsize)
 {
-    VReg* dst = vp_regalloc_spawn(vsize, src->flag);
+    VReg* dst = vp_regalloc_spawn(vsize, 0);
     IR* ir = ir_new(kind);
     ir->src1 = src;
     ir->dst = dst;
     return dst;
+}
+
+/* Create a new call info */
+IRCallInfo* vp_ircallinfo_new(VReg** args, uint32_t argnum, Str* label)
+{
+    IRCallInfo* ci = vp_mem_calloc(1, sizeof(*ci));
+    ci->argnum = argnum;
+    ci->args = args;
+    ci->label = label;
+    return ci;
 }
 
 CondKind vp_cond_swap(CondKind cond)

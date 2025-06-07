@@ -32,6 +32,7 @@ static void* ast_alloc(uint32_t size)
 static Expr* expr_new(ExprKind kind, SrcLoc loc)
 {
     Expr* e = ast_alloc(sizeof(*e));
+    e->ty = NULL;
     e->kind = kind;
     e->loc = loc;
     return e;

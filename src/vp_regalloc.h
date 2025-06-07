@@ -9,6 +9,13 @@
 #include "vp_ir.h"
 #include "vp_type.h"
 
+/* Liveness intervals */
+typedef struct LiveInterval
+{
+    uint32_t start; /* First use position */
+    uint32_t end;   /* Last use position */
+} LiveInterval;
+
 /* Register allocator state */
 typedef struct RegAlloc
 {
@@ -35,6 +42,7 @@ static inline uint8_t vp_vflag(Type* ty)
 /* Convert type size to virtual register size */
 static inline VRegSize vp_vsize(Type* ty)
 {
+    vp_assertX(type_isscalar(ty), "not a primitive type");
     uint32_t size = vp_type_sizeof(ty);
     return vp_msb(size);
 }

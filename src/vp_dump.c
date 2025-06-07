@@ -31,14 +31,22 @@ static void dump_vreg(VReg* vr)
         if(vr->flag & VRF_NUM)
         {
             if(vr->vsize == VRegSize4)
-                printf("%ff", vr->n);
+            {
+                printf("%f", vr->n);
+            }
             else
-                printf("%.14gf", vr->n);
+            {
+                printf("%.14g", vr->n);
+            }
         }
         else if(vr->flag & VRF_INT)
-            printf("#%lli", vr->i64);
+        {
+            printf("%lli", vr->i64);
+        }
         else
-            printf("#%llu", vr->u64);
+        {
+            printf("%llu", vr->u64);
+        }
     }
     else
     {
@@ -50,13 +58,43 @@ static const char* const kcond[] = {
     NULL, "MP", "EQ", "NEQ", "LT", "LE", "GT", "GE",
     NULL, "MP", "EQ", "NEQ", "LT", "LE", "GT", "GE"};
 
-static const char* const kbinop[] = {
+static const char* const kcond2[] = {
+    NULL, NULL, "==", "!=", "<", "<=", ">", ">=",
+    NULL, NULL, "==", "!=", "<", "<=", ">", ">="
+};
+
+static const char* const kbinop2[] = {
+    "+", "-", "*", "/", "%",
+    "&", "|", "^", "<<", ">>"
+};
+
+static const char* const kirs[] = {
+    "BOFS", "IOFS",
+    "MOV", "STORE", "LOAD",
+    "RET",
+    "COND",
+    "JMP",
+    "MEMZERO",
+    "MEMCPY",
+    "CALL",
+    "CAST",
     "ADD", "SUB", "MUL", "DIV", "MOD",
-    "BAND", "BOR", "BXOR", "LSHIFT", "RSHIFT"
+    "BAND", "BOR", "BXOR", "LSHIFT", "RSHIFT",
+    "NEG", "NOT", "BNOT"
 };
 
 static void dump_ir(IR* ir)
 {
+    switch(ir->kind)
+    {
+        case IR_JMP:
+            printf("J%s\t", kcond[ir->jmp.cond & (COND_MASK | COND_UNSIGNED)]);
+            break;
+        default:
+            printf("%s\t", kirs[ir->kind]);
+            break;
+    }
+
     switch(ir->kind)
     {
         case IR_ADD:
@@ -69,72 +107,115 @@ static void dump_ir(IR* ir)
         case IR_BXOR:
         case IR_LSHIFT:
         case IR_RSHIFT:
-            printf("%s ", kbinop[ir->kind - IR_ADD]);
             dump_vreg(ir->dst);
-            printf(", ");
+            printf(" = ");
             dump_vreg(ir->src1);
-            printf(", ");
+            printf(" %s ", kbinop2[ir->kind - IR_ADD]);
             dump_vreg(ir->src2);
-            printf("\n");
             break;
         case IR_BOFS:
-            printf("BOFS ");
             dump_vreg(ir->dst);
-            printf("\n");
+            printf(" = frame_addr");
             break;
         case IR_IOFS:
-            printf("IOFS ");
             dump_vreg(ir->dst);
-            printf(", &%s", str_data(ir->label));
-            printf("\n");
+            printf(" = &%s", str_data(ir->label));
             break;
         case IR_STORE:
-            printf("STORE [");
+            printf("*");
             dump_vreg(ir->src2);
-            printf("], ");
+            printf(" = ");
             dump_vreg(ir->src1);
-            printf("\n");
             break;
         case IR_LOAD:
-            printf("LOAD ");
             dump_vreg(ir->dst);
-            printf(", [");
+            printf(" = *");
             dump_vreg(ir->src1);
-            printf("]\n");
             break;
         case IR_MOV:
-            printf("MOV ");
             dump_vreg(ir->dst);
-            printf(", ");
+            printf(" = ");
             dump_vreg(ir->src1);
-            printf("\n");
             break;
         case IR_COND:
-            printf("%s ", kcond[ir->cond & (COND_MASK | COND_UNSIGNED)]);
             dump_vreg(ir->dst);
-            printf(", ");
+            printf(" = ");
             dump_vreg(ir->src1);
-            printf(", ");
+            printf(" %s ", kcond2[ir->cond & (COND_MASK | COND_UNSIGNED)]);
             dump_vreg(ir->src2);
-            printf("\n");
             break;
         case IR_JMP:
         {
-            printf("J%s ", kcond[ir->jmp.cond & (COND_MASK | COND_UNSIGNED)]);
             if(ir->jmp.cond != COND_ANY && ir->jmp.cond != COND_NONE)
             {
+                printf("if ");
                 dump_vreg(ir->src1);
-                printf(", ");
+                printf(" %s ", kcond2[ir->jmp.cond & (COND_MASK | COND_UNSIGNED)]);
                 dump_vreg(ir->src2);
-                printf(", ");
+                printf(" goto %.*s", ir->jmp.bb->label->len, str_data(ir->jmp.bb->label));
             }
-            printf("%.*s\n", ir->jmp.bb->label->len, str_data(ir->jmp.bb->label));
+            else
+            {
+                printf("goto %.*s", 
+                    ir->jmp.bb->label->len, str_data(ir->jmp.bb->label));
+            }
+            printf("\n");
+            break;
+        }
+        case IR_MEMZERO:
+        {
+            printf("");
+            dump_vreg(ir->dst);
+            printf(", %d", ir->mem.size);
+            break;
+        }
+        case IR_MEMCPY:
+        {
+            dump_vreg(ir->dst);
+            printf(", ");
+            dump_vreg(ir->src1);
+            printf(", %d", ir->mem.size);
+            break;
+        }
+        case IR_CALL:
+        {
+            if(ir->dst)
+            {
+                dump_vreg(ir->dst);
+                printf(" = ");
+            }
+            if(ir->call->label)
+            {
+                printf("%.*s(args=%d)", ir->call->label->len, str_data(ir->call->label), ir->call->argnum);
+            }
+            else
+            {
+                printf("*");
+                dump_vreg(ir->src1);
+                printf("(args=%d)", ir->call->argnum);
+            }
+            break;
+        }
+        case IR_RET:
+        {
+            if(ir->src1)
+            {
+                dump_vreg(ir->src1);
+            }
+            break;
+        }
+        case IR_CAST:
+        {
+            dump_vreg(ir->dst);
+            printf(" = ");
+            dump_vreg(ir->src1);
             break;
         }
         default:
             vp_assertX(0, "unknown ir %d", ir->kind);
             break;
     }
+    putchar('\n');
 }
 
 void vp_dump_bb(Decl* d)
@@ -545,6 +626,14 @@ static void dump_ast_expr(Expr* e)
         {
             dump_ast_expr(e->field.expr);
             printf(".%s", str_data(e->field.name));
+            break;
+        }
+        case EX_IDX:
+        {
+            dump_ast_expr(e->idx.expr);
+            printf("[");
+            dump_ast_expr(e->idx.index);
+            printf("]");
             break;
         }
         default:
