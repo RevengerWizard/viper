@@ -68,21 +68,6 @@ static const char* const kbinop2[] = {
     "&", "|", "^", "<<", ">>"
 };
 
-static const char* const kirs[] = {
-    "BOFS", "IOFS",
-    "MOV", "STORE", "LOAD",
-    "RET",
-    "COND",
-    "JMP",
-    "MEMZERO",
-    "MEMCPY",
-    "CALL",
-    "CAST",
-    "ADD", "SUB", "MUL", "DIV", "MOD",
-    "BAND", "BOR", "BXOR", "LSHIFT", "RSHIFT",
-    "NEG", "NOT", "BNOT"
-};
-
 static void dump_ir(IR* ir)
 {
     switch(ir->kind)
@@ -91,35 +76,28 @@ static void dump_ir(IR* ir)
             printf("J%s\t", kcond[ir->jmp.cond & (COND_MASK | COND_UNSIGNED)]);
             break;
         default:
-            printf("%s\t", kirs[ir->kind]);
+            printf("%s\t", vp_ir_name[ir->kind]);
             break;
     }
 
     switch(ir->kind)
     {
-        case IR_ADD:
-        case IR_SUB:
-        case IR_MUL:
-        case IR_DIV:
-        case IR_MOD:
-        case IR_BAND:
-        case IR_BOR:
-        case IR_BXOR:
-        case IR_LSHIFT:
-        case IR_RSHIFT:
-            dump_vreg(ir->dst);
-            printf(" = ");
-            dump_vreg(ir->src1);
-            printf(" %s ", kbinop2[ir->kind - IR_ADD]);
-            dump_vreg(ir->src2);
-            break;
         case IR_BOFS:
             dump_vreg(ir->dst);
-            printf(" = frame_addr");
+            printf(" = &[rbp]");
             break;
         case IR_IOFS:
             dump_vreg(ir->dst);
             printf(" = &%s", str_data(ir->label));
+            break;
+        case IR_SOFS:
+            dump_vreg(ir->dst);
+            printf(" = &[rsp]");
+            break;
+        case IR_MOV:
+            dump_vreg(ir->dst);
+            printf(" = ");
+            dump_vreg(ir->src1);
             break;
         case IR_STORE:
             printf("*");
@@ -132,11 +110,14 @@ static void dump_ir(IR* ir)
             printf(" = *");
             dump_vreg(ir->src1);
             break;
-        case IR_MOV:
-            dump_vreg(ir->dst);
-            printf(" = ");
-            dump_vreg(ir->src1);
+        case IR_RET:
+        {
+            if(ir->src1)
+            {
+                dump_vreg(ir->src1);
+            }
             break;
+        }
         case IR_COND:
             dump_vreg(ir->dst);
             printf(" = ");
@@ -177,6 +158,12 @@ static void dump_ir(IR* ir)
             printf(", %d", ir->mem.size);
             break;
         }
+        case IR_PUSHARG:
+        {
+            printf("%d, ", ir->arg.idx);
+            dump_vreg(ir->src1);
+            break;
+        }
         case IR_CALL:
         {
             if(ir->dst)
@@ -186,22 +173,24 @@ static void dump_ir(IR* ir)
             }
             if(ir->call->label)
             {
-                printf("%.*s(args=%d)", ir->call->label->len, str_data(ir->call->label), ir->call->argnum);
+                printf("%.*s", ir->call->label->len, str_data(ir->call->label));
             }
             else
             {
                 printf("*");
                 dump_vreg(ir->src1);
-                printf("(args=%d)", ir->call->argnum);
             }
-            break;
-        }
-        case IR_RET:
-        {
-            if(ir->src1)
+            printf("(");
+            for(uint32_t i = 0; i < ir->call->argnum; i++)
             {
-                dump_vreg(ir->src1);
+                dump_vreg(ir->call->args[i]);
+                if(i != ir->call->argnum - 1)
+                {
+                    printf(", ");
+                }
             }
+            printf(")");
+            printf(" args=%d", ir->call->argnum);
             break;
         }
         case IR_CAST:
@@ -211,6 +200,37 @@ static void dump_ir(IR* ir)
             dump_vreg(ir->src1);
             break;
         }
+        case IR_ADD:
+        case IR_SUB:
+        case IR_MUL:
+        case IR_DIV:
+        case IR_MOD:
+        case IR_BAND:
+        case IR_BOR:
+        case IR_BXOR:
+        case IR_LSHIFT:
+        case IR_RSHIFT:
+            dump_vreg(ir->dst);
+            printf(" = ");
+            dump_vreg(ir->src1);
+            printf(" %s ", kbinop2[ir->kind - IR_ADD]);
+            dump_vreg(ir->src2);
+            break;
+        case IR_NEG:
+            dump_vreg(ir->dst);
+            printf(" = -");
+            dump_vreg(ir->src1);
+            break;
+        case IR_NOT:
+            dump_vreg(ir->dst);
+            printf(" = !");
+            dump_vreg(ir->src1);
+            break;
+        case IR_BNOT:
+            dump_vreg(ir->dst);
+            printf(" = ~");
+            dump_vreg(ir->src1);
+            break;
         default:
             vp_assertX(0, "unknown ir %d", ir->kind);
             break;

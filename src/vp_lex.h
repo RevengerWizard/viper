@@ -15,6 +15,7 @@
     /* Keywords */ \
     _(fn) \
     _(struct) _(union) _(enum) \
+    _(asm) \
     _(var) _(const) \
     _(not) _(and) _(or) \
     _(type) _(void) _(cast) \

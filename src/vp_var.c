@@ -73,6 +73,7 @@ VarInfo* vp_var_new(Str* name, Type* ty)
     vi->type = ty;
     vi->storage = 0;
     vi->vreg = NULL;
+    vi->fi = NULL;
     return vi;
 }
 

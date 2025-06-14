@@ -293,6 +293,7 @@ typedef struct Decl
         } ts;
         struct
         {
+            Type* rett;
             TypeSpec* ret;
             Param* params;
             Stmt* body;

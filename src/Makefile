@@ -105,7 +105,7 @@ VPCORE_O = vp_assert.o vp_mem.o vp_buf.o \
 	vp_char.o vp_strscan.o \
 	vp_lex.o vp_parse.o vp_ast.o \
 	vp_load.o vp_sema.o vp_err.o \
-	vp_codegen.o vp_ir.o vp_var.o vp_regalloc.o vp_asm.o \
+	vp_codegen.o vp_ir.o vp_var.o vp_regalloc.o \
 	vp_dump.o vp_state.o
 
 VP_O = viper.o

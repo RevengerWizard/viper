@@ -260,6 +260,7 @@ Decl* vp_decl_var(SrcLoc loc, Str* name, TypeSpec* spec, Expr* e)
 Decl* vp_decl_fn(SrcLoc loc, TypeSpec* ret, Str* name, Param* params, Stmt* body)
 {
     Decl* d = decl_new(DECL_FN, loc, name);;
+    d->fn.rett = NULL;
     d->fn.ret = ret;
     d->fn.params = params;
     d->fn.body = body;

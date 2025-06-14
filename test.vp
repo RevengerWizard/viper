@@ -5,12 +5,12 @@ struct Foo
     c : double;
 }
 
-/*var x = false;
+var x = false;
 
 fn add(a : int32, b : int32) : int32
 {
     return a + b;
-}*/
+}
 
 fn main() : void
 {
@@ -27,13 +27,14 @@ fn main() : void
     var f2 : Foo[3] = {{a = 34, b = false, c = 1.34343}, {a = 0, b = true, c = 92.2323}, {a = -2323, b = false, c = -0.2323}};
     f2[2];
 
-    //var res = add(1, 2);
+    var a : int16 = 34;
+    var b : int16 = 98;
+
+    var res = add(a, b);
 
     //var f2 : Foo[3] = {};
     //f2[0] = {a = 3, b = true, c = 2.23};
 
-    //var a : int16 = 34;
-    //var b : int16 = 98;
     //var c = a + b;
     //var pi2 : float = 3 * 2.141592;
     //var d = pi2 + c;

@@ -29,3 +29,34 @@ void* vp_vec_grow(const void* vec, size_t len, size_t size)
     hdr->size = newsize;
     return hdr->data;
 }
+
+void vp_vec_insert(const void* vec, size_t idx, size_t elemsize)
+{
+    VecHeader* hdr = vec_hdr(vec);
+    size_t len = hdr->len;
+
+    /* Shift elements to the right to make space */
+    if(idx < len)
+    {
+        char* data = (char*)vec;
+        memmove(data + (idx + 1) * elemsize, 
+                data + idx * elemsize, 
+                (len - idx) * elemsize);
+    }
+    hdr->len++;
+}
+
+void vp_vec_remove_at(const void* vec, size_t idx, size_t elemsize)
+{
+    VecHeader* hdr = vec_hdr(vec);
+    size_t len = hdr->len;
+    
+    /* Shift elements to the left to fill the gap */
+    if (idx < len - 1) {
+        char* data = (char*)vec;
+        memmove(data + idx * elemsize,
+                data + (idx + 1) * elemsize,
+                (len - idx - 1) * elemsize);
+    }
+    hdr->len--;
+}

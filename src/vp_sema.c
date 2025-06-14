@@ -1665,6 +1665,7 @@ static void sema_fn_body(Sym* sym)
         vp_scope_add(V->currscope, param->name, pty);
     }
     Type* ret = sema_typespec(d->fn.ret);
+    d->fn.rett = ret;
     for(uint32_t i = 0; i < vec_len(d->fn.body->block); i++)
     {
         sema_stmt(d->fn.body->block[i], ret);

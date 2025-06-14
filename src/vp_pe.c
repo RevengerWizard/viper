@@ -3,6 +3,7 @@
 ** Windows PE emitter
 */
 
+#if 0
 #include <IntSafe.h>
 
 #include <stdio.h>
@@ -103,3 +104,5 @@ void vp_emit_exe(VpState* V, SBuf* sb)
 {
     pe_build(V, sb);
 }
+
+#endif

@@ -1,13 +1,12 @@
 /*
-** vp_asm.c
-** Instruction encoding
+** vp_emit_x64.c
+** x64 Instruction emitter
 */
 
-#include "vp_asm.h"
 #include "vp_buf.h"
 #include "vp_state.h"
 
-void vp_asm_ret(VpState* V)
+void vp_emit_ret(VpState* V)
 {
     char* p = vp_buf_more(&V->code, 1);
     p[0] = 0xc3;    /* ret */
@@ -15,7 +14,7 @@ void vp_asm_ret(VpState* V)
     V->code.w = p + 1;
 }
 
-void vp_asm_mov_rax_imm32(VpState* V, int32_t imm)
+void vp_emit_mov_rax_imm32(VpState* V, int32_t imm)
 {
     char* p = vp_buf_more(&V->code, 7);
 

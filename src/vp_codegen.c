@@ -14,23 +14,35 @@
 
 #include "vp_dump.h"
 
-/* Generate storage location for variable */
-static void gen_varinfo(VarInfo* vi)
+/* Determine if type parameter needs to be allocated on the stack */
+static bool param_isstack(Type* ty)
 {
+    if(type_isaggr(ty))
+    {
+        uint32_t size = vp_type_sizeof(ty);
+        return size > 8;
+    }
+    return false;
+}
+
+/* Generate storage location for variable */
+static VReg* gen_varinfo(VarInfo* vi)
+{
+    VReg* vr;
     vp_assertX(vi, "empty variable info");
-    
     if(!type_isscalar(vi->type))
     {
         /* For non-scalar types (arrays, structs), allocate frame space */
         vi->fi = vp_frameinfo_new();
-        vi->vreg = NULL;
+        vi->vreg = vr = NULL;
     }
     else
     {
         /* For scalar types, allocate a virtual register */
-        vi->vreg = vp_vreg_new(vi->type);
+        vi->vreg = vr = vp_vreg_new(vi->type);
         vi->fi = NULL;
     }
+    return vr;
 }
 
 /* Generate store operation, based on type */
@@ -226,20 +238,86 @@ static VReg* gen_call(Expr* e)
 {
     vp_assertX(e->kind == EX_CALL, "not a call expression");
     
+    typedef struct
+    {
+        uint32_t regidx;
+        uint32_t offset;
+        uint32_t size;
+        bool stack; /* Is a stack argument */
+        bool flo;   /* Is a float argument */
+    } ArgInfo;
+
+    VReg** args = NULL;
+    ArgInfo* arginfos = NULL;
+    uint32_t offset = 0;
+    uint32_t regargs = 0;
+    uint32_t argnum = vec_len(e->call.args);
+
+    /* Argument placements */
+    {
+        for(uint32_t i = 0; i < argnum; i++)
+        {
+            Expr* arg = e->call.args[i];
+            Type* argty = arg->ty;
+            vp_assertX(argty, "missing arg type");
+
+            ArgInfo p = {0};
+            p.size = vp_type_sizeof(argty);
+            p.flo = type_isflo(argty);
+
+            if(i < 4)
+            {
+                p.stack = false;
+                p.regidx = i;
+                regargs++;
+            }
+            else
+            {
+                uint32_t align = vp_type_alignof(argty);
+                p.stack = true;
+                offset = ALIGN_UP(offset, align);
+                p.offset = offset;
+                offset += ALIGN_UP(p.size, 8);
+            }
+
+            vec_push(arginfos, p);
+        }
+    }
+    
+    /* Generate arguments */
+    {
+        for(uint32_t i = 0; i < argnum; i++)
+        {
+            VReg* vr = gen_expr(e->call.args[i]);
+            vec_push(args, vr);
+
+            ArgInfo* p = &arginfos[i];
+            if(p->stack)
+            {
+                VReg* dst = vp_ir_sofs(p->offset)->dst;
+                if(type_isscalar(e->call.args[i]->ty))
+                {
+                    vp_ir_store(dst, vr);
+                }
+                else
+                {
+                    vp_ir_memcpy(dst, vr, p->size);
+                }
+            }
+            else
+            {
+                vp_ir_pusharg(vr, p->regidx);
+            }
+        }
+    }
+
+    /* Determine if this is a direct or indirect call */
     bool labelcall = false;
     if(e->call.expr->kind == EX_NAME)
     {
         VarInfo* vi = vp_scope_find(e->call.expr->scope, e->call.expr->name, NULL);
         vp_assertX(vi, "name not found");
         labelcall = vi->type->kind == TY_func;
-    }
-    
-    VReg** args = NULL;
-    uint32_t argnum = vec_len(e->call.args);
-    for(uint32_t i = 0; i < argnum; i++)
-    {
-        VReg* vr = gen_expr(e->call.args[i]);
-        vec_push(args, vr);
     }
 
     Str* label = NULL;
@@ -256,6 +334,9 @@ static VReg* gen_call(Expr* e)
         freg = gen_expr(e->call.expr);
 
     IRCallInfo* ci = vp_ircallinfo_new(args, argnum, label);
+    ci->regargs = regargs;
+    ci->stacksize = offset;
+
     vp_ir_call(ci, dst, freg);
     return dst;
 }
@@ -527,41 +608,36 @@ static void gen_var(Decl* d)
     
     VarInfo* vi = d->var.vi;
     vp_assertX(vi, "null variable info");
-    
     gen_varinfo(vi);
     
     /* Generate initialization if provided */
     if(d->var.expr)
     {
-        VReg* init_val = gen_expr(d->var.expr);
+        VReg* src = gen_expr(d->var.expr);
         
         if(type_isscalar(vi->type))
         {
-            /* For scalars, vi->vreg is the destination register */
-            vp_assertX(vi->vreg, "missing vreg for scalar variable");
-            vp_ir_mov(vi->vreg, init_val);
+            vp_assertX(vi->vreg, "empty vreg");
+            vp_ir_mov(vi->vreg, src);
         }
         else
         {
-            /* For aggregates, vi->fi provides the frame location */
-            vp_assertX(vi->fi, "missing frame info for aggregate variable");
-            VReg* dst_addr = vp_ir_bofs(vi->fi)->dst;
+            vp_assertX(vi->fi, "missing frame info");
+            VReg* dst = vp_ir_bofs(vi->fi)->dst;
+            uint32_t tysize = vp_type_sizeof(vi->type);
             
-            /* Zero out the memory first */
-            uint32_t type_size = vp_type_sizeof(vi->type);
-            vp_ir_memzero(dst_addr, type_size);
-            
-            /* Then copy the initialization value */
-            vp_ir_memcpy(dst_addr, init_val, type_size);
+            /* Copy the initialization value */
+            vp_ir_memcpy(dst, src, tysize);
         }
     }
     else if (!type_isscalar(vi->type))
     {
-        /* For uninitialized aggregates, just zero them out */
-        vp_assertX(vi->fi, "missing frame info for aggregate variable");
-        VReg* dst_addr = vp_ir_bofs(vi->fi)->dst;
-        uint32_t type_size = vp_type_sizeof(vi->type);
-        vp_ir_memzero(dst_addr, type_size);
+        vp_assertX(vi->fi, "missing frame info");
+        VReg* dst = vp_ir_bofs(vi->fi)->dst;
+        uint32_t tysize = vp_type_sizeof(vi->type);
+
+        /* Just zero it them out */
+        vp_ir_memzero(dst, tysize);
     }
 }
 
@@ -589,6 +665,7 @@ static void gen_block(Stmt** block)
     }
 }
 
+/* Generate a statement */
 static void gen_stmt(Stmt* st)
 {
     switch(st->kind)
@@ -602,23 +679,54 @@ static void gen_stmt(Stmt* st)
     }
 }
 
+/* Generate function parameters */
+static void gen_params(Decl* d)
+{
+    Type* ret = d->fn.rett;
+    bool stack = param_isstack(ret);
+    uint32_t start = stack ? 1 : 0;
+
+    if(stack)
+    {
+        VReg* vr = vp_vreg_new(vp_type_ptr(ret));
+        vr->flag |= VRF_PARAM;
+        vr->param = 0;
+    }
+
+    for(uint32_t i = 0; i < vec_len(d->fn.params); i++)
+    {
+        VarInfo* vi = d->fn.scopes[0]->vars[i];
+        VReg* vr = gen_varinfo(vi);
+        if(vr)
+        {
+            vr->flag |= VRF_PARAM;
+            uint32_t slot = i + start;
+            if(slot < 4)
+            {
+                vr->param = slot;
+            }
+            else
+            {
+                vr->flag |= VRF_STACK_PARAM;
+            }
+        }
+    }
+}
+
+/* Generate function body, if present */
 static void gen_fn(Decl* d)
 {
     if(!d->fn.body)
         return;
 
-    V->ra = vp_regalloc_new();
+    V->ra = vp_ra_new();
     V->currfn = d;
     BB* bb = vp_bb_new();
     vp_bb_setcurr(bb);
 
     if(d->fn.params)
     {
-        for(uint32_t i = 0; i < vec_len(d->fn.params); i++)
-        {
-            VarInfo* vi = d->fn.scopes[0]->vars[i];
-            gen_varinfo(vi);
-        }
+        gen_params(d);
     }
 
     gen_block(d->fn.body->block);
