@@ -14,16 +14,25 @@ typedef struct FrameInfo
     int64_t ofs;
 } FrameInfo;
 
-#define VRF_INT (1 << 0)    /* Signed integer */
-#define VRF_UINT (1 << 1)   /* Unsigned integer */
-#define VRF_NUM (1 << 2)    /* Floating point */
-#define VRF_REF (1 << 3)    /* Reference & */
-#define VRF_PARAM (1 << 4)  /* Function parameter */
-#define VRF_STACK_PARAM (1 << 5)  /* Stack parameter (spilled) */
-#define VRF_SPILL (1 << 6)  /* Spilled register */
-#define VRF_NO_SPILL (1 << 7)   /* Stop spilling */
+/* Virtual register flags */
+#define VRFDEF(_) \
+    _(UNSIGNED, 0)      /* Unsigned */ \
+    _(CONST, 1)         /* Integer constant */ \
+    _(FLO, 2)           /* Floating */ \
+    _(REF, 3)           /* Reference & */ \
+    _(PARAM, 4)         /* Function parameter */ \
+    _(STACK_PARAM, 5)   /* Stack parameter (spilled) */ \
+    _(SPILL, 6)         /* Spilled register */ \
+    _(NO_SPILL, 7)      /* Stop spilling */ \
 
-#define VRF_CONST (VRF_INT | VRF_UINT | VRF_NUM)
+#define VRF_MASK (VRF_FLO | VRF_NO_SPILL)
+
+enum
+{
+#define VRFENUM(name, bit) VRF_##name = (1 << bit),
+    VRFDEF(VRFENUM)
+#undef VRFENUM
+};
 
 /* Size of a virtual register */
 typedef enum VRegSize
@@ -33,6 +42,8 @@ typedef enum VRegSize
     VRegSize4,
     VRegSize8,
 } VRegSize;
+
+#define REG_NO ((uint32_t)-1)
 
 /* Virtual register */
 typedef struct VReg
@@ -185,7 +196,7 @@ IR* vp_ir_memzero(VReg* dst, uint32_t size);
 IR* vp_ir_memcpy(VReg* dst, VReg* src, uint32_t size);
 IR* vp_ir_pusharg(VReg* src, uint32_t idx);
 IR* vp_ir_call(IRCallInfo* ci, VReg* dst, VReg* freg);
-IR* vp_ir_cast(VReg* src, VRegSize dstsize);
+IR* vp_ir_cast(VReg* src, VRegSize dstsize, uint8_t vflag);
 VReg* vp_ir_binop(IrKind kind, VReg* src1, VReg* src2, VRegSize vsize);
 VReg* vp_ir_unary(IrKind kind, VReg* src, VRegSize vsize);
 

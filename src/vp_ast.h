@@ -8,6 +8,7 @@
 
 #include "vp_ir.h"
 #include "vp_lex.h"
+#include "vp_regalloc.h"
 #include "vp_str.h"
 #include "vp_type.h"
 #include "vp_var.h"
@@ -299,6 +300,7 @@ typedef struct Decl
             Stmt* body;
             Scope** scopes;
             BB** bbs;
+            RegAlloc* ra;
         } fn;
         struct
         {

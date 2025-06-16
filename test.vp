@@ -24,9 +24,11 @@ fn main() : void
     //var fb = f.b;
     //var fc = f.c;
 
-    var f2 : Foo[3] = {{a = 34, b = false, c = 1.34343}, {a = 0, b = true, c = 92.2323}, {a = -2323, b = false, c = -0.2323}};
-    f2[2];
+    //var f1 : Foo = {a = 1, b = true, c = 23.2};
+    //var f2 : Foo[3] = {{a = 34, b = false, c = 1.34343}, {a = 0, b = true, c = 92.2323}, {a = -2323, b = false, c = -0.2323}};
+    //f2[2];
 
+    var ff : float = 3434.3434;
     var a : int16 = 34;
     var b : int16 = 98;
 

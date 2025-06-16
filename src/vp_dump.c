@@ -8,6 +8,7 @@
 #include "vp_dump.h"
 #include "vp_ast.h"
 #include "vp_ir.h"
+#include "vp_regalloc.h"
 #include "vp_str.h"
 #include "vp_type.h"
 #include "vp_vec.h"
@@ -23,12 +24,57 @@ static void dump_indent()
 
 /* -- IR dump ------------------------------------------------------- */
 
+static const char* const vrf_flags[] = {
+#define VRFNAME(name, bit) [bit] = "VRF_" #name,
+    VRFDEF(VRFNAME)
+#undef VRFNAME
+};
+
+void dump_regbits(uint64_t regbits, char rt)
+{
+    if(regbits == 0)
+    {
+        printf("none");
+        return;
+    }
+    
+    bool first = true;
+    for(uint32_t i = 0; i < 64; i++)
+    {
+        if(regbits & (1ULL << i))
+        {
+            printf("%s%c%d", first ? "" : ",", rt, i);
+            first = false;
+        }
+    }
+}
+
+static void dump_vreg_flags(uint8_t flag)
+{
+    if(flag == 0)
+    {
+        printf("0");
+        return;
+    }
+
+    bool first = true;
+    for(uint32_t i = 0; i < 8; i++)
+    {
+        if(flag & (1 << i))
+        {
+            printf("%s%s", first ? "" : " | ", vrf_flags[i]);
+            first = false;
+        }
+    }
+}
+
 static void dump_vreg(VReg* vr)
 {
     vp_assertX(vr, "empty vreg");
+    vp_assertX(!(vr->flag & VRF_SPILL), "spilled vreg");
     if(vr->flag & VRF_CONST)
     {
-        if(vr->flag & VRF_NUM)
+        if(vr->flag & VRF_FLO)
         {
             if(vr->vsize == VRegSize4)
             {
@@ -39,14 +85,23 @@ static void dump_vreg(VReg* vr)
                 printf("%.14g", vr->n);
             }
         }
-        else if(vr->flag & VRF_INT)
-        {
-            printf("%lli", vr->i64);
-        }
-        else
+        else if(vr->flag & VRF_UNSIGNED)
         {
             printf("%llu", vr->u64);
         }
+        else
+        {
+            printf("%lli", vr->i64);
+        }
+    }
+    else if(vr->phys != REG_NO)
+    {
+        char rt = 'r';
+        if(vr->flag & VRF_FLO)
+        {
+            rt = 'f';
+        }
+        printf("%c%d<v%d>", rt, vr->phys, vr->virt);
     }
     else
     {
@@ -83,9 +138,12 @@ static void dump_ir(IR* ir)
     switch(ir->kind)
     {
         case IR_BOFS:
+        {
+            int64_t ofs = ir->bofs.fi->ofs;
             dump_vreg(ir->dst);
-            printf(" = &[rbp]");
+            printf(" = &[rbp %c %lli]", ofs >= 0 ? '+' : '-', ofs > 0 ? ofs : -ofs);
             break;
+        }
         case IR_IOFS:
             dump_vreg(ir->dst);
             printf(" = &%s", str_data(ir->label));
@@ -240,6 +298,7 @@ static void dump_ir(IR* ir)
 
 void vp_dump_bb(Decl* d)
 {
+    printf("params and locals:\n");
     for(uint32_t i = 0; i < vec_len(d->fn.scopes); i++)
     {
         Scope* scope = d->fn.scopes[i];
@@ -248,23 +307,54 @@ void vp_dump_bb(Decl* d)
         for(uint32_t j = 0; j < vec_len(scope->vars); j++)
         {
             VarInfo* vi = scope->vars[j];
-            VReg* vreg = vi->vreg;
-            if(vreg == NULL)
+            VReg* vr = vi->vreg;
+            if(vr == NULL)
                 continue;
-            printf("v%d (flag=%x): %.*s : ", vreg->virt, vreg->flag, vi->name->len, str_data(vi->name));
+            printf("v%d (flag=", vr->virt);
+            dump_vreg_flags(vr->flag);
+            printf(") %.*s : ", vi->name->len, str_data(vi->name));
             vp_dump_type(vi->type);
             printf("\n");
         }
     }
 
+    RegAlloc* ra = d->fn.ra;
+    printf("VREG: #%d\n", vec_len(ra->vregs));
+    LiveInterval** sorted = ra->sorted;
+    if(sorted)
+    {
+        for(uint32_t i = 0; i < vec_len(ra->vregs); i++)
+        {
+            LiveInterval* li = sorted[i];
+            VReg* vr = ra->vregs[li->virt];
+            if(vr == NULL)
+                continue;
+            printf("    v%d (flag=", vr->virt);
+            dump_vreg_flags(vr->flag);
+            printf("):  live %d - %d", li->start, li->end);
+            {
+                char rt = vr->flag & VRF_FLO ? 'f' : 'r';
+                printf(" => %c%d", rt, li->phys);
+            }
+            if(li->regbits)
+            {
+                printf(", occupied=");
+                dump_regbits(li->regbits, vr->flag & VRF_FLO ? 'f' : 'r');
+            }
+            printf("\n");
+        }
+    }
+
+    uint32_t nip = 0;
     BB** bbs = d->fn.bbs;
     printf("BB: #%d\n", vec_len(bbs));
     for(uint32_t i = 0; i < vec_len(bbs); i++)
     {
         BB* bb = bbs[i];
         printf("%.*s:\n", bb->label->len, str_data(bb->label));
-        for(uint32_t j = 0; j < vec_len(bb->irs); j++)
+        for(uint32_t j = 0; j < vec_len(bb->irs); j++, nip++)
         {
+            printf("%6d|\t", nip);
             IR* ir = bb->irs[j];
             dump_ir(ir);
         }

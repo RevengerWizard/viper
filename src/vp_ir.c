@@ -167,17 +167,17 @@ IR* vp_ir_call(IRCallInfo* ci, VReg* dst, VReg* freg)
     return ir;
 }
 
-IR* vp_ir_cast(VReg* src, VRegSize dstsize)
+IR* vp_ir_cast(VReg* src, VRegSize dstsize, uint8_t vflag)
 {
     IR* ir = ir_new(IR_CAST);
     ir->src1 = src;
-    ir->dst = vp_ra_spawn(dstsize, 0);
+    ir->dst = vp_ra_spawn(dstsize, vflag);
     return ir;
 }
 
 VReg* vp_ir_binop(IrKind kind, VReg* src1, VReg* src2, VRegSize vsize)
 {
-    VReg* dst = vp_ra_spawn(vsize, 0);
+    VReg* dst = vp_ra_spawn(vsize, src1->flag & VRF_MASK);
     IR* ir = ir_new(kind);
     ir->dst = dst;
     ir->src1 = src1;
@@ -187,7 +187,7 @@ VReg* vp_ir_binop(IrKind kind, VReg* src1, VReg* src2, VRegSize vsize)
 
 VReg* vp_ir_unary(IrKind kind, VReg* src, VRegSize vsize)
 {
-    VReg* dst = vp_ra_spawn(vsize, 0);
+    VReg* dst = vp_ra_spawn(vsize, src->flag & VRF_MASK);
     IR* ir = ir_new(kind);
     ir->src1 = src;
     ir->dst = dst;

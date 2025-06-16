@@ -8,6 +8,7 @@
 #include "vp_ast.h"
 #include "vp_ir.h"
 #include "vp_str.h"
+#include "vp_target.h"
 #include "vp_type.h"
 #include "vp_var.h"
 #include "vp_vec.h"
@@ -286,7 +287,7 @@ static VReg* gen_call(Expr* e)
     
     /* Generate arguments */
     {
-        for(uint32_t i = 0; i < argnum; i++)
+        for(uint32_t i = argnum; i-- > 0;)
         {
             VReg* vr = gen_expr(e->call.args[i]);
             vec_push(args, vr);
@@ -358,7 +359,7 @@ static VReg* gen_cast(Expr* e)
             break;
     }
 
-    IR* ir = vp_ir_cast(src, vp_vsize(dstty));
+    IR* ir = vp_ir_cast(src, vp_vsize(dstty), vp_vflag(dstty));
     return ir->dst;
 }
 
@@ -542,7 +543,7 @@ static VReg* gen_logical(Expr* e)
 }
 
 typedef VReg* (*GenExprFn)(Expr*);
-static const GenExprFn table[] = {
+static const GenExprFn gentab[] = {
     [EX_NIL] = gen_nil,
     [EX_TRUE] = gen_true, [EX_FALSE] = gen_false,
     [EX_INT] = gen_int, [EX_UINT] = gen_uint,
@@ -568,9 +569,9 @@ static const GenExprFn table[] = {
 static VReg* gen_expr(Expr* e)
 {
     vp_assertX(e->ty, "missing type");
-    vp_assertX(e->kind < (int)ARRSIZE(table), "out of bounds expression kind");
-    vp_assertX(table[e->kind], "empty entry %d", e->kind);
-    return (*table[e->kind])(e);
+    vp_assertX(e->kind < (int)ARRSIZE(gentab), "out of bounds expression kind");
+    vp_assertX(gentab[e->kind], "empty entry %d", e->kind);
+    return (*gentab[e->kind])(e);
 }
 
 /* Generate expression statement */
@@ -719,7 +720,8 @@ static void gen_fn(Decl* d)
     if(!d->fn.body)
         return;
 
-    V->ra = vp_ra_new();
+    V->ra = vp_ra_new(&winx64_ra);
+    d->fn.ra = V->ra;
     V->currfn = d;
     BB* bb = vp_bb_new();
     vp_bb_setcurr(bb);
@@ -730,6 +732,10 @@ static void gen_fn(Decl* d)
     }
 
     gen_block(d->fn.body->block);
+
+    V->bb = NULL;
+
+    vp_ra_alloc(V->ra, d->fn.bbs);
 
     vp_dump_bb(d);
 }
