@@ -95,7 +95,7 @@ uint32_t vp_type_sizeof(Type* t)
         case TY_union:
             return t->st.size;
         default:
-            vp_assertX(0, "?");
+            vp_assertX(0, "type %d", t->kind);
             break;
     }
     return 0;
@@ -143,17 +143,17 @@ bool vp_type_isconv(Type* dst, Type* src)
         return true;
     else if(dst == tyvoid)
         return true;
-    else if(type_isint(dst) && type_isint(src))
+    else if(ty_isint(dst) && ty_isint(src))
     {
         /* Same signedness widening */
-        if(type_issigned(dst) == type_issigned(src) &&
+        if(ty_issigned(dst) == ty_issigned(src) &&
             vp_type_sizeof(src) < vp_type_sizeof(dst))
         {
             return true;
         }
         return false;
     }
-    else if(type_isint(src) && type_isflo(dst))
+    else if(ty_isint(src) && ty_isflo(dst))
     {
         /* Small enough integers to float */
         if((vp_type_sizeof(src) <= 4) && dst->kind == TY_float)
@@ -167,21 +167,21 @@ bool vp_type_isconv(Type* dst, Type* src)
         }
         return false;
     }
-    else if(type_isflo(src) && type_isint(dst))
+    else if(ty_isflo(src) && ty_isint(dst))
     {
         return false;
     }
-    else if(type_isflo(src) && type_isflo(dst))
+    else if(ty_isflo(src) && ty_isflo(dst))
     {
         return dst == src;
     }
-    else if(type_isptrlike(dst) && type_isnil(src))
+    else if(ty_isptrlike(dst) && ty_isnil(src))
     {
         return true;
     }
-    else if(type_isptr(dst) && type_isptr(src))
+    else if(ty_isptr(dst) && ty_isptr(src))
     {
-        if(type_isaggr(dst->p) && type_isaggr(src->p) && 
+        if(ty_isaggr(dst->p) && ty_isaggr(src->p) && 
             dst->p == src->p->st.fields[0].ty)
         {
             return true;
@@ -211,15 +211,15 @@ bool vp_type_iscast(Type* dst, Type* src)
     {
         return true;
     }
-    else if(type_isint(dst))
+    else if(ty_isint(dst))
     {
-        return type_isptrlike(src);
+        return ty_isptrlike(src);
     }
-    else if(type_isint(src))
+    else if(ty_isint(src))
     {
-        return type_isptrlike(dst);
+        return ty_isptrlike(dst);
     }
-    else if(type_isptrlike(dst) && type_isptrlike(src))
+    else if(ty_isptrlike(dst) && ty_isptrlike(src))
     {
         return true;
     }
@@ -232,7 +232,7 @@ bool vp_type_iscast(Type* dst, Type* src)
 /* Check pointer compatibility */
 bool vp_type_isptrcomp(Type* lty, Type* rty)
 {
-    if(type_isptr(lty) && type_isptr(rty))
+    if(ty_isptr(lty) && ty_isptr(rty))
     {
         Type* ltybase = lty->p;
         Type* rtybase = rty->p;
@@ -338,7 +338,7 @@ Type* vp_type_decay(Type* t)
 /* Decay an empty array type */
 Type* vp_type_decayempty(Type* t)
 {
-    if(type_isarrempty(t) && type_isptr(t))
+    if(ty_isarrempty(t) && ty_isptr(t))
     {
         return vp_type_ptr(vp_type_decayempty(t->p));
     }

@@ -23,5 +23,6 @@ src/
 ├── vp_asm_x64.c      ← x64 assembler
 ├── vp_emit_x64.c     ← x64 instruction encoding
 ├── vp_sel_x64.c      ← x64 instruction selection (IR -> x64)
+├── vp_sel.h          ← instruction selection
 ├── vp_pe.c           ← Windows PE emitter
 ├── viper.c           ← CLI main

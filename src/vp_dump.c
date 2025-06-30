@@ -71,10 +71,10 @@ static void dump_vreg_flags(uint8_t flag)
 static void dump_vreg(VReg* vr)
 {
     vp_assertX(vr, "empty vreg");
-    vp_assertX(!(vr->flag & VRF_SPILL), "spilled vreg");
-    if(vr->flag & VRF_CONST)
+    vp_assertX(!vrf_spill(vr), "spilled vreg");
+    if(vrf_const(vr))
     {
-        if(vr->flag & VRF_FLO)
+        if(vrf_flo(vr))
         {
             if(vr->vsize == VRegSize4)
             {
@@ -85,10 +85,6 @@ static void dump_vreg(VReg* vr)
                 printf("%.14g", vr->n);
             }
         }
-        else if(vr->flag & VRF_UNSIGNED)
-        {
-            printf("%llu", vr->u64);
-        }
         else
         {
             printf("%lli", vr->i64);
@@ -97,7 +93,7 @@ static void dump_vreg(VReg* vr)
     else if(vr->phys != REG_NO)
     {
         char rt = 'r';
-        if(vr->flag & VRF_FLO)
+        if(vrf_flo(vr))
         {
             rt = 'f';
         }
@@ -146,7 +142,7 @@ static void dump_ir(IR* ir)
         }
         case IR_IOFS:
             dump_vreg(ir->dst);
-            printf(" = &%s", str_data(ir->label));
+            printf(" = &%s", str_data(ir->iofs.label));
             break;
         case IR_SOFS:
             dump_vreg(ir->dst);
@@ -279,11 +275,6 @@ static void dump_ir(IR* ir)
             printf(" = -");
             dump_vreg(ir->src1);
             break;
-        case IR_NOT:
-            dump_vreg(ir->dst);
-            printf(" = !");
-            dump_vreg(ir->src1);
-            break;
         case IR_BNOT:
             dump_vreg(ir->dst);
             printf(" = ~");
@@ -333,13 +324,13 @@ void vp_dump_bb(Decl* d)
             dump_vreg_flags(vr->flag);
             printf("):  live %d - %d", li->start, li->end);
             {
-                char rt = vr->flag & VRF_FLO ? 'f' : 'r';
+                char rt = vrf_flo(vr) ? 'f' : 'r';
                 printf(" => %c%d", rt, li->phys);
             }
             if(li->regbits)
             {
                 printf(", occupied=");
-                dump_regbits(li->regbits, vr->flag & VRF_FLO ? 'f' : 'r');
+                dump_regbits(li->regbits, vrf_flo(vr) ? 'f' : 'r');
             }
             printf("\n");
         }
@@ -619,7 +610,7 @@ static void dump_ast_expr(Expr* e)
             printf("%.*s", e->name->len, str_data(e->name));
             break;
         }
-        case EX_COMPOUND:
+        case EX_COMPLIT:
         {
             if(e->comp.spec)
             {

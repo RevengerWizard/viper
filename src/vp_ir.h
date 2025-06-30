@@ -7,25 +7,25 @@
 #define _VP_IR_H
 
 #include "vp_str.h"
+#include "vp_type.h"
 
 /* Frame offset */
 typedef struct FrameInfo
 {
-    int64_t ofs;
+    int32_t ofs;
 } FrameInfo;
 
 /* Virtual register flags */
 #define VRFDEF(_) \
-    _(UNSIGNED, 0)      /* Unsigned */ \
-    _(CONST, 1)         /* Integer constant */ \
-    _(FLO, 2)           /* Floating */ \
-    _(REF, 3)           /* Reference & */ \
-    _(PARAM, 4)         /* Function parameter */ \
-    _(STACK_PARAM, 5)   /* Stack parameter (spilled) */ \
-    _(SPILL, 6)         /* Spilled register */ \
-    _(NO_SPILL, 7)      /* Stop spilling */ \
+    _(CONST, 0)         /* Integer constant */ \
+    _(FLO, 1)           /* Floating */ \
+    _(REF, 2)           /* Reference & */ \
+    _(PARAM, 3)         /* Function parameter */ \
+    _(STACK_PARAM, 4)   /* Stack parameter (spilled) */ \
+    _(SPILL, 5)         /* Spilled register */ \
+    _(NO_SPILL, 6)      /* Stop spilling */ \
 
-#define VRF_MASK (VRF_FLO | VRF_NO_SPILL)
+#define VRF_MASK (VRF_FLO)
 
 enum
 {
@@ -34,21 +34,25 @@ enum
 #undef VRFENUM
 };
 
+#define vrf_const(vr) ((vr)->flag & VRF_CONST)
+#define vrf_flo(vr) ((vr)->flag & VRF_FLO)
+#define vrf_spill(vr) ((vr)->flag & VRF_SPILL)
+
 /* Size of a virtual register */
-typedef enum VRegSize
+typedef enum VRSize
 {
     VRegSize1,
     VRegSize2,
     VRegSize4,
     VRegSize8,
-} VRegSize;
+} VRSize;
 
 #define REG_NO ((uint32_t)-1)
 
 /* Virtual register */
 typedef struct VReg
 {
-    VRegSize vsize;
+    VRSize vsize;
     uint8_t flag;
     union
     {
@@ -63,7 +67,6 @@ typedef struct VReg
         };
         /* Constant */
         int64_t i64;
-        uint64_t u64;
         double n;
     };
 } VReg;
@@ -93,7 +96,6 @@ typedef struct VReg
     _(LSHIFT, d12) _(RSHIFT, d12) \
     /* Unary operators */ \
     _(NEG, d12) \
-    _(NOT, d12) \
     _(BNOT, d12)
 
 typedef enum IrKind
@@ -113,16 +115,21 @@ typedef enum CondKind
     COND_LT,
     COND_LE,
     COND_GT,
-    COND_GE
-} CondKind;
+    COND_GE,
 
-/* Condition masks */
-enum
-{
+    /* Condition masks */
     COND_MASK = 0x07,
     COND_UNSIGNED = 1 << 3,
-    COND_NUM = 1 << 4
-};
+    COND_FLO = 1 << 4,
+
+    /* Unsigned masks */
+    COND_EQ_U = COND_EQ | COND_UNSIGNED,
+    COND_NEQ_U = COND_NEQ | COND_UNSIGNED,
+    COND_LT_U = COND_LT | COND_UNSIGNED,
+    COND_GT_U = COND_GT | COND_UNSIGNED,
+    COND_LE_U = COND_LE | COND_UNSIGNED,
+    COND_GE_U = COND_GE | COND_UNSIGNED,
+} CondKind;
 
 typedef struct IRCallInfo
 {
@@ -133,16 +140,29 @@ typedef struct IRCallInfo
     VReg** args;
 } IRCallInfo;
 
+/* IR flags */
+enum
+{
+    IRF_UNSIGNED = 1 << 0
+};
+
+#define irf_unsigned(ir) ((ir)->flag & IRF_UNSIGNED)
+
 typedef struct IR
 {
     IrKind kind;
+    uint8_t flag;
     VReg* dst;
     VReg* src1;
     VReg* src2;
     union
     {
         CondKind cond;
-        Str* label;
+        struct
+        {
+            int64_t ofs;
+            Str* label;
+        } iofs;
         struct
         {
             FrameInfo* fi;
@@ -183,12 +203,12 @@ extern const char* const vp_ir_name[];
 IR* vp_ir_bofs(FrameInfo* fi);
 IR* vp_ir_iofs(Str* label);
 IR* vp_ir_sofs(uint32_t ofs);
-IR* vp_ir_mov(VReg* dst, VReg* src);
-IR* vp_ir_store(VReg* dst, VReg* src);
-IR* vp_ir_load(VReg* src, VRegSize vsize);
+IR* vp_ir_mov(VReg* dst, VReg* src, uint8_t flag);
+IR* vp_ir_store(VReg* dst, VReg* src, uint8_t flag);
+IR* vp_ir_load(VReg* src, VRSize vsize, uint8_t flag);
 IR* vp_ir_store_s(VReg* dst, VReg* src);
-IR* vp_ir_load_s(VReg* dst, VReg* src, VRegSize vsize);
-IR* vp_ir_ret(VReg* src);
+IR* vp_ir_load_s(VReg* dst, VReg* src, uint8_t flag);
+IR* vp_ir_ret(VReg* src, uint8_t flag);
 IR* vp_ir_cond(VReg* src1, VReg* src2, CondKind cond);
 IR* vp_ir_jmp(BB* bb);
 void vp_ir_cjmp(VReg* src1, VReg* src2, CondKind cond, BB* bb);
@@ -196,9 +216,9 @@ IR* vp_ir_memzero(VReg* dst, uint32_t size);
 IR* vp_ir_memcpy(VReg* dst, VReg* src, uint32_t size);
 IR* vp_ir_pusharg(VReg* src, uint32_t idx);
 IR* vp_ir_call(IRCallInfo* ci, VReg* dst, VReg* freg);
-IR* vp_ir_cast(VReg* src, VRegSize dstsize, uint8_t vflag);
-VReg* vp_ir_binop(IrKind kind, VReg* src1, VReg* src2, VRegSize vsize);
-VReg* vp_ir_unary(IrKind kind, VReg* src, VRegSize vsize);
+IR* vp_ir_cast(VReg* src, VRSize dstsize, uint8_t vflag);
+VReg* vp_ir_binop(IrKind kind, VReg* src1, VReg* src2, VRSize vsize, uint8_t flag);
+VReg* vp_ir_unary(IrKind kind, VReg* src, VRSize vsize, uint8_t flag);
 
 /* Frame info */
 FrameInfo* vp_frameinfo_new();
@@ -215,5 +235,20 @@ BB* vp_bb_new();
 void vp_bb_setcurr(BB* bb);
 
 Str* vp_label_new();
+
+static VP_AINLINE uint8_t ir_flag(Type* ty)
+{
+    return ty_isunsigned(ty) ? IRF_UNSIGNED : 0;
+}
+
+static VP_AINLINE uint8_t cond_flag(Type* ty)
+{
+    uint8_t flag = 0;
+    if(ty_isunsigned(ty))
+        flag = COND_UNSIGNED;
+    if(ty_isflo(ty))
+        flag |= COND_FLO;
+    return flag;
+}
 
 #endif

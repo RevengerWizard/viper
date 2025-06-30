@@ -22,6 +22,7 @@ static IR* ir_new(IrKind kind)
 {
     IR* ir = vp_arena_alloc(&V->irarena, sizeof(*ir));
     ir->kind = kind;
+    ir->flag = 0;
     ir->dst = ir->src1 = ir->src2 = NULL;
     if(V->bb)
     {
@@ -42,7 +43,8 @@ IR* vp_ir_bofs(FrameInfo* fi)
 IR* vp_ir_iofs(Str* label)
 {
     IR* ir = ir_new(IR_IOFS);
-    ir->label = label;
+    ir->iofs.ofs = 0;
+    ir->iofs.label = label;
     ir->dst = vp_ra_spawn(VRegSize8, 0);
     return ir;
 }
@@ -55,25 +57,28 @@ IR* vp_ir_sofs(uint32_t ofs)
     return ir;
 }
 
-IR* vp_ir_mov(VReg* dst, VReg* src)
+IR* vp_ir_mov(VReg* dst, VReg* src, uint8_t flag)
 {
     IR* ir = ir_new(IR_MOV);
+    ir->flag = flag;
     ir->dst = dst;
     ir->src1 = src;
     return ir;
 }
 
-IR* vp_ir_store(VReg* dst, VReg* src)
+IR* vp_ir_store(VReg* dst, VReg* src, uint8_t flag)
 {
     IR* ir = ir_new(IR_STORE);
+    ir->flag = flag;
     ir->src1 = src;
     ir->src2 = dst;
     return ir;
 }
 
-IR* vp_ir_load(VReg* src, VRegSize vsize)
+IR* vp_ir_load(VReg* src, VRSize vsize, uint8_t flag)
 {
     IR* ir = ir_new(IR_LOAD);
+    ir->flag = flag;
     ir->src1 = src;
     ir->dst = vp_ra_spawn(vsize, src->flag);
     return ir;
@@ -87,17 +92,19 @@ IR* vp_ir_store_s(VReg* dst, VReg* src)
     return ir;
 }
 
-IR* vp_ir_load_s(VReg* dst, VReg* src, VRegSize vsize)
+IR* vp_ir_load_s(VReg* dst, VReg* src, uint8_t flag)
 {
     IR* ir = ir_new(IR_LOAD_S);
+    ir->flag = flag;
     ir->src1 = src;
     ir->dst = dst;
     return ir;
 }
 
-IR* vp_ir_ret(VReg* src)
+IR* vp_ir_ret(VReg* src, uint8_t flag)
 {
     IR* ir = ir_new(IR_RET);
+    ir->flag = flag;
     ir->src1 = src;
     return ir;
 }
@@ -167,7 +174,7 @@ IR* vp_ir_call(IRCallInfo* ci, VReg* dst, VReg* freg)
     return ir;
 }
 
-IR* vp_ir_cast(VReg* src, VRegSize dstsize, uint8_t vflag)
+IR* vp_ir_cast(VReg* src, VRSize dstsize, uint8_t vflag)
 {
     IR* ir = ir_new(IR_CAST);
     ir->src1 = src;
@@ -175,20 +182,169 @@ IR* vp_ir_cast(VReg* src, VRegSize dstsize, uint8_t vflag)
     return ir;
 }
 
-VReg* vp_ir_binop(IrKind kind, VReg* src1, VReg* src2, VRegSize vsize)
+static VReg* ir_binop_fold(IrKind kind, VReg* src1, VReg* src2, VRSize vsize, uint8_t flag)
 {
-    VReg* dst = vp_ra_spawn(vsize, src1->flag & VRF_MASK);
+    if((src2->flag & (VRF_FLO | VRF_CONST)) == VRF_CONST && src2->i64 == 0 &&
+        (kind == IR_DIV || kind == IR_MOD))
+    {
+        return NULL;
+    }
+
+    if((src1->flag & (VRF_FLO | VRF_CONST)) == VRF_CONST)
+    {
+        int64_t lval = src1->i64;
+        if((src2->flag & (VRF_FLO | VRF_CONST)) == VRF_CONST)
+        {
+            int64_t rval = src2->i64;
+            int64_t val = 0;
+            switch(kind)
+            {
+            case IR_ADD: val = lval + rval; break;
+            case IR_SUB: val = lval - rval; break;
+            case IR_MUL: val = lval * rval; break;
+            case IR_DIV:
+                if(flag & IRF_UNSIGNED)
+                    val = (uint64_t)lval / (uint64_t)rval;
+                else
+                    val = lval / rval;
+                break;
+            case IR_MOD:
+                if(flag & IRF_UNSIGNED)
+                    val = (uint64_t)lval % (uint64_t)rval;
+                else
+                    val = lval % rval;
+                break;
+            case IR_BAND: val = lval & rval; break;
+            case IR_BOR: val = lval | rval; break;
+            case IR_BXOR: val = lval ^ rval; break;
+            case IR_LSHIFT: val = lval << rval; break;
+            case IR_RSHIFT:
+                if(flag & IRF_UNSIGNED)
+                    val = (uint64_t)lval >> rval;
+                else
+                    val = lval >> rval;
+                break;
+            default: vp_assertX(0, "?"); break;
+            }
+            return vp_vreg_ki(val, vsize);
+        }
+        else
+        {
+            switch(kind)
+            {
+            case IR_ADD:
+                if(lval == 0)
+                    return src2;  /* No effect */
+                break;
+            case IR_SUB:
+                if(lval == 0)
+                    return vp_ir_unary(IR_NEG, src2, src2->vsize, flag);
+                break;
+            case IR_MUL:
+                switch(lval)
+                {
+                case 1: return src2;  /* No effect */
+                case 0: return src1;  /* 0 */
+                case -1:
+                    if(!(flag & IRF_UNSIGNED))
+                        return vp_ir_unary(IR_NEG, src2, src2->vsize, flag);  /* -src2 */
+                    break;
+                default: break;
+                }
+                break;
+            case IR_DIV:
+            case IR_MOD:
+                if(lval == 0)
+                    return src1;
+                break;
+            case IR_BAND:
+                if(lval == 0)
+                    return src1;  /* 0 */
+                break;
+            case IR_BOR:
+            case IR_BXOR:
+                if(lval == 0)
+                    return src2;  /* No effect */
+                break;
+            case IR_LSHIFT:
+            case IR_RSHIFT:
+                if(lval == 0)
+                    return src1;  /* 0 */
+                break;
+            default:
+                break;
+            }
+        }
+    }
+    else
+    {
+        if((src2->flag & (VRF_FLO | VRF_CONST)) == VRF_CONST)
+        {
+            int64_t rval = src2->i64;
+            switch(kind)
+            {
+            case IR_ADD:
+            case IR_SUB:
+                if(rval == 0)
+                    return src1;  /* No effect */
+                break;
+            case IR_DIV:
+                if(rval == 0)
+                    return src1;  /* Detect zero division */
+                /* Fall */
+            case IR_MUL:
+                switch(rval)
+                {
+                case 1: return src1;  /* No effect */
+                case 0: return src2;  /* 0 */
+                case -1:
+                    if(!(flag & IRF_UNSIGNED))
+                        return vp_ir_unary(IR_NEG, src1, src1->vsize, flag);  /* -src1 */
+                    break;
+                default: break;
+                }
+                break;
+            case IR_BAND:
+                if(rval == 0)
+                    return src2;  /* 0 */
+                break;
+            case IR_BOR:
+            case IR_BXOR:
+                if(rval == 0)
+                    return src1;  /* No effect */
+                break;
+            case IR_LSHIFT:
+            case IR_RSHIFT:
+                if(src2->i64 == 0)
+                    return src1;  /* no effect */
+                break;
+            default:
+                break;
+            }
+        }
+    }
+    return NULL;
+}
+
+VReg* vp_ir_binop(IrKind kind, VReg* src1, VReg* src2, VRSize vsize, uint8_t flag)
+{
+    VReg* dst = ir_binop_fold(kind, src1, src2, vsize, flag);
+    if(dst) return dst;
+    
+    dst = vp_ra_spawn(vsize, src1->flag & VRF_MASK);
     IR* ir = ir_new(kind);
+    ir->flag = flag;
     ir->dst = dst;
     ir->src1 = src1;
     ir->src2 = src2;
     return dst;
 }
 
-VReg* vp_ir_unary(IrKind kind, VReg* src, VRegSize vsize)
+VReg* vp_ir_unary(IrKind kind, VReg* src, VRSize vsize, uint8_t flag)
 {
     VReg* dst = vp_ra_spawn(vsize, src->flag & VRF_MASK);
     IR* ir = ir_new(kind);
+    ir->flag = flag;
     ir->src1 = src;
     ir->dst = dst;
     return dst;

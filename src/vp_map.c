@@ -15,7 +15,7 @@ static uint64_t hash_u64(uint64_t x)
     return x;
 }
 
-static uint64_t hash_ptr(const void* p)
+/*static uint64_t hash_ptr(const void* p)
 {
     return hash_u64((uintptr_t)p);
 }
@@ -26,7 +26,7 @@ static uint64_t hash_mix(uint64_t x, uint64_t y)
     x *= 0xff51afd7ed558ccd;
     x ^= x >> 32;
     return x;
-}
+}*/
 
 static void map_grow(Map* map, uint32_t newsize)
 {

@@ -13,29 +13,14 @@
 
 /* -- Virtual registers --------------------------------------------- */
 
-/* Spawn an unsigned integer vreg */
-VReg* vp_vreg_ku(uint64_t u64, VRegSize vsize)
+/* Spawn an integer vreg */
+VReg* vp_vreg_ki(int64_t i64, VRSize vsize)
 {
     RegAlloc* ra = V->ra;
     for(uint32_t i = 0; i < vec_len(ra->vconsts); i++)
     {
         VReg* vr = ra->vconsts[i];
-        if(!(vr->flag & VRF_FLO) && vr->u64 == u64 && vr->vsize == vsize)
-            return vr;
-    }
-    VReg* vr = vp_ra_spawn(vsize, VRF_CONST | VRF_UNSIGNED);
-    vr->u64 = u64;
-    return vr;
-}
-
-/* Spawn a signed integer vreg */
-VReg* vp_vreg_ki(int64_t i64, VRegSize vsize)
-{
-    RegAlloc* ra = V->ra;
-    for(uint32_t i = 0; i < vec_len(ra->vconsts); i++)
-    {
-        VReg* vr = ra->vconsts[i];
-        if(!(vr->flag & VRF_FLO) && vr->i64 == i64 && vr->vsize == vsize)
+        if(!vrf_flo(vr) && vr->i64 == i64 && vr->vsize == vsize)
             return vr;
     }
     VReg* vr = vp_ra_spawn(vsize, VRF_CONST);
@@ -44,7 +29,7 @@ VReg* vp_vreg_ki(int64_t i64, VRegSize vsize)
 }
 
 /* Spawn a floating vreg */
-VReg* vp_vreg_kf(double n, VRegSize vsize)
+VReg* vp_vreg_kf(double n, VRSize vsize)
 {
     RegAlloc* ra = V->ra;
     union { double d; uint64_t q; } u1, u2;
@@ -52,7 +37,7 @@ VReg* vp_vreg_kf(double n, VRegSize vsize)
     for(uint32_t i = 0; i < vec_len(ra->vconsts); i++)
     {
         VReg* vr = ra->vconsts[i];
-        if(vr->flag & VRF_FLO)
+        if(vrf_flo(vr))
         {
             u2.d = vr->n;
             if(u1.q == u2.q && vr->vsize == vsize)
@@ -73,8 +58,8 @@ typedef struct
     uint32_t len;
     uint32_t physmax;   /* Max # of physical registers */
     uint32_t phystemp;  /* Bitmask of volatile registers */
-    uint64_t usebits;   /* Current register bits in use */
-    uint64_t bits;      /* Final register bits */
+    RegSet usebits;   /* Current register bits in use */
+    RegSet bits;      /* Final register bits */
 } PhysRegSet;
 
 /* Insert an active live interval */
@@ -111,7 +96,7 @@ static void live_remove(LiveInterval** active, uint32_t len, uint32_t start, uin
 static void live_expire(PhysRegSet* p, uint32_t start)
 {
     uint32_t len = p->len;
-    uint64_t usebits = p->usebits;
+    RegSet usebits = p->usebits;
     uint32_t j;
     for(j = 0; j < len; j++)
     {
@@ -143,14 +128,14 @@ static int live_sort(const void* pa, const void* pb)
 }
 
 /* Occupy a set of active integer/float registers */
-static void live_occupy(RegAlloc* ra, LiveInterval** actives, uint64_t ioccupy, uint64_t foccupy)
+static void live_occupy(RegAlloc* ra, LiveInterval** actives, RegSet ioccupy, RegSet foccupy)
 {
     for(uint32_t k = 0; k < vec_len(actives); k++)
     {
         LiveInterval* li = actives[k];
         VReg* vr = ra->vregs[li->virt];
         vp_assertX(vr, "empty vreg");
-        li->regbits |= (vr->flag & VRF_FLO) ? foccupy : ioccupy;
+        li->regbits |= vrf_flo(vr) ? foccupy : ioccupy;
     }
 }
 
@@ -196,7 +181,7 @@ static void live_detect(RegAlloc* ra, BB** bbs, uint32_t vreglen, LiveInterval**
     }
 
     const RASettings* set = ra->set;
-    uint64_t iargset = 0, fargset = 0;
+    RegSet iargset = 0, fargset = 0;
     uint32_t nip = 0;   /* IR position */
     for(uint32_t i = 0; i < vec_len(bbs); i++)
     {
@@ -207,7 +192,11 @@ static void live_detect(RegAlloc* ra, BB** bbs, uint32_t vreglen, LiveInterval**
             /* Detect extra occupied registers */
             if(set->extra != NULL)
             {
-
+                RegSet ioccupy = set->extra(ra, ir);
+                if(ioccupy != 0)
+                {
+                    live_occupy(ra, actives, ioccupy, 0);
+                }
             }
 
             if(iargset != 0 || fargset != 0)
@@ -229,7 +218,7 @@ static void live_detect(RegAlloc* ra, BB** bbs, uint32_t vreglen, LiveInterval**
             if(ir->kind == IR_PUSHARG)
             {
                 VReg* src = ir->src1;
-                if(src->flag & VRF_FLO)
+                if(vrf_flo(src))
                 {
                     uint64_t n = set->fmap[ir->arg.idx];
                     fargset |= 1ULL << n;
@@ -283,8 +272,8 @@ static void live_build(RegAlloc* ra, BB** bbs, uint32_t vreglen, LiveInterval* i
         VReg* vr = ra->vregs[i];
         if(vr == NULL)
             continue;
-        vp_assertX(!(vr->flag & VRF_CONST), "const vreg");
-        if(vr->flag & VRF_SPILL)
+        vp_assertX(!vrf_const(vr), "const vreg");
+        if(vrf_spill(vr))
         {
             li->state = LI_SPILL;
             li->phys = vr->phys;
@@ -303,7 +292,7 @@ static void live_build(RegAlloc* ra, BB** bbs, uint32_t vreglen, LiveInterval* i
             for(uint32_t k = 0; k < 3; k++)
             {
                 VReg* vr = vregs[k];
-                if(vr == NULL || (vr->flag & VRF_CONST))
+                if(vr == NULL || vrf_const(vr))
                     continue;
                 
                 LiveInterval* li = &intervals[vr->virt];
@@ -328,7 +317,7 @@ enum
     src2 = 1 << 1,
     dst = 1 << 2,
     d12 = dst | src1 | src2,
-    ___ = -1
+    ___ = REG_NO
 };
 
 static const int ir_spilltab[] = {
@@ -340,6 +329,7 @@ static const int ir_spilltab[] = {
 /* Insert load/store spills in the IR */
 static uint32_t ra_spill(RegAlloc* ra, BB** bbs)
 {
+    UNUSED(ra);
     uint32_t inserted = 0;
     for(uint32_t i = 0; i < vec_len(bbs); i++)
     {
@@ -349,38 +339,38 @@ static uint32_t ra_spill(RegAlloc* ra, BB** bbs)
         {
             IR* ir = irs[j];
             uint32_t flag = ir_spilltab[ir->kind];
-            if(flag == ___)
+            if(flag == (uint32_t)___)
                 continue;
 
             /* Insert spill for src1 */
-            if(ir->src1 && (flag & src1) && (ir->src1->flag & VRF_SPILL))
+            if(ir->src1 && (flag & src1) && vrf_spill(ir->src1))
             {
                 VReg* sp = ir->src1;
-                vp_assertX(!(sp->flag & VRF_CONST), "spill const vreg?");
+                vp_assertX(!vrf_const(sp), "spill const vreg?");
                 VReg* tmp = vp_ra_spawn(sp->vsize, VRF_NO_SPILL);
-                IR* is = vp_ir_load_s(tmp, sp, tmp->vsize);
+                IR* is = vp_ir_load_s(tmp, sp, ir->flag);
                 vec_insert(irs, j, is); j++;
                 ir->src1 = tmp;
                 inserted++;
             }
             
             /* Insert spill for src2 */
-            if(ir->src2 && (flag & src2) && (ir->src2->flag & VRF_SPILL))
+            if(ir->src2 && (flag & src2) && vrf_spill(ir->src2))
             {
                 VReg* sp = ir->src2;
-                vp_assertX(!(sp->flag & VRF_CONST), "spill const vreg?");
+                vp_assertX(!vrf_const(sp), "spill const vreg?");
                 VReg* tmp = vp_ra_spawn(sp->vsize, VRF_NO_SPILL);
-                IR* is = vp_ir_load_s(tmp, sp, tmp->vsize);
+                IR* is = vp_ir_load_s(tmp, sp, ir->flag);
                 vec_insert(irs, j, is); j++;
                 ir->src2 = tmp;
                 inserted++;
             }
 
             /* Insert spill for dst */
-            if(ir->dst && (flag & dst) && (ir->dst->flag & VRF_SPILL))
+            if(ir->dst && (flag & dst) && vrf_spill(ir->dst))
             {
                 VReg* sp = ir->dst;
-                vp_assertX(!(sp->flag & VRF_CONST), "spill const vreg?");
+                vp_assertX(!vrf_const(sp), "spill const vreg?");
                 VReg* tmp = vp_ra_spawn(sp->vsize, VRF_NO_SPILL);
                 IR* is = vp_ir_store_s(tmp, sp);
                 vec_insert(irs, j, is); j++;
@@ -426,7 +416,7 @@ static void ra_scan(RegAlloc* ra, LiveInterval** sorted, uint32_t vreglen)
         live_expire(&fregset, li->start);
 
         PhysRegSet* prsp = &iregset;
-        if(vr->flag & VRF_FLO)
+        if(vrf_flo(vr))
         {
             prsp = &fregset;
         }
@@ -434,10 +424,10 @@ static void ra_scan(RegAlloc* ra, LiveInterval** sorted, uint32_t vreglen)
         uint32_t mask = prsp->phystemp;  /* Volatile registers mask */
         uint32_t regno = REG_NO;
         uint32_t ip = vr->param;
-        uint64_t occupied = prsp->usebits | li->regbits;
+        RegSet occupied = prsp->usebits | li->regbits;
         if(ip != REG_NO)
         {
-            if(vr->flag & VRF_FLO)
+            if(vrf_flo(vr))
             {
                 /* Map floating registers */
                 ip = ra->set->fmap[ip];
@@ -515,7 +505,7 @@ void vp_ra_alloc(RegAlloc *ra, BB** bbs)
             if(li->state == LI_SPILL)
             {
                 VReg* vr = ra->vregs[i];
-                if(vr->flag & VRF_SPILL)
+                if(vrf_spill(vr))
                     continue;
                 vreg_spill(vr);
             }
@@ -544,7 +534,7 @@ void vp_ra_alloc(RegAlloc *ra, BB** bbs)
         VReg* vr = ra->vregs[i];
         if(vr)
         {
-            vp_assertX(!(vr->flag & VRF_CONST), "const vreg");
+            vp_assertX(!vrf_const(vr), "const vreg");
             vr->phys = li->phys;
         }
     }
@@ -566,7 +556,7 @@ RegAlloc* vp_ra_new(const RASettings* set)
 }
 
 /* Spawn a new virtual register */
-VReg* vp_ra_spawn(VRegSize vsize, uint8_t vflag)
+VReg* vp_ra_spawn(VRSize vsize, uint8_t vflag)
 {
     RegAlloc* ra = V->ra;
     VReg* vr = vp_arena_alloc(&V->irarena, sizeof(*vr));

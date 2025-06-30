@@ -1,0 +1,26 @@
+struct Foo
+{
+    a : int32;
+    b : bool;
+}
+
+#staticassert(sizeof(Foo) == 8);
+
+fn main() : int32
+{
+    //var f : Foo = {};
+    //var f2 : Foo[5] = {};
+    //f2[4].a = 987;
+    //f.a = 232399;
+    //f.b = false;
+    //f.b = false;
+    
+    var x = 0;
+    var f2 : Foo[3] = {{a = 23232288, b = false}, {a = 9877, b = true}};
+    //f2[0].a = 2323288;
+    
+    return f2[x].a;
+    //var c = 0;
+    //var c = f.a;
+    //return c;
+}

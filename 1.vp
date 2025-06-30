@@ -1,0 +1,6 @@
+fn main() : int32
+{
+    var a : int32 = 12323;
+    var b : int32 = 2;
+    return a * b;
+}

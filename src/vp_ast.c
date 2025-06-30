@@ -131,7 +131,7 @@ Expr* vp_expr_name(SrcLoc loc, Str* name)
 
 Expr* vp_expr_comp(SrcLoc loc, TypeSpec* spec, Field* fields)
 {
-    Expr* expr = expr_new(EX_COMPOUND, loc);
+    Expr* expr = expr_new(EX_COMPLIT, loc);
     expr->comp.spec = spec;
     expr->comp.fields = fields;
     return expr;
@@ -284,11 +284,6 @@ Decl* vp_decl_aggr(SrcLoc loc, DeclKind kind, Str* name, Aggregate* agr)
     return d;
 }
 
-Decl* vp_decl_enum(Str* name, TypeSpec* spec)
-{
-    return NULL;
-}
-
 Decl* vp_decl_note(SrcLoc loc, Note note)
 {
     Decl* d = decl_new(DECL_NOTE, loc, NULL);
@@ -298,6 +293,7 @@ Decl* vp_decl_note(SrcLoc loc, Note note)
 
 Aggregate* vp_aggr_new(SrcLoc loc, AggregateKind kind, AggregateItem* items)
 {
+    UNUSED(loc);
     Aggregate* ag = ast_alloc(sizeof(*ag));
     ag->kind = kind;
     ag->items = items;

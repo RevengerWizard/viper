@@ -3,10 +3,16 @@
 ** Viper compiler
 */
 
+#ifdef _MSC_VER
+#define _CRT_SECURE_NO_WARNINGS
+#endif
+
 #include <stdio.h>
 #include <stdlib.h>
 
 #include "vp_state.h"
+
+#include "vp_pe.c"
 
 static void print_usage()
 {
@@ -24,21 +30,32 @@ int main(int argc, char** argv)
         print_usage();
         return EXIT_SUCCESS;
     }
-
+    
     V = vp_state_open();
+    
+    SBuf* code = &V->code;
+    vp_buf_init(code);
+    vp_buf_need(code, 1024);
 
     vp_load(V, argv[1]);
 
-    /*SBuf sb;
+    FILE* f = fopen("out.bin", "wb");
+    if(f)
+    {
+        fwrite(code->b, 1, sbuf_len(code), f);
+        fclose(f);
+    }
+
+    SBuf sb;
     vp_buf_init(&sb);
     vp_buf_need(&sb, 1024);
     vp_emit_exe(V, &sb);
-    FILE* f = fopen("output.exe", "wb");
+    f = fopen("out.exe", "wb");
     if(f)
     {
         fwrite(sb.b, 1, sbuf_len(&sb), f);
         fclose(f);
-    }*/
+    }
 
     vp_state_close(V);
 

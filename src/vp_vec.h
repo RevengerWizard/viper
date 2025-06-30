@@ -6,6 +6,8 @@
 #ifndef _VP_VEC_H
 #define _VP_VEC_H
 
+#include <stdlib.h>
+
 #include "vp_def.h"
 
 typedef struct VecHeader

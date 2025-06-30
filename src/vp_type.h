@@ -82,72 +82,72 @@ extern Type* tydouble;
 extern Type* tyvoid;
 extern Type* tynil;
 
-static inline bool type_isbool(const Type* t)
+static VP_AINLINE bool ty_isbool(const Type* t)
 {
     return t->kind == TY_bool;
 }
 
-static inline bool type_issigned(const Type* t)
+static VP_AINLINE bool ty_issigned(const Type* t)
 {
     return t->kind >= TY_int8 && t->kind <= TY_int64;
 }
 
-static inline bool type_isunsigned(const Type* t)
+static VP_AINLINE bool ty_isunsigned(const Type* t)
 {
     return t->kind >= TY_uint8 && t->kind <= TY_uint64;
 }
 
-static inline bool type_isint(const Type* t)
+static VP_AINLINE bool ty_isint(const Type* t)
 {
     return t->kind >= TY_uint8 && t->kind <= TY_int64;
 }
 
-static inline bool type_isflo(const Type* t)
+static VP_AINLINE bool ty_isflo(const Type* t)
 {
     return t->kind == TY_float || t->kind == TY_double;
 }
 
-static inline bool type_isnum(const Type* t)
+static VP_AINLINE bool ty_isnum(const Type* t)
 {
-    return type_isint(t) || type_isflo(t);
+    return ty_isint(t) || ty_isflo(t);
 }
 
-static inline bool type_isptrto(const Type* t, TypeKind kind)
+static VP_AINLINE bool ty_isptrto(const Type* t, TypeKind kind)
 {
     return t->kind == TY_ptr && t->p->kind == kind;
 }
 
-static inline bool type_isptr(const Type* t)
+static VP_AINLINE bool ty_isptr(const Type* t)
 {
     return t->kind == TY_ptr;
 }
 
-static inline bool type_isptrlike(const Type* t)
+static VP_AINLINE bool ty_isptrlike(const Type* t)
 {
     return t->kind == TY_ptr || t->kind == TY_func;
 }
 
-static inline bool type_isarrempty(const Type* t)
+static VP_AINLINE bool ty_isarrempty(const Type* t)
 {
     return t->kind == TY_array && t->len == 0;
 }
 
-static inline bool type_isnil(const Type* t)
+static VP_AINLINE bool ty_isnil(const Type* t)
 {
     return t == tynil;
 }
 
-static inline bool type_isscalar(const Type* t)
+static VP_AINLINE bool ty_isscalar(const Type* t)
 {
     return TY_bool <= t->kind && t->kind <= TY_func;
 }
 
-static inline bool type_isaggr(const Type* t)
+static VP_AINLINE bool ty_isaggr(const Type* t)
 {
     return t->kind == TY_struct || t->kind == TY_union;
 }
 
-static inline bool type_isfunc(const Type* t)
+static VP_AINLINE bool ty_isfunc(const Type* t)
 {
     return t->kind == TY_func;
 }

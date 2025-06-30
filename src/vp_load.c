@@ -17,6 +17,7 @@
 #include "vp_ast.h"
 #include "vp_sema.h"
 #include "vp_codegen.h"
+#include "vp_sel.h"
 
 typedef struct FileReaderCtx
 {
@@ -52,5 +53,6 @@ void vp_load(VpState* V, const char* filename)
     Decl** decls = vp_parse(V, &ls);
     vp_sema(decls);
     vp_codegen(decls);
-    fclose(ctx.fp);    
+    vp_sel(decls);
+    fclose(ctx.fp);
 }

@@ -104,6 +104,7 @@ static StrScanFmt strscan_hex(const uint8_t* p, LexValue* o, StrScanFmt fmt, int
 /* Parse octal number */
 static StrScanFmt strscan_oct(const uint8_t* p, LexValue* o, StrScanFmt fmt, int32_t ex2, uint32_t dig)
 {
+    UNUSED(ex2);
     uint64_t x = 0;
 
     if(dig > 22 || (dig == 22 && *p > '1'))

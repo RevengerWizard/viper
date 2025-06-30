@@ -4,6 +4,7 @@
 */
 
 #include "vp_target.h"
+#include "vp_sel.h"
 
 /* x64 integer registers */
 #define X64IREGDEF(_) \
@@ -58,6 +59,7 @@ static const uint32_t winx64_fmap[] = {
 
 /* Windows x64 regalloc settings */
 const RASettings winx64_ra = {
+    .extra = sel_extra,
     .imap = winx64_imap,
     .fmap = winx64_fmap,
     .iphysmax = 16,

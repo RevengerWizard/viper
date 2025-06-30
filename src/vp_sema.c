@@ -190,7 +190,7 @@ static void sym_complete(Type* ty)
         }
         for(uint32_t j = 0; j < vec_len(item->names); j++)
         {
-            vec_push(fields, (TypeField){item->names[j], tyitem});
+            vec_push(fields, (TypeField){item->names[j], tyitem, 0});
         }
     }
     if(vec_len(fields) == 0)
@@ -487,13 +487,13 @@ static bool val_overflow(uint64_t v, Type* ty)
 static Val val_fromtype(SrcLoc loc, Type* ret, uint64_t u64)
 {
     Val val;
-    if(type_isint(ret))
+    if(ty_isint(ret))
     {
         if(val_overflow(u64, ret))
         {
             vp_err_error(loc, "literal out of range for '%s'", type_name(ret));
         }
-        if(type_isunsigned(ret))
+        if(ty_isunsigned(ret))
         { 
             val = (Val){.u64 = u64};
         }
@@ -570,7 +570,7 @@ static void val_binop_overflow(Expr* e, Type* ty, Val lval, Val rval)
             break;
     }
     if ((op == EX_DIV || op == EX_MOD) &&
-    type_issigned(ty) &&
+    ty_issigned(ty) &&
     ((ty->kind == TY_int32 && lval.i32 == INT32_MIN && rval.i32 == -1) ||
      (ty->kind == TY_int64 && lval.i64 == INT64_MIN && rval.i64 == -1)))
     {
@@ -594,12 +594,12 @@ static Val val_unary(Expr* e, Type* ty, Val val)
     ExprKind op = e->kind;
     Operand res = opr_const(ty, val);
     opr_cast(&res, ty);
-    if(type_isbool(ty))
+    if(ty_isbool(ty))
     {
         vp_assertX(e->kind == EX_NOT, "fold ! bool");
         res.val.b = !res.val.b;
     }
-    else if(type_isunsigned(ty))
+    else if(ty_isunsigned(ty))
     {
         if(op == EX_NEG)
         {
@@ -607,11 +607,11 @@ static Val val_unary(Expr* e, Type* ty, Val val)
         }
         res.val.u64 = fold_unary_u64(op, res.val.u64);
     }
-    else if(type_issigned(ty))
+    else if(ty_issigned(ty))
     {
         res.val.i64 = fold_unary_i64(op, res.val.i64);
     }
-    else if(type_isflo(ty))
+    else if(ty_isflo(ty))
     {
         if(ty->kind == TY_double)
         {
@@ -640,19 +640,19 @@ static Val val_binop(Expr* e, Type* ty, Val lval, Val rval)
     Operand res;
     opr_cast(&lop, ty);
     opr_cast(&rop, ty);
-    if(type_isunsigned(ty))
+    if(ty_isunsigned(ty))
     {
         val_binop_overflow(e, ty, lop.val, rop.val);
         uint64_t u64 = fold_binop_u64(op, lop.val.u64, rop.val.u64);
         res = opr_const(ty, (Val){.u64 = u64});
     }
-    else if(type_issigned(ty))
+    else if(ty_issigned(ty))
     {
         val_binop_overflow(e, ty, lop.val, rop.val);
         int64_t i64 = fold_binop_i64(op, lop.val.i64, rop.val.i64);
         res = opr_const(ty, (Val){.i64 = i64});
     }
-    else if(type_isflo(ty))
+    else if(ty_isflo(ty))
     {
         if(ty->kind == TY_double)
         {
@@ -689,13 +689,13 @@ static void opr_fold(SrcLoc loc, Expr** e, Operand opr)
             }
             return;
         }
-        if(type_isbool(ty))
+        if(ty_isbool(ty))
         {
             *e = opr.val.b ? vp_expr_true(loc) : vp_expr_false(loc);
         }
-        else if(type_isint(ty))
+        else if(ty_isint(ty))
         {
-            if(type_issigned(ty))
+            if(ty_issigned(ty))
             {
                 *e = vp_expr_ilit(loc, opr.val.i64);
             }
@@ -704,7 +704,7 @@ static void opr_fold(SrcLoc loc, Expr** e, Operand opr)
                 *e = vp_expr_ulit(loc, opr.val.u64);
             }
         }
-        else if(type_isflo(ty))
+        else if(ty_isflo(ty))
         {
             if(ty->kind == TY_double)
             {
@@ -809,25 +809,25 @@ static Operand sema_expr_unary(Expr* e, Type* ret)
     switch(e->kind)
     {
         case EX_DEREF:
-            if(!type_isptr(ty))
+            if(!ty_isptr(ty))
             {
                 vp_err_error(e->loc, "cannot deref non-pointer type");
             }
             return opr_lval(ty->p);
         case EX_NOT:
-            if(!type_isscalar(ty))
+            if(!ty_isscalar(ty))
             {
                 vp_err_error(e->loc, "can only use 'not' with scalar types");
             }
             return opr_unary(e, opr);
         case EX_NEG:
-            if(!type_isnum(ty))
+            if(!ty_isnum(ty))
             {
                 vp_err_error(e->loc, "can only use unary '-' with arithmetic types");
             }
             return opr_unary(e, opr);
         case EX_BNOT:
-            if(!type_isint(ty))
+            if(!ty_isint(ty))
             {
                 vp_err_error(e->loc, "can only use '~' with integer types");
             }
@@ -849,16 +849,16 @@ static Operand sema_expr_binop(Expr* e, Type* ret)
     switch(op)
     {
         case EX_ADD:
-            if(type_isnum(lop.ty) && type_isnum(rop.ty))
+            if(ty_isnum(lop.ty) && ty_isnum(rop.ty))
             {
                 return opr_binop(e, lop, rop, ret);
             }
-            else if(type_isptr(lop.ty) && type_isint(rop.ty))
+            else if(ty_isptr(lop.ty) && ty_isint(rop.ty))
             {
                 sym_complete(lop.ty->p);
                 return opr_rval(lop.ty);
             }
-            else if(type_isint(lop.ty) && type_isptr(rop.ty))
+            else if(ty_isint(lop.ty) && ty_isptr(rop.ty))
             {
                 sym_complete(rop.ty->p);
                 return opr_rval(rop.ty);
@@ -869,15 +869,15 @@ static Operand sema_expr_binop(Expr* e, Type* ret)
             }
             break;
         case EX_SUB:
-            if(type_isnum(lop.ty) && type_isnum(rop.ty))
+            if(ty_isnum(lop.ty) && ty_isnum(rop.ty))
             {
                 return opr_binop(e, lop, rop, ret);
             }
-            else if(type_isptr(lop.ty) && type_isint(rop.ty))
+            else if(ty_isptr(lop.ty) && ty_isint(rop.ty))
             {
                 return opr_rval(lop.ty);
             }
-            else if(type_isptr(lop.ty) && type_isptr(rop.ty))
+            else if(ty_isptr(lop.ty) && ty_isptr(rop.ty))
             {
                 if(!vp_type_isptrcomp(lop.ty, rop.ty))
                 {
@@ -892,21 +892,21 @@ static Operand sema_expr_binop(Expr* e, Type* ret)
             break;
         case EX_MUL:
         case EX_DIV:
-            if(!type_isnum(lop.ty))
+            if(!ty_isnum(lop.ty))
             {
                 vp_err_error(e->loc, "left operand of '%s' must have arithmetic type", opname);
             }
-            if(!type_isnum(rop.ty))
+            if(!ty_isnum(rop.ty))
             {
                 vp_err_error(e->loc, "right operand of '%s' must have arithmetic type", opname);
             }
             return opr_binop(e, lop, rop, ret);
         case EX_MOD:
-            if(!type_isint(lop.ty))
+            if(!ty_isint(lop.ty))
             {
                 vp_err_error(e->loc, "left operand of '%%' must have integer type");
             }
-            if(!type_isint(rop.ty))
+            if(!ty_isint(rop.ty))
             {
                 vp_err_error(e->loc, "right operand of '%%' must have integer type");
             }
@@ -915,13 +915,13 @@ static Operand sema_expr_binop(Expr* e, Type* ret)
         case EX_LT:
         case EX_GE:
         case EX_GT:
-            if(type_isnum(lop.ty) && type_isnum(rop.ty))
+            if(ty_isnum(lop.ty) && ty_isnum(rop.ty))
             {
                 Operand res = opr_binop(e, lop, rop, ret);
                 opr_cast(&res, tybool);
                 return res;
             }
-            else if(type_isptr(lop.ty) && type_isptr(rop.ty))
+            else if(ty_isptr(lop.ty) && ty_isptr(rop.ty))
             {
                 if(lop.ty->p != rop.ty->p)
                 {
@@ -936,13 +936,13 @@ static Operand sema_expr_binop(Expr* e, Type* ret)
             break;
         case EX_EQ:
         case EX_NOTEQ:
-            if(type_isnum(lop.ty) && type_isnum(rop.ty))
+            if(ty_isnum(lop.ty) && ty_isnum(rop.ty))
             {
                 Operand res = opr_binop(e, lop, rop, ret);
                 opr_cast(&res, tybool);
                 return res;
             }
-            else if(type_isptr(lop.ty) && type_isptr(rop.ty))
+            else if(ty_isptr(lop.ty) && ty_isptr(rop.ty))
             {
                 if(lop.ty->p != rop.ty->p)
                 {
@@ -950,8 +950,8 @@ static Operand sema_expr_binop(Expr* e, Type* ret)
                 }
                 return opr_rval(tybool);
             }
-            else if((type_isnil(lop.ty) && type_isptr(rop.ty)) ||
-                    (type_isptr(lop.ty) && type_isnil(rop.ty)))
+            else if((ty_isnil(lop.ty) && ty_isptr(rop.ty)) ||
+                    (ty_isptr(lop.ty) && ty_isnil(rop.ty)))
             {
                 return opr_rval(tybool);
             }
@@ -963,7 +963,7 @@ static Operand sema_expr_binop(Expr* e, Type* ret)
         case EX_BAND:
         case EX_BOR:
         case EX_BXOR:
-            if(type_isint(lop.ty) && type_isint(rop.ty))
+            if(ty_isint(lop.ty) && ty_isint(rop.ty))
             {
                 return opr_binop(e, lop, rop, ret);
             }
@@ -974,7 +974,7 @@ static Operand sema_expr_binop(Expr* e, Type* ret)
             break;
         case EX_LSHIFT:
         case EX_RSHIFT:
-            if(type_isint(lop.ty) && type_isint(rop.ty))
+            if(ty_isint(lop.ty) && ty_isint(rop.ty))
             {
                 Type* ty = lop.ty;
                 Operand res = opr_binop(e, lop, rop, ret);
@@ -988,7 +988,7 @@ static Operand sema_expr_binop(Expr* e, Type* ret)
             break;
         case EX_AND:
         case EX_OR:
-            if(type_isscalar(lop.ty) && type_isscalar(rop.ty))
+            if(ty_isscalar(lop.ty) && ty_isscalar(rop.ty))
             {
                 Operand res = opr_binop(e, lop, rop, ret);
                 res.ty = tybool;
@@ -1032,7 +1032,7 @@ static Operand sema_expr_name(Expr* e)
 static Operand sema_init(Type* ty, Expr* e)
 {
     Operand opr = sema_expr(e, ty);
-    if(type_isarrempty(ty))
+    if(ty_isarrempty(ty))
     {
         if(opr.ty->kind == TY_array && ty->p == opr.ty->p)
         {
@@ -1040,12 +1040,12 @@ static Operand sema_init(Type* ty, Expr* e)
             ty->len = opr.ty->len;
             return opr_rval(ty);
         }
-        else if(type_isptr(opr.ty) && ty->p == opr.ty->p)
+        else if(ty_isptr(opr.ty) && ty->p == opr.ty->p)
         {
             return opr;
         }
     }
-    if(ty && type_isptr(ty))
+    if(ty && ty_isptr(ty))
     {
         opr = opr_decay(opr);
     }
@@ -1055,7 +1055,7 @@ static Operand sema_init(Type* ty, Expr* e)
 /* Resolve compound literal */
 static Operand sema_expr_comp(Expr* e, Type* ret)
 {
-    vp_assertX(e->kind == EX_COMPOUND, "compound");
+    vp_assertX(e->kind == EX_COMPLIT, "compound");
     if(!ret && !e->comp.spec)
     {
         vp_err_error(e->loc, "implicitly typed compound literal used in context without expected type");
@@ -1071,7 +1071,7 @@ static Operand sema_expr_comp(Expr* e, Type* ret)
         ty = ret;
     }
     sym_complete(ty);
-    if(type_isaggr(ty))
+    if(ty_isaggr(ty))
     {
         uint32_t idx = 0;
         for(uint32_t i = 0; i < numfields; i++)
@@ -1113,7 +1113,7 @@ static Operand sema_expr_comp(Expr* e, Type* ret)
             else if(field->kind == FIELD_IDX)
             {
                 Operand opr = sema_constexpr(field->idx);
-                if(!type_isint(opr.ty))
+                if(!ty_isint(opr.ty))
                 {
                     vp_err_error(field->loc, "field init index expression must have type int");
                 }
@@ -1128,7 +1128,7 @@ static Operand sema_expr_comp(Expr* e, Type* ret)
                 idx = opr.val.i32;
                 opr_fold(field->loc, &field->idx, opr);
             }
-            if(ty->len && idx >= ty->len)
+            if(ty->len && (uint32_t)idx >= ty->len)
             {
                 vp_err_error(field->loc, "field init in array compound literal out of range");
             }
@@ -1190,7 +1190,7 @@ static Operand sema_expr_idx(Expr* e)
         vp_err_error(e->loc, "can only index arrays or pointers");
     }
     Operand idx = sema_expr_rval(e->idx.index, NULL);
-    if(!type_isint(idx.ty))
+    if(!ty_isint(idx.ty))
     {
         vp_err_error(e->loc, "index expression must have type int");
     }
@@ -1249,7 +1249,7 @@ static Operand sema_expr_int(Expr* e, Type* ret, uint64_t u64)
             vp_err_error(e->loc, "mismatched types");
         }
     }
-    if(ret && type_isnum(ret))
+    if(ret && ty_isnum(ret))
     {
         Val val = val_fromtype(e->loc, ret, u64);
         res = opr_lit(ret, val, false);
@@ -1265,7 +1265,7 @@ static Operand sema_expr_int(Expr* e, Type* ret, uint64_t u64)
 static Operand sema_expr_num(Expr* e, Type* ret)
 {
     Operand res;
-    if(ret && type_isflo(ret))
+    if(ret && ty_isflo(ret))
     {
         Val val;
         if(ret->kind == TY_double)
@@ -1319,7 +1319,7 @@ static Operand sema_expr(Expr* e, Type* ret)
         case EX_REF:
         {
             Operand opr;
-            if(ret && type_isptr(ret))
+            if(ret && ty_isptr(ret))
             {
                 opr = sema_expr(e->unary, ret->p);
             }
@@ -1360,7 +1360,7 @@ static Operand sema_expr(Expr* e, Type* ret)
         case EX_OR:
             res = sema_expr_binop(e, ret);
             break;
-        case EX_COMPOUND:
+        case EX_COMPLIT:
             res = sema_expr_comp(e, ret); 
             break;
         case EX_FIELD:
@@ -1482,7 +1482,7 @@ static Type* sema_typespec(TypeSpec* spec)
             if(spec->arr.expr)
             {
                 Operand opr = sema_constexpr(spec->arr.expr);
-                if(!type_isint(opr.ty))
+                if(!ty_isint(opr.ty))
                 {
                     vp_err_error(spec->loc, "array size constant expression must have integer type");
                 }
@@ -1698,7 +1698,7 @@ static Type* sema_var(Decl* d)
         vp_assertX(d->var.expr, "expression");
         Operand res = sema_expr(d->var.expr, NULL);
         inferty = ty = res.ty;
-        if(ty->kind == TY_array && d->var.expr->kind != EX_COMPOUND)
+        if(ty->kind == TY_array && d->var.expr->kind != EX_COMPLIT)
         {
             ty = vp_type_decay(ty);
         }
@@ -1706,11 +1706,11 @@ static Type* sema_var(Decl* d)
         d->var.expr->ty = inferty;
     }
     sym_complete(ty);
-    if(!d->var.expr || type_isptr(inferty))
+    if(!d->var.expr || ty_isptr(inferty))
     {
         ty = vp_type_decayempty(ty);
     }
-    if(type_isnil(ty))
+    if(ty_isnil(ty))
     {
         vp_err_error(d->loc, "cannot infer type of nil");
     }

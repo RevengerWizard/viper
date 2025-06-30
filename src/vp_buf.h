@@ -22,36 +22,36 @@ typedef struct SBuf
 char* vp_buf_need2(SBuf* sb, size_t size);
 char* vp_buf_more2(SBuf* sb, size_t size);
 
-static inline void vp_buf_init(SBuf* sb)
+static VP_AINLINE void vp_buf_init(SBuf* sb)
 {
     sb->w = sb->e = sb->b = NULL;
 }
 
-static inline void vp_buf_reset(SBuf* sb)
+static VP_AINLINE void vp_buf_reset(SBuf* sb)
 {
     sb->w = sb->b;
 }
 
-static inline char* vp_buf_need(SBuf* sb, size_t size)
+static VP_AINLINE char* vp_buf_need(SBuf* sb, size_t size)
 {
     if(size > sbuf_left(sb))
         return vp_buf_need2(sb, size);
     return sb->b;
 }
 
-static inline char* vp_buf_more(SBuf* sb, size_t size)
+static VP_AINLINE char* vp_buf_more(SBuf* sb, size_t size)
 {
     if(size > sbuf_left(sb))
         return vp_buf_more2(sb, size);
     return sb->w;
 }
 
-static inline char* vp_buf_wmem(char* p, const void* q, size_t len)
+static VP_AINLINE char* vp_buf_wmem(char* p, const void* q, size_t len)
 {
     return (char*)memcpy(p, q, len) + len;
 }
 
-static inline void vp_buf_putb(SBuf* sb, int c)
+static VP_AINLINE void vp_buf_putb(SBuf* sb, int c)
 {
     char* w = vp_buf_more(sb, 1);
     *w++ = (char)c;

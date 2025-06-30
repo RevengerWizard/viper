@@ -70,6 +70,16 @@ static VP_AINLINE uint32_t vp_fls(uint32_t x)
 #define VP_UNLIKELY(x) (x)
 #endif
 
+static VP_AINLINE bool vp_isimm8(int64_t x)
+{
+    return x >= INT8_MIN && x <= INT8_MAX;
+}
+
+static VP_AINLINE bool vp_isimm32(int64_t x)
+{
+    return x >= INT32_MIN && x <= INT32_MAX;
+}
+
 /* Most significant bit */
 static VP_AINLINE uint32_t vp_msb(uint32_t x)
 {
