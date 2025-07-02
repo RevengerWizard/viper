@@ -194,8 +194,8 @@ static VReg* gen_ref(Expr* e)
                 return base;
             
             /* base + offset */
-            VReg* ofsreg = vp_vreg_ki(offset, VRegSize8);
-            return vp_ir_binop(IR_ADD, base, ofsreg, VRegSize8, IRF_UNSIGNED);
+            VReg* ofsreg = vp_vreg_ki(offset, VRSize8);
+            return vp_ir_binop(IR_ADD, base, ofsreg, VRSize8, IRF_UNSIGNED);
         }
         case EX_IDX:
         {
@@ -207,10 +207,10 @@ static VReg* gen_ref(Expr* e)
             /* base + (idx * sizeof(base)) */
             if(elemsize > 1)
             {
-                VReg* sizevr = vp_vreg_ki(elemsize, VRegSize8);
-                idx = vp_ir_binop(IR_MUL, idx, sizevr, VRegSize8, IRF_UNSIGNED);
+                VReg* sizevr = vp_vreg_ki(elemsize, VRSize8);
+                idx = vp_ir_binop(IR_MUL, idx, sizevr, VRSize8, IRF_UNSIGNED);
             }
-            return vp_ir_binop(IR_ADD, base, idx, VRegSize8, IRF_UNSIGNED);
+            return vp_ir_binop(IR_ADD, base, idx, VRSize8, IRF_UNSIGNED);
         }
         default:
             vp_assertX(0, "?");
@@ -376,8 +376,8 @@ static VReg* gen_cast(Expr* e)
 typedef struct FlatField
 {
     uint32_t offset;     /* Byte offset from base */
-    Expr* initializer_expr; /* The original initializer expression */
-    Type* type;         /* Type of the field */
+    Expr* init; /* Initializer expression */
+    Type* type;
 } FlatField;
 
 /* Flatten a compound literal */
@@ -404,19 +404,11 @@ static void flatten_complit(Expr* e, uint32_t base_offset, FlatField** flat_fiel
             }
             case FIELD_IDX:
             {
-                /* For array indexing, we need to evaluate the index expression */
-                /* This is tricky for compile-time constants vs runtime expressions */
-                if(field->idx->kind == EX_INT || field->idx->kind == EX_UINT)
-                {
-                    uint32_t idx_val = (field->idx->kind == EX_INT) ? field->idx->i : field->idx->u;
-                    Type* elemty = compty->p;
-                    uint32_t elemsize = vp_type_sizeof(elemty);
-                    field_offset = base_offset + (idx_val * elemsize);
-                }
-                else
-                {
-                    vp_assertX(0, "Complex compound literal indexing not yet supported in flattening (runtime index)");
-                }
+                vp_assertX(field->idx->kind == EX_INT || field->idx->kind == EX_UINT, "not constexpr");
+                uint32_t idx_val = (field->idx->kind == EX_INT) ? field->idx->i : field->idx->u;
+                Type* elemty = compty->p;
+                uint32_t elemsize = vp_type_sizeof(elemty);
+                field_offset = base_offset + (idx_val * elemsize);
                 break;
             }
             case FIELD_DEFAULT:
@@ -434,19 +426,13 @@ static void flatten_complit(Expr* e, uint32_t base_offset, FlatField** flat_fiel
         /* Check if the field initializer is another compound literal */
         if(field->init->kind == EX_COMPLIT)
         {
-            /* Recursively flatten nested compound literal */
             flatten_complit(field->init, field_offset, flat_fields);
         }
         else
         {
-            /* Add to flat list. We store the *expression* itself,
-               not its generated VReg, to defer gen_expr until
-               we are ready to store. This is crucial for avoiding
-               unnecessary loads/stores for nested aggregates.
-            */
             FlatField ff = {
                 .offset = field_offset,
-                .initializer_expr = field->init,
+                .init = field->init,
                 .type = field->init->ty
             };
             vec_push(*flat_fields, ff);
@@ -472,11 +458,11 @@ static VReg* gen_complit_base(Expr* e, VReg* base)
         }
         else
         {
-            VReg* offset_reg = vp_vreg_ki(ff->offset, VRegSize8);
-            field_addr = vp_ir_binop(IR_ADD, base, offset_reg, VRegSize8, IRF_UNSIGNED);
+            VReg* offset_reg = vp_vreg_ki(ff->offset, VRSize8);
+            field_addr = vp_ir_binop(IR_ADD, base, offset_reg, VRSize8, IRF_UNSIGNED);
         }
         
-        VReg* value = gen_expr(ff->initializer_expr);
+        VReg* value = gen_expr(ff->init);
         gen_store(field_addr, value, ff->type);
     }
     
@@ -603,10 +589,10 @@ static VReg* gen_logical(Expr* e)
     gen_cond_jmp(e, tbb, fbb);
     vp_bb_setcurr(tbb);
     VReg* dst = vp_vreg_new(tybool);
-    vp_ir_mov(dst, vp_vreg_ki(true, VRegSize1), 0);
+    vp_ir_mov(dst, vp_vreg_ki(true, VRSize1), 0);
     vp_ir_jmp(nbb);
     vp_bb_setcurr(fbb);
-    vp_ir_mov(dst, vp_vreg_ki(false, VRegSize1), 0);
+    vp_ir_mov(dst, vp_vreg_ki(false, VRSize1), 0);
     vp_bb_setcurr(nbb);
     return dst;
 }

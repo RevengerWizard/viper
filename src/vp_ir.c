@@ -34,7 +34,7 @@ static IR* ir_new(IrKind kind)
 IR* vp_ir_bofs(FrameInfo* fi)
 {
     IR* ir = ir_new(IR_BOFS);
-    ir->dst = vp_ra_spawn(VRegSize8, 0);
+    ir->dst = vp_ra_spawn(VRSize8, 0);
     ir->bofs.fi = fi;
     ir->bofs.ofs = 0;
     return ir;
@@ -45,14 +45,14 @@ IR* vp_ir_iofs(Str* label)
     IR* ir = ir_new(IR_IOFS);
     ir->iofs.ofs = 0;
     ir->iofs.label = label;
-    ir->dst = vp_ra_spawn(VRegSize8, 0);
+    ir->dst = vp_ra_spawn(VRSize8, 0);
     return ir;
 }
 
 IR* vp_ir_sofs(uint32_t ofs)
 {
     IR* ir = ir_new(IR_SOFS);
-    ir->dst = vp_ra_spawn(VRegSize8, 0);
+    ir->dst = vp_ra_spawn(VRSize8, 0);
     ir->sofs.ofs = ofs;
     return ir;
 }
@@ -114,7 +114,7 @@ IR* vp_ir_cond(VReg* src1, VReg* src2, CondKind cond)
     IR* ir = ir_new(IR_COND);
     ir->src1 = src1;
     ir->src2 = src2;
-    ir->dst = vp_ra_spawn(VRegSize1, 0);
+    ir->dst = vp_ra_spawn(VRSize1, 0);
     ir->cond = cond;
     return ir;
 }

@@ -41,10 +41,10 @@ enum
 /* Size of a virtual register */
 typedef enum VRSize
 {
-    VRegSize1,
-    VRegSize2,
-    VRegSize4,
-    VRegSize8,
+    VRSize1,
+    VRSize2,
+    VRSize4,
+    VRSize8,
 } VRSize;
 
 #define REG_NO ((uint32_t)-1)

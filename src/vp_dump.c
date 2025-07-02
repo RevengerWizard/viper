@@ -76,7 +76,7 @@ static void dump_vreg(VReg* vr)
     {
         if(vrf_flo(vr))
         {
-            if(vr->vsize == VRegSize4)
+            if(vr->vsize == VRSize4)
             {
                 printf("%f", vr->n);
             }
@@ -124,12 +124,15 @@ static void dump_ir(IR* ir)
     switch(ir->kind)
     {
         case IR_JMP:
-            printf("J%s\t", kcond[ir->jmp.cond & (COND_MASK | COND_UNSIGNED)]);
+            printf("J%s", kcond[ir->jmp.cond & (COND_MASK | COND_UNSIGNED)]);
             break;
         default:
-            printf("%s\t", vp_ir_name[ir->kind]);
+            printf("%s", vp_ir_name[ir->kind]);
             break;
     }
+
+    if(irf_unsigned(ir)) printf("U");
+    printf("\t");
 
     switch(ir->kind)
     {

@@ -806,6 +806,13 @@ static void emit_call64_r(VpState* V, X64Reg reg)
     emit_u8(V, MODRM(3, 2, reg & 7));
 }
 
+/* CALL rel32 */
+static void emit_call_rel32(VpState* V, int32_t rel)
+{
+    emit_u8(V, 0xE8);
+    emit_im32(V, rel);
+}
+
 /* -- INC instructions ---------------------------------------------- */
 
 /* INC reg64 */
@@ -978,6 +985,23 @@ static void emit_pop64_r(VpState* V, X64Reg reg)
     emit_u8(V, 0x58 + (reg & 7));
 }
 
+/* -- JMP instructions ---------------------------------------------- */
+
+/* JMP rel32 */
+static void emit_jmp_rel32(VpState* V, int32_t rel)
+{
+    emit_u8(V, 0xE9);
+    emit_im32(V, rel);
+}
+
+/* Jcc rel32 */
+static void emit_jcc_rel32(VpState* V, X64CC cc, int32_t rel)
+{
+    emit_u8(V, 0x0F);
+    emit_u8(V, 0x80 + cc);
+    emit_im32(V, rel);
+}
+
 /* -- SETcc instructions -------------------------------------------- */
 
 /* SETcc reg8 */
@@ -988,19 +1012,6 @@ static void emit_setcc(VpState* V, X64CC cc, X64Reg reg)
     emit_u8(V, 0x90 | (uint8_t)cc);
     emit_u8(V, MODRM(3, 0, reg & 7));
 }
-
-static void emit_sete(VpState* V, X64Reg reg) { emit_setcc(V, CC_E, reg); }
-static void emit_setne(VpState* V, X64Reg reg) { emit_setcc(V, CC_NE, reg); }
-static void emit_setl(VpState* V, X64Reg reg) { emit_setcc(V, CC_L, reg); }
-static void emit_setg(VpState* V, X64Reg reg) { emit_setcc(V, CC_G, reg); }
-static void emit_setle(VpState* V, X64Reg reg) { emit_setcc(V, CC_LE, reg); }
-static void emit_setge(VpState* V, X64Reg reg) { emit_setcc(V, CC_GE, reg); }
-static void emit_setb(VpState* V, X64Reg reg) { emit_setcc(V, CC_B, reg); }
-static void emit_seta(VpState* V, X64Reg reg) { emit_setcc(V, CC_A, reg); }
-static void emit_setbe(VpState* V, X64Reg reg) { emit_setcc(V, CC_BE, reg); }
-static void emit_setae(VpState* V, X64Reg reg) { emit_setcc(V, CC_AE, reg); }
-static void emit_setp(VpState* V, X64Reg reg) { emit_setcc(V, CC_P, reg); }
-static void emit_setnp(VpState* V, X64Reg reg) { emit_setcc(V, CC_NP, reg); }
 
 /* -- Sign-extension instructions ----------------------------------- */
 

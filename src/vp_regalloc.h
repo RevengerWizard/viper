@@ -98,4 +98,7 @@ static VP_AINLINE VReg* vp_vreg_new(Type* ty)
     return vp_ra_spawn(vp_vsize(ty), vp_vflag(ty));
 }
 
+#define vp_assertVSize(v, min, max) \
+    vp_assertX((v) >= (min) && (v) <= (max), "invalid VRSize")
+
 #endif
