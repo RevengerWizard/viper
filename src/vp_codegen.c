@@ -728,6 +728,32 @@ static void gen_block(Stmt** block)
     }
 }
 
+/* Generate if/else if/else statement */
+static void gen_if_stmt(Stmt* st)
+{
+    vp_assertX(st->kind == ST_IF, "not an if statement");
+
+    BB* tbb = vp_bb_new();
+    BB* fbb = vp_bb_new();
+
+    gen_cond_jmp(st->ifst.cond, tbb, fbb);
+    vp_bb_setcurr(tbb);
+    gen_stmt(st->ifst.tblock);
+
+    if(st->ifst.fblock == NULL)
+    {
+        vp_bb_setcurr(fbb);
+    }
+    else
+    {
+        BB* nbb = vp_bb_new();
+        vp_ir_jmp(nbb);
+        vp_bb_setcurr(fbb);
+        gen_stmt(st->ifst.fblock);
+        vp_bb_setcurr(nbb);
+    }
+}
+
 /* Generate a statement */
 static void gen_stmt(Stmt* st)
 {
@@ -737,6 +763,7 @@ static void gen_stmt(Stmt* st)
         case ST_DECL: gen_var(st->decl); break;
         case ST_ASSIGN: gen_assign(st->lhs, st->rhs); break;
         case ST_EXPR: gen_expr_stmt(st->expr); break;
+        case ST_IF: gen_if_stmt(st); break;
         case ST_RETURN: gen_ret(st); break;
         default: vp_assertX(0, "?");
     }
@@ -856,7 +883,7 @@ static void gen_fn(Decl* d)
 
     gen_stack(d);
 
-    vp_dump_bb(d);
+    //vp_dump_bb(d);
 }
 
 /* Generate code IR for all declarations */

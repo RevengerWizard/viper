@@ -633,10 +633,18 @@ static void sel_cond(IR* ir)
     emit_movsx_r32r8(V, dst, dst);
 }
 
+static PatchInfo* jmps = NULL;
+
+static void patchinfo_add(BB* target, uint32_t ofs)
+{
+    PatchInfo pi = {target, ofs};
+    vec_push(jmps, pi);
+}
+
 static void sel_jmp(IR* ir)
 {
     CondKind cond = ir->jmp.cond;
-    vp_assertX(cond != COND_NONE, "unconditional jump?");
+    vp_assertX(cond != COND_NONE, "unconditional jump");
 
     VReg* src1 = ir->src1, *src2 = ir->src2;
     if(cond & COND_FLO)
@@ -669,14 +677,18 @@ static void sel_jmp(IR* ir)
 
     if(cond == COND_ANY)
     {
+        uint32_t patch = sbuf_len(&V->code) + 1;
         emit_jmp_rel32(V, 0);
+        patchinfo_add(ir->jmp.bb, patch);
         return;
     }
 
     cmp_vregs(src1, src2, cond);
 
+    uint32_t patch = sbuf_len(&V->code) + 2;
     X64CC cc = cond2cc(cond);
     emit_jcc_rel32(V, cc, 0);
+    patchinfo_add(ir->jmp.bb, patch);
 }
 
 static void sel_mem(IR* ir)
@@ -1116,6 +1128,21 @@ void vp_sel_tweak(Decl* d)
     }
 }
 
+static void patch_jumps(void)
+{
+    for(uint32_t i = 0; i < vec_len(jmps); i++)
+    {
+        PatchInfo* patch = &jmps[i];
+        
+        int32_t from = patch->ofs + 4;
+        int32_t to = patch->target->ofs;
+        int32_t rel = (int32_t)(to - from);
+        
+        uint8_t* code = (uint8_t*)(V->code.b + patch->ofs);
+        *(uint32_t*)code = (uint32_t)rel;
+    }
+}
+
 void vp_sel(Decl** decls)
 {
     emit_push64_r(V, RBP);
@@ -1132,6 +1159,7 @@ void vp_sel(Decl** decls)
             for(uint32_t i = 0; i < vec_len(bbs); i++)
             {
                 BB* bb = bbs[i];
+                bb->ofs = sbuf_len(&V->code);
                 for(uint32_t j = 0; j < vec_len(bb->irs); j++)
                 {
                     IR* ir = bb->irs[j];
@@ -1143,4 +1171,5 @@ void vp_sel(Decl** decls)
     emit_add64_ri(V, RSP, 0x100);
     emit_pop64_r(V, RBP);
     emit_ret(V);
+    patch_jumps();
 }

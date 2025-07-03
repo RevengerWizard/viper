@@ -26,6 +26,7 @@
     _(usize) _(isize) \
     _(float) _(double) \
     _(true) _(false) _(nil) \
+    _(if) _(else) \
     _(return) \
     /* Symbols */ \
     __(ge, >=) __(le, <=) \

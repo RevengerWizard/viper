@@ -766,6 +766,32 @@ static void dump_ast_stmt(Stmt* stm)
 {
     switch(stm->kind)
     {
+        case ST_IF:
+            dump_indent();
+            printf("if ");
+            dump_ast_expr(stm->ifst.cond);
+            printf("\n");
+            dump_indent();
+            printf("{\n");
+            indent++;
+            dump_ast_stmt(stm->ifst.tblock);
+            indent--;
+            dump_indent();
+            printf("}\n");
+            /* Else block, if any */
+            if(stm->ifst.fblock)
+            {
+                dump_indent();
+                printf("else\n");
+                dump_indent();
+                printf("{\n");
+                indent++;
+                dump_ast_stmt(stm->ifst.fblock);
+                indent--;
+                dump_indent();
+                printf("}\n");
+            }
+            break;
         case ST_RETURN:
             dump_indent();
             printf("return ");

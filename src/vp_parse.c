@@ -669,6 +669,28 @@ static Stmt* parse_block(LexState* ls)
     return vp_stmt_block(loc, stmts);
 }
 
+/* Parse 'if' statement */
+static Stmt* parse_if(LexState* ls)
+{
+    vp_lex_next(ls);    /* Skip 'if' */
+    SrcLoc loc = lex_srcloc(ls);
+    Expr* cond = expr(ls);
+    Stmt* tblock = parse_block(ls);
+    Stmt* fblock = NULL;
+    if(lex_match(ls, TK_else))
+    {
+        if(lex_check(ls, TK_if))
+        {
+            fblock = parse_stmt(ls);            
+        }
+        else
+        {
+            fblock = parse_block(ls);
+        }
+    }
+    return vp_stmt_if(loc, cond, tblock, fblock);
+}
+
 /* Parse 'return' statement */
 static Stmt* parse_return(LexState* ls)
 {
@@ -833,6 +855,9 @@ static Stmt* parse_stmt(LexState* ls)
     Stmt* st;
     switch(ls->curr)
     {
+        case TK_if:
+            st = parse_if(ls);
+            break;
         case TK_return:
             st = parse_return(ls);
             break;

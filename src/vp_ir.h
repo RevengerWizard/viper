@@ -195,7 +195,14 @@ typedef struct BB
     struct BB* next;
     Str* label;
     IR** irs;
+    uint32_t ofs;
 } BB;
+
+typedef struct PatchInfo
+{
+    BB* target;
+    int32_t ofs;   /* Offset to path */
+} PatchInfo;
 
 extern const char* const vp_ir_name[];
 

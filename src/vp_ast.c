@@ -237,6 +237,15 @@ Stmt* vp_stmt_return(SrcLoc loc, Expr* e)
     return st;
 }
 
+Stmt* vp_stmt_if(SrcLoc loc, Expr* cond, Stmt* tblock, Stmt* fblock)
+{
+    Stmt* st = stmt_new(ST_IF, loc);
+    st->ifst.cond = cond;
+    st->ifst.tblock = tblock;
+    st->ifst.fblock = fblock;
+    return st;
+}
+
 /* -- AST declarations ---------------------------------------------- */
 
 static Decl* decl_new(DeclKind kind, SrcLoc loc, Str* name)

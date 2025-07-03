@@ -393,6 +393,7 @@ BB* vp_bb_new()
     bb->label = vp_label_new();
     bb->next = NULL;
     bb->irs = NULL;
+    bb->ofs = 0;
     return bb;
 }
 

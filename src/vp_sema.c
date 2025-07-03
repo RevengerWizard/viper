@@ -1558,6 +1558,16 @@ static Type* sema_fn(Decl* d)
 static void sema_stmt(Stmt* st, Type* ret);
 static Type* sema_var(Decl* d);
 
+/* Resolve a condition expression */
+static void sema_cond(Expr* e)
+{
+    Operand cond = sema_expr(e, NULL);
+    if(!ty_isscalar(cond.ty))
+    {
+        vp_err_error(e->loc, "condition expression must have scalar type");
+    }
+}
+
 /* Resolve block of statements */
 static void sema_block(Stmt** stmts, Type* ret)
 {
@@ -1610,6 +1620,14 @@ static void sema_stmt(Stmt* st, Type* ret)
             break;
         case ST_BLOCK:
             sema_block(st->block, ret);
+            break;
+        case ST_IF:
+            sema_cond(st->ifst.cond);
+            sema_stmt(st->ifst.tblock, ret);
+            if(st->ifst.fblock)
+            {
+                sema_stmt(st->ifst.fblock, ret);
+            }
             break;
         case ST_EXPR:
             sema_expr(st->expr, NULL);
