@@ -1,6 +1,11 @@
+fn mul(a : int32, b : int32) : int32
+{
+    return a * b;
+}
+
 fn main() : int32
 {
-    var a : int32 = 12323;
+    var a : int32 = 999;
     var b : int32 = 2;
-    return a * b;
+    return mul(a, b);
 }

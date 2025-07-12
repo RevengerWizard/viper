@@ -33,11 +33,12 @@ typedef struct VpState
     struct Scope* globscope;
     struct Scope* currscope;
     BB* bb;
-    struct Decl* currfn;
+    struct Code* fncode;
     RegAlloc* ra;
     Arena irarena;
     FILE* txtfile;
     SBuf tmpbuf;
+    Tab funcs;
 } VpState;
 
 extern VpState* V;

@@ -138,6 +138,7 @@ typedef struct IRCallInfo
     uint32_t stacksize; /* Stack space for arguments */
     Str* label;
     VReg** args;
+    struct Code* fn;
 } IRCallInfo;
 
 /* IR flags */
@@ -195,11 +196,12 @@ typedef struct BB
     struct BB* next;
     Str* label;
     IR** irs;
-    uint32_t ofs;
+    int32_t ofs;
 } BB;
 
 typedef struct PatchInfo
 {
+    struct Code* c;
     BB* target;
     int32_t ofs;   /* Offset to path */
 } PatchInfo;

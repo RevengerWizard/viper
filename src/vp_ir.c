@@ -7,7 +7,7 @@
 #include "vp_mem.h"
 #include "vp_state.h"
 #include "vp_str.h"
-#include "vp_ast.h"
+#include "vp_codegen.h"
 #include "vp_vec.h"
 #include "vp_regalloc.h"
 
@@ -406,7 +406,7 @@ void vp_bb_setcurr(BB* bb)
         V->bb->next = bb;
     }
     V->bb = bb;
-    vec_push(V->currfn->fn.bbs, bb);
+    vec_push(V->fncode->bbs, bb);
 }
 
 static uint32_t labelno;

@@ -4,11 +4,13 @@
 */
 
 #include "vp_codegen.h"
+#include "vp_mem.h"
 #include "vp_regalloc.h"
 #include "vp_ast.h"
 #include "vp_ir.h"
 #include "vp_sel.h"
 #include "vp_str.h"
+#include "vp_tab.h"
 #include "vp_target.h"
 #include "vp_type.h"
 #include "vp_var.h"
@@ -346,8 +348,12 @@ static VReg* gen_call(Expr* e)
     IRCallInfo* ci = vp_ircallinfo_new(args, argnum, label);
     ci->regargs = regargs;
     ci->stacksize = offset;
+    ci->fn = vp_tab_get(&V->funcs, label);
+    vp_assertX(ci->fn, "?");
 
-    vp_ir_call(ci, dst, freg);
+    IR* ir = vp_ir_call(ci, dst, freg);
+    vec_push(V->fncode->calls, ir);
+
     return dst;
 }
 
@@ -769,11 +775,11 @@ static void gen_stmt(Stmt* st)
     }
 }
 
-static void gen_stack(Decl* d)
+static void gen_stack(Decl* d, Code* cd)
 {
     uint32_t framesize = 0;
 
-    /* Allocate stack variables onto stack frame */
+    /* Allocate stack frame */
     for(uint32_t i = 0; i < vec_len(d->fn.scopes); i++)
     {
         Scope* scope = d->fn.scopes[i];
@@ -803,7 +809,7 @@ static void gen_stack(Decl* d)
     }
 
     /* Allocate spilled variables onto stack frame */
-    RegAlloc* ra = d->fn.ra;
+    RegAlloc* ra = cd->ra;
     for(uint32_t i = 0; i < vec_len(ra->vregs); i++)
     {
         LiveInterval* li = ra->sorted[i];
@@ -820,6 +826,8 @@ static void gen_stack(Decl* d)
         framesize = ALIGN_UP(framesize + size, align);
         vr->fi.ofs = -(int32_t)framesize;
     }
+
+    cd->framesize = framesize;
 }
 
 /* Generate function parameters */
@@ -833,7 +841,7 @@ static void gen_params(Decl* d)
     {
         VReg* vr = vp_vreg_new(vp_type_ptr(ret));
         vr->flag |= VRF_PARAM;
-        vr->param = 0;
+        vr->param = REG_NO;
     }
 
     for(uint32_t i = 0; i < vec_len(d->fn.params); i++)
@@ -857,14 +865,19 @@ static void gen_params(Decl* d)
 }
 
 /* Generate function body, if present */
-static void gen_fn(Decl* d)
+static Code* gen_fn(Decl* d)
 {
-    if(!d->fn.body)
-        return;
+    vp_assertX(d->kind == DECL_FN, "not function declaration");
 
-    V->ra = vp_ra_new(&winx64_ra);
-    d->fn.ra = V->ra;
-    V->currfn = d;
+    Code* code = vp_mem_calloc(1, sizeof(*code));
+    code->name = d->name;
+    code->numparams = vec_len(d->fn.params);
+    code->scopes = d->fn.scopes;
+    vp_tab_set(&V->funcs, code->name, code);
+
+    RegAlloc* ra = V->ra = vp_ra_new(&winx64_ra);
+    code->ra = ra;
+    V->fncode = code;
     BB* bb = vp_bb_new();
     vp_bb_setcurr(bb);
 
@@ -877,24 +890,31 @@ static void gen_fn(Decl* d)
 
     V->bb = NULL;
 
-    vp_sel_tweak(d);
+    vp_sel_tweak(code);
 
-    vp_ra_alloc(V->ra, d->fn.bbs);
+    vp_ra_alloc(ra, code->bbs);
 
-    gen_stack(d);
+    gen_stack(d, code);
 
-    //vp_dump_bb(d);
+    vp_dump_bb(code);
+
+    return code;
 }
 
 /* Generate code IR for all declarations */
-void vp_codegen(Decl** decls)
+Code** vp_codegen(Decl** decls)
 {
+    Code** codes = NULL;
     for(uint32_t i = 0; i < vec_len(decls); i++)
     {
+        Code* cd;
         Decl* d = decls[i];
-        if(!d)
-            continue;
-        if(d->kind == DECL_FN)
-            gen_fn(d);
+        if(!d) continue;
+        if(d->kind == DECL_FN && d->fn.body)
+        {
+            cd = gen_fn(d);
+            vec_push(codes, cd);
+        }
     }
+    return codes;
 }

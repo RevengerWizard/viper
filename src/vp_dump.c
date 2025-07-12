@@ -157,15 +157,24 @@ static void dump_ir(IR* ir)
             dump_vreg(ir->src1);
             break;
         case IR_STORE:
-            printf("*");
+            printf("[");
             dump_vreg(ir->src2);
-            printf(" = ");
+            printf("] = ");
+            dump_vreg(ir->src1);
+            break;
+        case IR_STORE_S:
+            printf("[v%d] = ", ir->src2->virt);
             dump_vreg(ir->src1);
             break;
         case IR_LOAD:
             dump_vreg(ir->dst);
-            printf(" = *");
+            printf(" = [");
             dump_vreg(ir->src1);
+            printf("]");
+            break;
+        case IR_LOAD_S:
+            dump_vreg(ir->dst);
+            printf(" = [v%d]", ir->src1->virt);
             break;
         case IR_RET:
         {
@@ -290,12 +299,12 @@ static void dump_ir(IR* ir)
     putchar('\n');
 }
 
-void vp_dump_bb(Decl* d)
+void vp_dump_bb(Code* cd)
 {
-    printf("params and locals:\n");
-    for(uint32_t i = 0; i < vec_len(d->fn.scopes); i++)
+    printf("\nparams and locals:\n");
+    for(uint32_t i = 0; i < vec_len(cd->scopes); i++)
     {
-        Scope* scope = d->fn.scopes[i];
+        Scope* scope = cd->scopes[i];
         if(scope->vars == NULL)
             continue;
         for(uint32_t j = 0; j < vec_len(scope->vars); j++)
@@ -312,7 +321,7 @@ void vp_dump_bb(Decl* d)
         }
     }
 
-    RegAlloc* ra = d->fn.ra;
+    RegAlloc* ra = cd->ra;
     printf("VREG: #%d\n", vec_len(ra->vregs));
     LiveInterval** sorted = ra->sorted;
     if(sorted)
@@ -340,7 +349,7 @@ void vp_dump_bb(Decl* d)
     }
 
     uint32_t nip = 0;
-    BB** bbs = d->fn.bbs;
+    BB** bbs = cd->bbs;
     printf("BB: #%d\n", vec_len(bbs));
     for(uint32_t i = 0; i < vec_len(bbs); i++)
     {

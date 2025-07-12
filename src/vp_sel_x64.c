@@ -6,7 +6,6 @@
 #include "vp_emit_x64.c"
 
 #include "vp_sel.h"
-#include "vp_ast.h"
 #include "vp_ir.h"
 #include "vp_regalloc.h"
 #include "vp_state.h"
@@ -30,6 +29,7 @@ RegSet sel_extra(RegAlloc* ra, IR* ir)
     }
     if(ra->flag & RAF_STACK_FRAME)
         ioccupy |= 1ULL << RBP;
+    ioccupy |= 1ULL << RSP;
     return ioccupy;
 }
 
@@ -355,19 +355,19 @@ static void emit_mov(uint32_t dst, VReg* src1)
 static void sel_bofs(IR* ir)
 {
     int64_t ofs = ir->bofs.fi->ofs + ir->bofs.ofs;
-    emit_lea64_rm(V, ir->dst->phys, RBP, NOIDX, 1, ofs);
+    emit_lea64_rm(V, ir->dst->phys, MEM(RBP, NOREG, 1, ofs));
 }
 
 static void sel_iofs(IR* ir)
 {
     int64_t ofs = ir->iofs.ofs;
-    emit_lea64_rrip(V, ir->dst->phys, ofs);
+    emit_lea64_rm(V, ir->dst->phys, MEM(RIP, NOREG, 1, ofs));
 }
 
 static void sel_sofs(IR* ir)
 {
     int64_t ofs = ir->sofs.ofs;
-    emit_lea64_rm(V, ir->dst->phys, RSP, NOIDX, 1, ofs);
+    emit_lea64_rm(V, ir->dst->phys, MEM(RSP, NOREG, 1, ofs));
 }
 
 static void sel_mov(IR* ir)
@@ -382,6 +382,7 @@ static void sel_store(IR* ir)
     uint32_t dst = ir->src2->phys;
     if(ir->kind == IR_STORE_S)
     {
+        vp_assertX(vrf_spill(ir->src2), "not spilled");
         disp = ir->src2->fi.ofs;
         base = RBP;
     }
@@ -391,8 +392,8 @@ static void sel_store(IR* ir)
         vp_assertX(!vrf_const(ir->src1), "const src1");
         switch(ir->src1->vsize)
         {
-        case VRSize4: emit_movss_mr(V, dst, base, NOIDX, 1, disp); break;
-        case VRSize8: emit_movsd_mr(V, dst, base, NOIDX, 1, disp); break;
+        case VRSize4: emit_movss_mr(V, dst, MEM(base, NOREG, 1, disp)); break;
+        case VRSize8: emit_movsd_mr(V, dst, MEM(base, NOREG, 1, disp)); break;
         default: vp_assertX(0, "?");
         }
     }
@@ -412,13 +413,12 @@ static void sel_store(IR* ir)
         }
         else
         {
-            vp_assertX(!vrf_spill(ir->src1), "spill src1?");
             switch(p)
             {
-            case VRSize1: emit_mov8_mr(V, dst, base, NOIDX, 1, disp); break;
-            case VRSize2: emit_mov16_mr(V, dst, base, NOIDX, 1, disp); break;
-            case VRSize4: emit_mov32_mr(V, dst, base, NOIDX, 1, disp); break;
-            case VRSize8: emit_mov64_mr(V, dst, base, NOIDX, 1, disp); break;
+            case VRSize1: emit_mov8_mr(V, dst, MEM(base, NOREG, 1, disp)); break;
+            case VRSize2: emit_mov16_mr(V, dst, MEM(base, NOREG, 1, disp)); break;
+            case VRSize4: emit_mov32_mr(V, dst, MEM(base, NOREG, 1, disp)); break;
+            case VRSize8: emit_mov64_mr(V, dst, MEM(base, NOREG, 1, disp)); break;
             }
         }
     }
@@ -440,8 +440,8 @@ static void sel_load(IR* ir)
         vp_assertX(!vrf_const(ir->src1), "const src1");
         switch(ir->src1->vsize)
         {
-        case VRSize4: emit_movss_rm(V, dst, base, NOIDX, 1, disp); break;
-        case VRSize8: emit_movsd_rm(V, dst, base, NOIDX, 1, disp); break;
+        case VRSize4: emit_movss_rm(V, dst, MEM(base, NOREG, 1, disp)); break;
+        case VRSize8: emit_movsd_rm(V, dst, MEM(base, NOREG, 1, disp)); break;
         default: vp_assertX(0, "?");
         }
     }
@@ -451,10 +451,10 @@ static void sel_load(IR* ir)
         vp_assertVSize(p, VRSize1, VRSize8);
         switch(p)
         {
-        case VRSize1: emit_mov8_rm(V, dst, base, NOIDX, 1, disp); break;
-        case VRSize2: emit_mov16_rm(V, dst, base, NOIDX, 1, disp); break;
-        case VRSize4: emit_mov32_rm(V, dst, base, NOIDX, 1, disp); break;
-        case VRSize8: emit_mov64_rm(V, dst, base, NOIDX, 1, disp); break;
+        case VRSize1: emit_mov8_rm(V, dst, MEM(base, NOREG, 1, disp)); break;
+        case VRSize2: emit_mov16_rm(V, dst, MEM(base, NOREG, 1, disp)); break;
+        case VRSize4: emit_mov32_rm(V, dst, MEM(base, NOREG, 1, disp)); break;
+        case VRSize8: emit_mov64_rm(V, dst, MEM(base, NOREG, 1, disp)); break;
         }
     }
 }
@@ -492,9 +492,18 @@ static void sel_pusharg(IR* ir)
         }
         else if(dst != ir->src1->phys)
         {
-            emit_mov_rr(p, dst, ir->src1->i64);
+            emit_mov_rr(p, dst, ir->src1->phys);
         }
     }
+}
+
+static PatchInfo* jmps = NULL;
+static PatchInfo* calls = NULL;
+
+static void patchinfo_add(BB* target, uint32_t ofs)
+{
+    PatchInfo pi = {NULL, target, ofs};
+    vec_push(jmps, pi);
 }
 
 static void sel_call(IR* ir)
@@ -503,7 +512,10 @@ static void sel_call(IR* ir)
 
     if(ir->call->label)
     {
+        uint32_t ofs = sbuf_len(&V->code) + 1;
         emit_call_rel32(V, 0);
+        PatchInfo pi = {ir->call->fn, NULL, ofs};
+        vec_push(calls, pi);
     }
     else
     {
@@ -631,14 +643,6 @@ static void sel_cond(IR* ir)
     X64CC cc = cond2cc(cond);
     emit_setcc(V, cc, dst);
     emit_movsx_r32r8(V, dst, dst);
-}
-
-static PatchInfo* jmps = NULL;
-
-static void patchinfo_add(BB* target, uint32_t ofs)
-{
-    PatchInfo pi = {target, ofs};
-    vec_push(jmps, pi);
 }
 
 static void sel_jmp(IR* ir)
@@ -788,7 +792,7 @@ static void sel_mul(IR* ir)
         default: vp_assertX(0, "?"); break;
         }
     }
-    else 
+    else
     {
         /* Break RAX, RDX */
         vp_assertX(ir->dst->phys == ir->src1->phys, "dst != src1");
@@ -1087,9 +1091,9 @@ static void sel_conv3to2(BB** bbs)
 }
 
 /* Tweak the IR for x64 */
-void vp_sel_tweak(Decl* d)
+void vp_sel_tweak(Code* c)
 {
-    BB** bbs = d->fn.bbs;
+    BB** bbs = c->bbs;
     sel_conv3to2(bbs);
     for(uint32_t i = 0; i < vec_len(bbs); i++)
     {
@@ -1122,54 +1126,145 @@ void vp_sel_tweak(Decl* d)
                     tmp_mov(&ir->src2, &bb->irs, j++, ir->flag);
                 }
                 break;
+            case IR_CALL:
+                if(ir->src1 && vrf_const(ir->src1))
+                {
+                    tmp_mov(&ir->src1, &bb->irs, j++, ir->flag);
+                }
             default: break;
             }
         }
     }
 }
 
-static void patch_jumps(void)
+static uint32_t push_callee_save(RegAlloc* ra, RegSet used)
 {
-    for(uint32_t i = 0; i < vec_len(jmps); i++)
+    uint32_t count = 0;
+    for(uint32_t i = 0; i < ra->set->iphysmax; i++)
     {
-        PatchInfo* patch = &jmps[i];
+        if((ra->set->itemp & (1ULL << i)) && (used & (1ULL << i)))
+        {
+            emit_push64_r(V, i);
+            count++;
+        }
+    }
+    return count;
+}
+
+static void pop_callee_save(RegAlloc* ra, RegSet used)
+{
+    for(uint32_t i = ra->set->iphysmax; i-- > 0;)
+    {
+        if((ra->set->itemp & (1ULL << i)) && (used & (1ULL << i)))
+        {
+            emit_pop64_r(V, i);
+        }
+    }
+}
+
+static void assign_params(RegAlloc* ra, Code* c)
+{
+    for(uint32_t i = 0; i < c->numparams; i++)
+    {
+        VarInfo* vi = c->scopes[0]->vars[i];
+        VReg* vr = vi->vreg;
+        if(i < 4)
+        {
+            uint32_t preg = ra->set->imap[i];
+            VRSize p = vr->vsize;
+            if(preg != vr->phys)
+            {
+                emit_mov_rr(p, vr->phys, preg);
+            }
+        }
+    }
+}
+
+static void patch_infos(PatchInfo* patch, bool iscall)
+{
+    for(uint32_t i = 0; i < vec_len(patch); i++)
+    {
+        PatchInfo* p = &patch[i];
+
+        int32_t from = p->ofs;
+        int32_t ofs;
+        if(iscall)
+        {
+            ofs = p->c->ofs;
+        }
+        else
+        {
+            ofs = p->target->ofs;
+        }
         
-        int32_t from = patch->ofs + 4;
-        int32_t to = patch->target->ofs;
-        int32_t rel = (int32_t)(to - from);
+        int32_t rel = ofs - (from + 4);
         
-        uint8_t* code = (uint8_t*)(V->code.b + patch->ofs);
+        uint8_t* code = (uint8_t*)(V->code.b + p->ofs);
         *(uint32_t*)code = (uint32_t)rel;
     }
 }
 
-void vp_sel(Decl** decls)
+static void emit_bbs(BB** bbs)
 {
-    emit_push64_r(V, RBP);
-    emit_mov64_rr(V, RBP, RSP);
-    emit_sub_r64i32(V, RSP, 0x100);
-    for(uint32_t i = 0; i < vec_len(decls); i++)
+    for(uint32_t i = 0; i < vec_len(bbs); i++)
     {
-        Decl* d = decls[i];
-        if(!d)
-            continue;
-        if(d->kind == DECL_FN)
+        BB* bb = bbs[i];
+        bb->ofs = sbuf_len(&V->code);
+        for(uint32_t j = 0; j < vec_len(bb->irs); j++)
         {
-            BB** bbs = d->fn.bbs;
-            for(uint32_t i = 0; i < vec_len(bbs); i++)
-            {
-                BB* bb = bbs[i];
-                bb->ofs = sbuf_len(&V->code);
-                for(uint32_t j = 0; j < vec_len(bb->irs); j++)
-                {
-                    IR* ir = bb->irs[j];
-                    sel_ir(ir);
-                }
-            }
+            IR* ir = bb->irs[j];
+            sel_ir(ir);
         }
     }
-    emit_add64_ri(V, RSP, 0x100);
-    emit_pop64_r(V, RBP);
+}
+
+static void emit_body(Code* c)
+{
+    RegAlloc* ra = c->ra;
+    c->ofs = sbuf_len(&V->code);
+
+    /* Prologue */
+    bool saverbp = false;
+    uint32_t framesize = 0;
+    uint32_t numcallee = 0;
+    numcallee = push_callee_save(ra, ra->iregbits);
+    if(c->framesize > 0 || ra->flag & RAF_STACK_FRAME)
+    {
+        emit_push64_r(V, RBP);
+        emit_mov64_rr(V, RBP, RSP);
+        saverbp = true;
+    }
+
+    framesize = c->framesize;
+
+    if(framesize > 0)
+    {
+        emit_sub_r64i32(V, RSP, framesize);
+    }
+    assign_params(ra, c);
+
+    emit_bbs(c->bbs);
+
+    /* Epilogue */
+    if(saverbp)
+    {
+        emit_pop64_r(V, RBP);
+    }
+    if(framesize > 0)
+    {
+        emit_add64_ri(V, RSP, framesize);
+    }
+    pop_callee_save(ra, ra->iregbits);
     emit_ret(V);
-    patch_jumps();
+}
+
+void vp_sel(Code** codes)
+{
+    for(uint32_t i = 0; i < vec_len(codes); i++)
+    {
+        emit_body(codes[i]);
+    }
+    
+    patch_infos(jmps, false);
+    patch_infos(calls, true);
 }

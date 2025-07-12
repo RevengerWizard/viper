@@ -6,9 +6,7 @@
 #ifndef _VP_AST_H
 #define _VP_AST_H
 
-#include "vp_ir.h"
 #include "vp_lex.h"
-#include "vp_regalloc.h"
 #include "vp_str.h"
 #include "vp_type.h"
 #include "vp_var.h"
@@ -306,8 +304,6 @@ typedef struct Decl
             Param* params;
             Stmt* body;
             Scope** scopes;
-            BB** bbs;
-            RegAlloc* ra;
         } fn;
         struct
         {
@@ -323,16 +319,6 @@ typedef struct Decl
         } enm;
     };
 } Decl;
-
-static inline bool expr_iszero(Expr* e)
-{
-    return e->kind == EX_INT && e->i == 0;
-}
-
-static inline bool expr_isconst(Expr* e)
-{
-    return e->kind == EX_INT || e->kind == EX_NUM;
-}
 
 #define ast_binname(i) (vp_ast_binop[(i) - EX_BINOP])
 #define ast_unaryname(i) (vp_ast_unary[(i) - EX_UNARY])

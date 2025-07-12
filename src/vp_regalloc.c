@@ -3,6 +3,7 @@
 ** Register allocation
 */
 
+#include <stdbool.h>
 #include <stdlib.h>
 
 #include "vp_regalloc.h"
@@ -57,7 +58,7 @@ typedef struct
     LiveInterval** active;
     uint32_t len;
     uint32_t physmax;   /* Max # of physical registers */
-    uint32_t phystemp;  /* Bitmask of volatile registers */
+    RegSet phystemp;  /* Bitmask of volatile registers */
     RegSet usebits;   /* Current register bits in use */
     RegSet bits;      /* Final register bits */
 } PhysRegSet;
@@ -233,8 +234,8 @@ static void live_detect(RegAlloc* ra, BB** bbs, uint32_t vreglen, LiveInterval**
             /* Call instruction breaks temporary registers */
             if(ir->kind == IR_CALL)
             {
-                uint64_t ibroke = set->itemp;
-                uint64_t fbroke = set->ftemp;
+                RegSet ibroke = set->itemp;
+                RegSet fbroke = set->ftemp;
                 live_occupy(ra, actives, ibroke, fbroke);
                 iargset = fargset = 0;
             }
@@ -421,7 +422,8 @@ static void ra_scan(RegAlloc* ra, LiveInterval** sorted, uint32_t vreglen)
             prsp = &fregset;
         }
         
-        uint32_t mask = prsp->phystemp;  /* Volatile registers mask */
+        bool useall = true;
+        RegSet mask = prsp->phystemp;  /* Callee registers mask */
         uint32_t regno = REG_NO;
         uint32_t ip = vr->param;
         RegSet occupied = prsp->usebits | li->regbits;
@@ -442,15 +444,30 @@ static void ra_scan(RegAlloc* ra, LiveInterval** sorted, uint32_t vreglen)
             {
                 regno = ip;
             }
+            else
+            {
+                useall = false;
+            }
         }
         if(regno == REG_NO)
         {
             for(uint32_t j = 0; j < prsp->physmax; j++)
             {
-                if(!(occupied & (1ULL << j)) && (mask & (1ULL << j)))
+                if(useall)
                 {
-                    regno = j;
-                    break;
+                    if(!(occupied & (1ULL << j)))
+                    {
+                        regno = j;
+                        break;
+                    }
+                }
+                else
+                {
+                    if(!(occupied & (1ULL << j)) && (mask & (1ULL << j)))
+                    {
+                        regno = j;
+                        break;
+                    }
                 }
             }
         }

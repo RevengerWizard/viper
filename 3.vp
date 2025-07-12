@@ -1,0 +1,24 @@
+fn mul(a : int32, b : int32) : int32
+{
+    return a * b;
+}
+
+fn main() : int32
+{
+    var a : int32 = -2;
+    var b : int32 = 5;
+    var c : int32;
+    if a == 567
+    {
+        c = mul(445677654, 2);
+    }
+    else if a >= 0
+    {
+        c = (a * b) + b;
+    }
+    else
+    {
+        c = (a / b) - b;
+    }
+    return c;
+}

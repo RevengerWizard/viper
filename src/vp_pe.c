@@ -6,8 +6,11 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "vp_codegen.h"
 #include "vp_buf.h"
 #include "vp_state.h"
+#include "vp_str.h"
+#include "vp_tab.h"
 
 /*
 ** WORD = uint16_t
@@ -38,12 +41,16 @@ static void pe_build(VpState* V, SBuf* sb)
     *(uint16_t*)(&p[20]) = 240;    /* SizeOfOptionalHeader */
     *(uint16_t*)(&p[22]) = 0x103;    /* Characteristics */
     sb->w = p + 24;
-    
+
+    Code* c = vp_tab_get(&V->funcs, vp_str_newlen("main"));
+    vp_assertX(c, "?");
+    int32_t ofs = c->ofs;
+
     /* Optional header */
     p = vp_buf_more(sb, 240);
     memset(p, 0, 240);
     *(uint16_t*)(&p[0]) = 0x20b;    /* Magic (PE32+) */
-    *(uint32_t*)(&p[16]) = 4096;    /* AddressOfEntryPoint */
+    *(uint32_t*)(&p[16]) = 4096 + ofs;    /* AddressOfEntryPoint */
     *(uint64_t*)(&p[24]) = 0x00400000ULL;    /* ImageBase (64-bit) */
     *(uint32_t*)(&p[32]) = 4096;    /* SectionAlignment */
     *(uint32_t*)(&p[36]) = 512;    /* FileAlignment (standard) */

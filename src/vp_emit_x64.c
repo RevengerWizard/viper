@@ -34,10 +34,17 @@ typedef enum
     XMM0 = 0, XMM1 = 1, XMM2 = 2, XMM3 = 3,
     XMM4 = 4, XMM5 = 5, XMM6 = 6, XMM7 = 7,
     XMM8 = 8, XMM9 = 9, XMM10 = 10, XMM11 = 11,
-    XMM12 = 12, XMM13 = 13, XMM14 = 14, XMM15 = 15
+    XMM12 = 12, XMM13 = 13, XMM14 = 14, XMM15 = 15,
+
+    RIP = 0xFFF
 } X64Reg;
 
-#define NOIDX (RSP)
+typedef int64_t X64Mem;
+
+#define NOREG (0)
+
+#define MEM(base, idx, scale, off) \
+    (INT64_MIN | ((int64_t) ((base) & 0xfff) << 32) | ((int64_t) ((idx) & 0xfff) << 44) | ((int64_t) ((scale) & 0xf) << 56) | ((off) & 0xffffffff))
 
 /* Condition codes */
 typedef enum
@@ -202,52 +209,38 @@ static void emit_mov8_ri(VpState* V, X64Reg reg, int8_t imm)
     emit_u8(V, (uint8_t)imm);
 }
 
+static void mem_op(X64Mem mem, X64Reg* base, X64Reg* idx, uint8_t* scale, int32_t* off)
+{
+    mem &= ~((int64_t)1 << 63);
+
+    *base = (X64Reg)((mem >> 32) & 0xfff);
+    *idx = (X64Reg)((mem >> 44) & 0xfff);
+    *scale = (uint8_t)((mem >> 56) & 0xf);
+    *off = (int32_t)(mem & 0xffffffff);
+}
+
 /* Determine REX for memory instructions */
 static VP_AINLINE uint8_t rex_mem(X64Reg dst, X64Reg base, X64Reg idx, bool is64)
 {
     uint8_t rex = 0;
     if(is64) rex |= REX_W;
     if(regext(dst)) rex |= REX_R;
-    if(regext(base)) rex |= REX_B;
-    if(regext(idx)) rex |= REX_X;
+    if(base != RIP && regext(base)) rex |= REX_B;
+    if(idx != NOREG && regext(idx)) rex |= REX_X;
     return rex;
 }
 
-/* Emit common MOV instructions with memory operand (load/store) */
-static void emit_mov_mem(VpState* V, X64Reg src, X64Reg base, X64Reg idx, uint8_t scale, int32_t disp, int size, bool is_load)
+static void emit_modrm_sib_disp(VpState* V, X64Reg src, X64Reg base, X64Reg idx, uint8_t scale, int32_t disp)
 {
-    vp_assertX(IS_POW2(scale) && scale <= 8, "bad scale (1/2/4/8)");
-    vp_assertX(size == 8 || size == 16 || size == 32 || size == 64, "unsupported operand size");
+    uint8_t mod = 0;
+    uint8_t rm = 0;
+    bool needs_sib = false;
 
-    uint8_t rex = rex_mem(src, base, idx, size == 64);
-    if(rex) emit_u8(V, rex);
-
-    if(size == 16) emit_u8(V, 0x66);
-
-    uint8_t op = is_load ? 0x8B : 0x89; /* MOV reg, r/m vs MOV r/m, reg */
-    if(size == 8) op = is_load ? 0x8A : 0x88; /* MOV reg8, r/m8 vs MOV r/m8, reg8 */
-
-    emit_u8(V, op);
-
-    uint8_t mod = 2;    /* Assume 32-bit displacement initially */
-    bool has_sib = true;
-
-    if (idx == RSP && scale == 1)
+    if(base == RIP)
     {
-        has_sib = false;
-        if(disp == 0 && (base != RBP && base != R13))
-        {
-            mod = 0; /* [base] */
-        }
-        else if(vp_isimm8(disp))
-        {
-            mod = 1; /* [base + disp8] */
-        }
-        else
-        {
-            mod = 2; /* [base + disp32] */
-        }
-        emit_u8(V, MODRM(mod, src & 7, base & 7));
+        mod = 0;
+        rm = 5;
+        /* No SIB byte for RIP-relative addressing */
     }
     else
     {
@@ -263,40 +256,80 @@ static void emit_mov_mem(VpState* V, X64Reg src, X64Reg base, X64Reg idx, uint8_
         {
             mod = 2;
         }
-        emit_u8(V, MODRM(mod, src & 7, RM_SIB));
+
+        if(idx != NOREG || base == RSP || base == R12)
+        {
+            needs_sib = true;
+            rm = RM_SIB;
+        }
+        else
+        {
+            rm = base & 7;
+        }
     }
 
-    if(has_sib)
-    {
-        uint8_t sib = 0;
-        if(scale == 2) sib = 1;
-        else if(scale == 4) sib = 2;
-        else if(scale == 8) sib = 3;
+    emit_u8(V, MODRM(mod, src & 7, rm));
 
-        emit_u8(V, SIB(sib, idx & 7, base & 7));
+    /* Emit SIB byte if needed */
+    if(needs_sib)
+    {
+        uint8_t sib_scale = 0;
+        if(scale == 2) sib_scale = 1;
+        else if(scale == 4) sib_scale = 2;
+        else if(scale == 8) sib_scale = 3;
+
+        uint8_t sib_idx = (idx == NOREG) ? RSP & 7 : idx & 7;
+        uint8_t sib_base = base & 7;
+
+        emit_u8(V, SIB(sib_scale, sib_idx, sib_base));
     }
 
     if(mod == 1)
     {
-        emit_u8(V, (int8_t)disp); /* 8-bit displacement */
+        emit_u8(V, (int8_t)disp);
     }
-    else if(mod == 2)
+    else if (mod == 2 || (base == RIP && mod == 0))
     {
-        emit_im32(V, disp); /* 32-bit displacement */
+        emit_im32(V, disp);
     }
 }
 
+/* Emit common MOV instructions with memory operand (load/store) */
+static void emit_mov_mem(VpState* V, X64Reg src, X64Mem mem, int size, bool is_load)
+{
+    X64Reg base, idx;
+    uint8_t scale;
+    int32_t disp;
+    mem_op(mem, &base, &idx, &scale, &disp);
+
+    if(idx != NOREG)
+    {
+        vp_assertX(IS_POW2(scale) && (scale >= 1 && scale <= 8), "bad scale (1/2/4/8)");
+    }
+
+    uint8_t rex = rex_mem(src, base, idx, size == 64);
+    if(rex) emit_u8(V, rex);
+
+    if(size == 16) emit_u8(V, 0x66);
+
+    uint8_t op = is_load ? 0x8B : 0x89; /* MOV reg, r/m vs MOV r/m, reg */
+    if(size == 8) op = is_load ? 0x8A : 0x88; /* MOV reg8, r/m8 vs MOV r/m8, reg8 */
+    emit_u8(V, op);
+
+    emit_modrm_sib_disp(V, src, base, idx, scale, disp);
+}
+
 /* MOV reg, [base + index*scale + disp32] */
-static void emit_mov8_rm(VpState* V, X64Reg dst, X64Reg base, X64Reg idx, uint8_t scale, int32_t disp) { emit_mov_mem(V, dst, base, idx, scale, disp, 8, true); }
-static void emit_mov16_rm(VpState* V, X64Reg dst, X64Reg base, X64Reg idx, uint8_t scale, int32_t disp) { emit_mov_mem(V, dst, base, idx, scale, disp, 16, true); }
-static void emit_mov32_rm(VpState* V, X64Reg dst, X64Reg base, X64Reg idx, uint8_t scale, int32_t disp) { emit_mov_mem(V, dst, base, idx, scale, disp, 32, true); }
-static void emit_mov64_rm(VpState* V, X64Reg dst, X64Reg base, X64Reg idx, uint8_t scale, int32_t disp) { emit_mov_mem(V, dst, base, idx, scale, disp, 64, true); }
+static void emit_mov8_rm(VpState* V, X64Reg dst, X64Mem mem) { emit_mov_mem(V, dst, mem, 8, true); }
+static void emit_mov16_rm(VpState* V, X64Reg dst, X64Mem mem) { emit_mov_mem(V, dst, mem, 16, true); }
+static void emit_mov32_rm(VpState* V, X64Reg dst, X64Mem mem) { emit_mov_mem(V, dst, mem, 32, true); }
+static void emit_mov64_rm(VpState* V, X64Reg dst, X64Mem mem) { emit_mov_mem(V, dst, mem, 64, true); }
 
 /* MOV [base + index*scale + disp32], reg */
-static void emit_mov8_mr(VpState* V, X64Reg src, X64Reg base, X64Reg idx, uint8_t scale, int32_t disp) { emit_mov_mem(V, src, base, idx, scale, disp, 8, false); }
-static void emit_mov16_mr(VpState* V, X64Reg src, X64Reg base, X64Reg idx, uint8_t scale, int32_t disp) { emit_mov_mem(V, src, base, idx, scale, disp, 16, false); }
-static void emit_mov32_mr(VpState* V, X64Reg src, X64Reg base, X64Reg idx, uint8_t scale, int32_t disp) { emit_mov_mem(V, src, base, idx, scale, disp, 32, false); }
-static void emit_mov64_mr(VpState* V, X64Reg src, X64Reg base, X64Reg idx, uint8_t scale, int32_t disp) { emit_mov_mem(V, src, base, idx, scale, disp, 64, false); }
+static void emit_mov8_mr(VpState* V, X64Reg src, X64Mem mem) { emit_mov_mem(V, src, mem, 8, false); }
+static void emit_mov16_mr(VpState* V, X64Reg src, X64Mem mem) { emit_mov_mem(V, src, mem, 16, false); }
+static void emit_mov32_mr(VpState* V, X64Reg src, X64Mem mem) { emit_mov_mem(V, src, mem, 32, false); }
+static void emit_mov64_mr(VpState* V, X64Reg src, X64Mem mem) { emit_mov_mem(V, src, mem, 64, false); }
 
 /* Helper to emit MOV [reg], imm instructions */
 static void emit_mov_mi_common(VpState* V, X64Reg dst, int size, int64_t imm)
@@ -322,7 +355,7 @@ static void emit_mov_mi_common(VpState* V, X64Reg dst, int size, int64_t imm)
 
     if(modrm_rm == RM_SIB)
     {
-        emit_u8(V, SIB(0, NOIDX & 7, dst & 7));
+        emit_u8(V, SIB(0, RSP & 7, dst & 7));
     }
 
     if(size == 8)
@@ -439,87 +472,24 @@ static void emit_movsx_r64r32(VpState* V, X64Reg dst, X64Reg src)
 
 /* -- LEA instructions ---------------------------------------------- */
 
-/* LEA reg64, [base_reg + index_reg * scale + disp32] */
-static void emit_lea64_rm(VpState* V, X64Reg dst, X64Reg base, X64Reg idx, uint8_t scale, int32_t disp)
+/* LEA reg64, [base + idx * scale + disp32] */
+static void emit_lea64_rm(VpState* V, X64Reg dst, X64Mem mem)
 {
-    vp_assertX(IS_POW2(scale) && scale <= 8, "bad scale (1/2/4/8)");
+    X64Reg base, idx;
+    uint8_t scale;
+    int32_t disp;
+    mem_op(mem, &base, &idx, &scale, &disp);
+
+    if(idx != NOREG)
+    {
+        vp_assertX(IS_POW2(scale) && scale <= 8, "bad scale (1/2/4/8)");
+    }
 
     uint8_t rex = rex_mem(dst, base, idx, true);
-    emit_u8(V, rex);
-    emit_u8(V, 0x8D);
+    if(rex) emit_u8(V, rex);
+    emit_u8(V, 0x8D);   /* LEA opcode */
 
-    uint8_t mod = 0;
-    bool use_sib = false;
-
-    if(disp == 0)
-    {
-        if(base == RBP || base == R13)
-        {
-            mod = 1;
-        }
-        else
-        {
-            mod = 0;
-        }
-    }
-    else if(vp_isimm8(disp))
-    {
-        mod = 1;
-    }
-    else
-    {
-        mod = 2;
-    }
-
-    if(idx != RSP || base == RSP || base == R12)
-    {
-        use_sib = true;
-    }
-    
-    if(use_sib)
-    {
-        emit_u8(V, MODRM(mod, dst & 7, RM_SIB));
-    }
-    else
-    {
-        emit_u8(V, MODRM(mod, dst & 7, base & 7));
-    }
-    
-    if(use_sib)
-    {
-        uint8_t sib = 0;
-        if(scale == 2) sib = 1;
-        else if(scale == 4) sib = 2;
-        else if(scale == 8) sib = 3;
-
-        uint8_t sib_idx = idx & 7;
-        if(idx == RSP && scale == 1)
-        {
-            sib_idx = RSP & 7;
-            sib = 0;
-        }
-        
-        emit_u8(V, SIB(sib, sib_idx, base & 7));
-    }
-
-    if(mod == 1)
-    {
-        emit_u8(V, (int8_t)disp); /* 8-bit displacement */
-    }
-    else if(mod == 2)
-    {
-        emit_im32(V, disp); /* 32-bit displacement */
-    }
-}
-
-/* LEA reg64, [RIP + disp32] */
-static void emit_lea64_rrip(VpState* V, X64Reg dst, int32_t disp)
-{
-    uint8_t rex = rex_mem(dst, 0, 0, true);
-    emit_u8(V, rex);
-    emit_u8(V, 0x8D);
-    emit_u8(V, MODRM(0, dst & 7, 5));
-    emit_im32(V, disp);
+    emit_modrm_sib_disp(V, dst, base, idx, scale, disp);
 }
 
 /* -- ADD instructions ---------------------------------------------- */
@@ -1931,77 +1901,48 @@ static void emit_ucomiss_rr(VpState* V, X64Reg dst, X64Reg src)
     emit_sse_rr(V, 0x00, 0x2E, dst, src);
 }
 
-/* Determine REX for SSE instructions with memory operand */
-static VP_AINLINE uint8_t sse_mem_rex(X64Reg reg_op, X64Reg base, X64Reg idx)
-{
-    uint8_t rex = 0;
-    if(regext(reg_op)) rex |= REX_R;
-    if(regext(base)) rex |= REX_B;
-    if(regext(idx)) rex |= REX_X;
-    return rex;
-}
-
 /* Emit common SSE/SSE2 instructions with memory operand (load/store) */
-static void emit_sse_mem(VpState* V, uint8_t prefix, uint8_t opcode, X64Reg reg_operand, X64Reg base, X64Reg idx, uint8_t scale, int32_t disp)
+static void emit_sse_mem(VpState* V, uint8_t prefix, uint8_t op, X64Reg reg, X64Mem mem)
 {
-    vp_assertX(IS_POW2(scale) && scale <= 8, "bad scale (1/2/4/8)");
+    X64Reg base, idx;
+    uint8_t scale;
+    int32_t disp;
+    mem_op(mem, &base, &idx, &scale, &disp);
 
-    uint8_t rex = sse_mem_rex(reg_operand, base, idx);
-    if (rex) emit_u8(V, rex);
-
-    emit_u8(V, prefix); /* F3 for MOVSS, F2 for MOVSD */
-    emit_u8(V, 0x0F);    /* SSE escape byte */
-    emit_u8(V, opcode);  /* 10h for load, 11h for store */
-
-    uint8_t mod = 2;    /* Assume 32-bit displacement initially */
-    if(disp == 0 && (base != RBP && base != R13))
+    if(idx != NOREG)
     {
-        mod = 0;
-    }
-    else if(vp_isimm8(disp))
-    {
-        mod = 1; /* 8-bit displacement */
+        vp_assertX(IS_POW2(scale) && scale <= 8, "bad scale (1/2/4/8)");
     }
 
-    emit_u8(V, MODRM(mod, reg_operand & 7, RM_SIB));
+    if(prefix) emit_u8(V, prefix);
 
-    uint8_t sib = 0;
-    if(scale == 2) sib = 1;
-    else if(scale == 4) sib = 2;
-    else if(scale == 8) sib = 3;
+    uint8_t rex = rex_mem(reg, base, idx, false);
+    if(rex) emit_u8(V, rex);
+    emit_u8(V, op);
 
-    emit_u8(V, SIB(sib, idx & 7, base & 7));
-
-    if(mod == 1)
-    {
-        emit_u8(V, (int8_t)disp); /* 8-bit displacement */
-    }
-    else if(mod == 2)
-    {
-        emit_im32(V, disp); /* 32-bit displacement */
-    }
+    emit_modrm_sib_disp(V, reg, base, idx, scale, disp);
 }
 
 /* MOVSS xmm, [base + index*scale + disp32] */
-static void emit_movss_rm(VpState* V, X64Reg dst, X64Reg base, X64Reg idx, uint8_t scale, int32_t disp)
+static void emit_movss_rm(VpState* V, X64Reg dst, X64Mem mem)
 {
-    emit_sse_mem(V, 0xF3, 0x10, dst, base, idx, scale, disp);
+    emit_sse_mem(V, 0xF3, 0x10, dst, mem);
 }
 
 /* MOVSS [base + index*scale + disp32], xmm */
-static void emit_movss_mr(VpState* V, X64Reg src, X64Reg base, X64Reg idx, uint8_t scale, int32_t disp)
+static void emit_movss_mr(VpState* V, X64Reg src, X64Mem mem)
 {
-    emit_sse_mem(V, 0xF3, 0x11, src, base, idx, scale, disp);
+    emit_sse_mem(V, 0xF3, 0x11, src, mem);
 }
 
 /* MOVSD xmm, [base + index*scale + disp32] */
-static void emit_movsd_rm(VpState* V, X64Reg dst, X64Reg base, X64Reg idx, uint8_t scale, int32_t disp)
+static void emit_movsd_rm(VpState* V, X64Reg dst, X64Mem mem)
 {
-    emit_sse_mem(V, 0xF2, 0x10, dst, base, idx, scale, disp);
+    emit_sse_mem(V, 0xF2, 0x10, dst, mem);
 }
 
 /* MOVSD [base + index*scale + disp32], xmm */
-static void emit_movsd_mr(VpState* V, X64Reg src, X64Reg base, X64Reg idx, uint8_t scale, int32_t disp)
+static void emit_movsd_mr(VpState* V, X64Reg src, X64Mem mem)
 {
-    emit_sse_mem(V, 0xF2, 0x11, src, base, idx, scale, disp);
+    emit_sse_mem(V, 0xF2, 0x11, src, mem);
 }

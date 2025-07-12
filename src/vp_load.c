@@ -51,8 +51,8 @@ void vp_load(VpState* V, const char* filename)
     vp_buf_init(&ls.sb);
     vp_lex_setup(&ls);
     Decl** decls = vp_parse(V, &ls);
-    vp_sema(decls);
-    vp_codegen(decls);
-    vp_sel(decls);
+    decls = vp_sema(decls);
+    Code** codes = vp_codegen(decls);
+    vp_sel(codes);
     fclose(ctx.fp);
 }

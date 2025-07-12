@@ -38,8 +38,8 @@ typedef struct RASettings
     const uint32_t* fmap;    /* Mapping of float params -> registers */
     uint32_t iphysmax;  /* Max physical integer registers */
     uint32_t fphysmax;  /* Max physical float registers */
-    uint32_t itemp; /* Temporary integer registers (bitmask) */
-    uint32_t ftemp; /* Temporary float registers (bitmask) */
+    RegSet itemp; /* Temporary integer registers (bitmask) */
+    RegSet ftemp; /* Temporary float registers (bitmask) */
 } RASettings;
 
 #define RAF_STACK_FRAME (1 << 0)    /* Require stack frame */

@@ -18,7 +18,7 @@
 
 #include "vp_dump.h"
 
-Sym** sorted;
+Decl** sorted;
 Tab globsyms;
 Sym** syms;
 Sym** localsyms;
@@ -210,7 +210,6 @@ static void sym_complete(Type* ty)
         vp_assertX(d->kind == DECL_UNION, "union");
         vp_type_union(d->name, ty, fields);
     }
-    vec_push(sorted, ty->sym);
 }
 
 /* -- Constant folding ---------------------------------------------- */
@@ -1535,6 +1534,7 @@ static Type* sema_fn(Decl* d)
 {
     vp_assertX(d->kind == DECL_FN, "fn declaration");
     
+    vec_push(sorted, d);
     Type** params = NULL;
     for(uint32_t i = 0; i < vec_len(d->fn.params); i++)
     {
@@ -1767,10 +1767,9 @@ static void sema_resolve(Sym* sym)
             break;
     }
     sym->state = SYM_DONE;
-    vec_push(sorted, sym);
 }
 
-void vp_sema(Decl** decls)
+Decl** vp_sema(Decl** decls)
 {
     /* Create symbols */
     for(uint32_t i = 0; i < vec_len(decls); i++)
@@ -1807,4 +1806,6 @@ void vp_sema(Decl** decls)
         vp_dump_ast(decls[i]);
     }
     //vp_dump_typecache();
+
+    return sorted;
 }

@@ -59,6 +59,6 @@ typedef struct Operand
     bool untyped;
 } Operand;
 
-void vp_sema(Decl** decls);
+Decl** vp_sema(Decl** decls);
 
 #endif
