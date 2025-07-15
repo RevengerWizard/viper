@@ -10,6 +10,13 @@
 #include "vp_str.h"
 #include "vp_var.h"
 
+/* Stack slot */
+typedef struct Slot
+{
+    Type* type;
+    FrameInfo* fi;
+} Slot;
+
 /* Function code blocks */
 typedef struct Code
 {
@@ -18,6 +25,7 @@ typedef struct Code
     BB** bbs;
     Scope** scopes;
     IR** calls; /* Calls within current code */
+    Slot* slots; /* Stack frame offsets (vars and {}) */
     uint32_t numparams;
     int32_t ofs;    /* Code begin offset */
     uint32_t framesize; /* Stack frame size */

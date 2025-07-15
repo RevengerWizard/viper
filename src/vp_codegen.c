@@ -38,6 +38,12 @@ static VReg* gen_varinfo(VarInfo* vi)
     {
         vi->fi = vp_frameinfo_new();
         vi->vreg = vr = NULL;
+        Slot sl = {.type = vi->type, .fi = vi->fi};
+        vec_push(V->fncode->slots, sl);
+        if(!(V->ra->flag & RAF_STACK_FRAME))
+        {
+            V->ra->flag = RAF_STACK_FRAME;
+        }
     }
     else
     {
@@ -485,6 +491,9 @@ static VReg* gen_complit(Expr* e)
     
     FrameInfo* fi = vp_frameinfo_new();
     VReg* base = vp_ir_bofs(fi)->dst;
+
+    Slot sl = {.type = e->ty, .fi = fi};
+    vec_push(V->fncode->slots, sl);
     
     uint32_t size = vp_type_sizeof(e->ty);
     vp_ir_memzero(base, size);
@@ -775,37 +784,23 @@ static void gen_stmt(Stmt* st)
     }
 }
 
-static void gen_stack(Decl* d, Code* cd)
+static void gen_stack(Code* cd)
 {
     uint32_t framesize = 0;
 
-    /* Allocate stack frame */
-    for(uint32_t i = 0; i < vec_len(d->fn.scopes); i++)
+    /* Allocate stack frame*/
+    for(uint32_t i = 0; i < vec_len(cd->slots); i++)
     {
-        Scope* scope = d->fn.scopes[i];
-        if(scope->vars == NULL)
-            continue;
+        Slot* slot = &cd->slots[i];
+        FrameInfo* fi = slot->fi;
+        Type* type = slot->type;
 
-        for(uint32_t j = 0; j < vec_len(scope->vars); j++)
-        {
-            VarInfo* vi = scope->vars[j];
-            /* Handle stack params */
-            
-            if(ty_isscalar(vi->type))
-                continue;
-            
-            vp_assertX(vi->vreg == NULL, "non-empty vreg");
-            FrameInfo* fi = vi->fi;
-            vp_assertX(fi, "empty frame info");
-            
-            Type* ty = vi->type;
-            uint32_t size = vp_type_sizeof(ty);
-            if(size < 1) size = 1;
-            uint32_t align = vp_type_alignof(ty);
-            
-            framesize = ALIGN_UP(framesize + size, align);
-            fi->ofs = -(int32_t)framesize;
-        }
+        uint32_t size = vp_type_sizeof(type);
+        if(size < 1) size = 1;
+        uint32_t align = vp_type_alignof(type);
+
+        framesize = ALIGN_UP(framesize + size, align);
+        fi->ofs = -(int32_t)framesize;
     }
 
     /* Allocate spilled variables onto stack frame */
@@ -894,7 +889,7 @@ static Code* gen_fn(Decl* d)
 
     vp_ra_alloc(ra, code->bbs);
 
-    gen_stack(d, code);
+    gen_stack(code);
 
     vp_dump_bb(code);
 
