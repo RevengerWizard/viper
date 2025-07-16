@@ -348,7 +348,7 @@ static uint32_t ra_spill(RegAlloc* ra, BB** bbs)
             {
                 VReg* sp = ir->src1;
                 vp_assertX(!vrf_const(sp), "spill const vreg?");
-                VReg* tmp = vp_ra_spawn(sp->vsize, VRF_NO_SPILL);
+                VReg* tmp = vp_ra_spawn(sp->vsize, VRF_NO_SPILL | (sp->flag & VRF_MASK));
                 IR* is = vp_ir_load_s(tmp, sp, ir->flag);
                 vec_insert(irs, j, is); j++;
                 ir->src1 = tmp;
@@ -360,7 +360,7 @@ static uint32_t ra_spill(RegAlloc* ra, BB** bbs)
             {
                 VReg* sp = ir->src2;
                 vp_assertX(!vrf_const(sp), "spill const vreg?");
-                VReg* tmp = vp_ra_spawn(sp->vsize, VRF_NO_SPILL);
+                VReg* tmp = vp_ra_spawn(sp->vsize, VRF_NO_SPILL | (sp->flag & VRF_MASK));
                 IR* is = vp_ir_load_s(tmp, sp, ir->flag);
                 vec_insert(irs, j, is); j++;
                 ir->src2 = tmp;
@@ -372,9 +372,9 @@ static uint32_t ra_spill(RegAlloc* ra, BB** bbs)
             {
                 VReg* sp = ir->dst;
                 vp_assertX(!vrf_const(sp), "spill const vreg?");
-                VReg* tmp = vp_ra_spawn(sp->vsize, VRF_NO_SPILL);
-                IR* is = vp_ir_store_s(tmp, sp);
-                vec_insert(irs, j, is); j++;
+                VReg* tmp = vp_ra_spawn(sp->vsize, VRF_NO_SPILL | (sp->flag & VRF_MASK));
+                IR* is = vp_ir_store_s(ir->dst, tmp);
+                j++; vec_insert(irs, j, is);
                 ir->dst = tmp;
                 inserted++;
             }

@@ -18,7 +18,7 @@ typedef struct FrameInfo
 /* Virtual register flags */
 #define VRFDEF(_) \
     _(CONST, 0)         /* Integer constant */ \
-    _(FLO, 1)           /* Floating */ \
+    _(FLO, 1)           /* Float */ \
     _(REF, 2)           /* Reference & */ \
     _(PARAM, 3)         /* Function parameter */ \
     _(STACK_PARAM, 4)   /* Stack parameter (spilled) */ \

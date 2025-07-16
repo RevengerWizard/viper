@@ -332,17 +332,28 @@ void vp_dump_bb(Code* cd)
             VReg* vr = ra->vregs[li->virt];
             if(vr == NULL)
                 continue;
+
             printf("    v%d (flag=", vr->virt);
             dump_vreg_flags(vr->flag);
             printf("):  live %d - %d", li->start, li->end);
+            switch(li->state)
             {
-                char rt = vrf_flo(vr) ? 'f' : 'r';
-                printf(" => %c%d", rt, li->phys);
-            }
-            if(li->regbits)
-            {
-                printf(", occupied=");
-                dump_regbits(li->regbits, vrf_flo(vr) ? 'f' : 'r');
+                case LI_NORMAL:
+                {
+                    char rt = vrf_flo(vr) ? 'f' : 'r';
+                    printf(" => %c%d", rt, li->phys);
+                    if(li->regbits)
+                    {
+                        printf(", occupied=");
+                        dump_regbits(li->regbits, vrf_flo(vr) ? 'f' : 'r');
+                    }
+                    break;
+                }
+                case LI_SPILL:
+                {
+                    printf(" (spilled, offset=%d)", vr->fi.ofs);
+                    break;
+                }
             }
             printf("\n");
         }

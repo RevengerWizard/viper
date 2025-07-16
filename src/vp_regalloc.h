@@ -69,7 +69,8 @@ void vp_ra_alloc(RegAlloc *ra, BB** bbs);
 /* Spill a virtual register */
 static VP_AINLINE void vreg_spill(VReg* vr)
 {
-    vr->phys = 0;
+    vr->phys = REG_NO;
+    vp_assertX(!(vr->flag & VRF_NO_SPILL), "stop spilling");
     vr->flag |= VRF_SPILL;
 }
 

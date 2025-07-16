@@ -46,7 +46,7 @@ VarInfo* vp_scope_add(Scope* scope, Str* name, Type* ty)
     VarInfo* vi = vp_var_new(name, ty);
     if(vp_scope_isglob(scope))
     {
-        vi->storage = VS_GLOBAL;
+        vi->storage |= VS_GLOBAL;
         vp_tab_set(&V->globtab, name, vi);
     }
     vec_push(scope->vars, vi);

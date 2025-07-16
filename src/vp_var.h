@@ -11,13 +11,17 @@
 #include "vp_str.h"
 #include "vp_type.h"
 
-#define VS_GLOBAL 1
+/* Storage */
+enum
+{
+    VS_GLOBAL = 1 << 0,
+};
 
 typedef struct VarInfo
 {
+    uint8_t storage;
     Str* name;
     Type* type;
-    uint8_t storage;
     VReg* vreg;
     FrameInfo* fi;
 } VarInfo;
@@ -38,7 +42,7 @@ void vp_scope_end();
 /* Check if variable is local storage */
 static inline bool vp_var_isloc(VarInfo* vi)
 {
-    return vi->storage != VS_GLOBAL;
+    return !(vi->storage & VS_GLOBAL);
 }
 
 /* Check if it's global scope */

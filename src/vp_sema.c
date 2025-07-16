@@ -1203,6 +1203,12 @@ static Operand sema_expr_field(Expr* e)
     Operand lop = sema_expr(e->field.expr, NULL);
     Type* ty = lop.ty;
     sym_complete(ty);
+    if(ty_isptr(ty))
+    {
+        lop = opr_lval(ty->p);
+        ty = lop.ty;
+        sym_complete(ty);
+    }
     if(ty->kind != TY_struct && ty->kind != TY_union)
     {
         vp_err_error(e->loc, "can only access fields on struct/union types");

@@ -385,6 +385,7 @@ static void sel_store(IR* ir)
         vp_assertX(vrf_spill(ir->src2), "not spilled");
         disp = ir->src2->fi.ofs;
         base = RBP;
+        dst = ir->src1->phys;
     }
 
     if(vrf_flo(ir->src1))

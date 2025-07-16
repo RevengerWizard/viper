@@ -74,6 +74,7 @@ static void gen_store(VReg* dst, VReg* src, Type* ty)
 /* Forward declarations */
 static void gen_stmt(Stmt* st);
 static VReg* gen_expr(Expr* e);
+static VReg* gen_complit(Expr* e);
 static VReg* gen_lval(Expr* e);
 
 /* Generate nil constant (0) */
@@ -189,6 +190,14 @@ static VReg* gen_ref(Expr* e)
             {
                 return vp_ir_iofs(name)->dst;
             }
+            if(!vi->fi)
+            {
+                if(!vrf_spill(vi->vreg))
+                {
+                    vreg_spill(vi->vreg);
+                }
+                vi->fi = &vi->vreg->fi;
+            }
             return vp_ir_bofs(vi->fi)->dst;
         }
         case EX_DEREF:
@@ -196,6 +205,10 @@ static VReg* gen_ref(Expr* e)
         case EX_FIELD:
         {
             Type* basety = e->field.expr->ty;
+            if(ty_isptr(basety))
+            {
+                basety = basety->p;
+            }
             VReg* base = gen_expr(e->field.expr);
             uint32_t offset = vp_type_offset(basety, e->field.name);
             if(offset == 0)
@@ -219,6 +232,10 @@ static VReg* gen_ref(Expr* e)
                 idx = vp_ir_binop(IR_MUL, idx, sizevr, VRSize8, IRF_UNSIGNED);
             }
             return vp_ir_binop(IR_ADD, base, idx, VRSize8, IRF_UNSIGNED);
+        }
+        case EX_COMPLIT:
+        {
+            return gen_complit(e);
         }
         default:
             vp_assertX(0, "?");
