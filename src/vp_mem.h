@@ -6,11 +6,13 @@
 #ifndef _VP_MEM_H
 #define _VP_MEM_H
 
+#include "vp_vec.h"
+
 typedef struct Arena
 {
     char* p;
     char* end;
-    char** blocks;
+    vec_t(char*) blocks;
 } Arena;
 
 /* Arena allocator */

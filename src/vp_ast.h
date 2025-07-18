@@ -10,6 +10,7 @@
 #include "vp_str.h"
 #include "vp_type.h"
 #include "vp_var.h"
+#include "vp_vec.h"
 
 typedef enum TypeSpecKind
 {
@@ -39,7 +40,7 @@ typedef struct TypeSpec
         } arr;
         struct
         {
-            struct TypeSpec** args;
+            vec_t(struct TypeSpec*) args;
             struct TypeSpec* ret;
         } fn;
     };
@@ -149,12 +150,12 @@ typedef struct Expr
         struct
         {
             TypeSpec* spec;
-            Field* fields;
+            vec_t(Field) fields;
         } comp;
         struct
         {
             struct Expr* expr;
-            struct Expr** args;
+            vec_t(struct Expr*) args;
         } call;
         struct
         {
@@ -202,7 +203,7 @@ typedef struct Stmt
             Expr* rhs;
         };
         struct Decl* decl;
-        struct Stmt** block;
+        vec_t(struct Stmt*) block;
         struct
         {
             Expr* cond;
@@ -234,7 +235,7 @@ typedef struct AggregateItem
     {
         struct
         {
-            Str** names;
+            vec_t(Str)* names;
             TypeSpec* type;
         };
         struct Aggregate* sub;
@@ -303,7 +304,7 @@ typedef struct Decl
             TypeSpec* ret;
             Param* params;
             Stmt* body;
-            Scope** scopes;
+            vec_t(Scope)* scopes;
         } fn;
         struct
         {

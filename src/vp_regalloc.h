@@ -48,8 +48,8 @@ typedef struct RASettings
 typedef struct RegAlloc
 {
     const RASettings* set;  /* Regalloc settings */
-    VReg** vregs;   /* Virtual registers */
-    VReg** vconsts; /* Constant registers */
+    vec_t(VReg*) vregs;   /* Virtual registers */
+    vec_t(VReg*) vconsts; /* Constant registers */
     LiveInterval* intervals;    /* Live intervals */
     LiveInterval** sorted;      /* Sorted live intervals */
     RegSet iregbits;  /* Integer register bits in use */

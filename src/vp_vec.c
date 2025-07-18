@@ -52,7 +52,8 @@ void vp_vec_remove_at(const void* vec, size_t idx, size_t elemsize)
     size_t len = hdr->len;
     
     /* Shift elements to the left to fill the gap */
-    if (idx < len - 1) {
+    if(idx < len - 1)
+    {
         char* data = (char*)vec;
         memmove(data + idx * elemsize,
                 data + (idx + 1) * elemsize,

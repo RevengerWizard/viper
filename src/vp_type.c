@@ -248,7 +248,7 @@ bool vp_type_isptrcomp(Type* lty, Type* rty)
 }
 
 /* Check if struct/union has duplicate fields */
-bool vp_type_isdupfield(TypeField* fields)
+bool vp_type_isdupfield(vec_t(TypeField) fields)
 {
     for(uint32_t i = 0; i < vec_len(fields); i++)
     {
@@ -388,7 +388,7 @@ Type* vp_type_arr(Type* t, uint32_t len)
     return ty;
 }
 
-Type* vp_type_func(Type* ret, Type** params)
+Type* vp_type_func(Type* ret, vec_t(Type*) params)
 {
     for(uint32_t i = 0; i < vec_len(V->cachefunc); i++)
     {
@@ -415,7 +415,7 @@ Type* vp_type_func(Type* ret, Type** params)
     return ty;
 }
 
-void vp_type_struct(Str* name, Type* ty, TypeField* fields)
+void vp_type_struct(Str* name, Type* ty, vec_t(TypeField) fields)
 {
     vp_assertX(ty->kind == TY_name, "type name");
     ty->kind = TY_struct;

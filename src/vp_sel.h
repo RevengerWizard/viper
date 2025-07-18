@@ -11,6 +11,6 @@
 RegSet sel_extra(RegAlloc* ra, IR* ir);
 
 void vp_sel_tweak(Code* c);
-void vp_sel(Code** codes);
+void vp_sel(vec_t(Code*) codes);
 
 #endif

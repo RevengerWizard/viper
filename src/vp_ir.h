@@ -8,6 +8,7 @@
 
 #include "vp_str.h"
 #include "vp_type.h"
+#include "vp_vec.h"
 
 /* Frame offset */
 typedef struct FrameInfo
@@ -59,7 +60,6 @@ typedef struct VReg
         /* Non-const */
         struct
         {
-            struct VReg* vreg;
             uint32_t virt;  /* Virtual reg number */
             uint32_t phys;  /* Physical reg number */
             uint32_t param; /* Index of function parameter register, if any */
@@ -84,8 +84,6 @@ typedef struct VReg
     _(RET, src1) \
     _(COND, d12) \
     _(JMP, d12) \
-    _(MEMZERO, dst) \
-    _(MEMCPY, dst) \
     _(PUSHARG, d12) \
     _(CALL, d12) \
     _(CAST, d12) \
@@ -137,7 +135,7 @@ typedef struct IRCallInfo
     uint32_t regargs;   /* Number of register arguments */
     uint32_t stacksize; /* Stack space for arguments */
     Str* label;
-    VReg** args;
+    vec_t(VReg*) args;
     struct Code* fn;
 } IRCallInfo;
 
@@ -195,7 +193,7 @@ typedef struct BB
 {
     struct BB* next;
     Str* label;
-    IR** irs;
+    vec_t(IR*) irs;
     int32_t ofs;
 } BB;
 
@@ -214,15 +212,13 @@ IR* vp_ir_iofs(Str* label);
 IR* vp_ir_sofs(uint32_t ofs);
 IR* vp_ir_mov(VReg* dst, VReg* src, uint8_t flag);
 IR* vp_ir_store(VReg* dst, VReg* src, uint8_t flag);
-IR* vp_ir_load(VReg* src, VRSize vsize, uint8_t flag);
+IR* vp_ir_load(VReg* src, VRSize vsize, uint8_t vflag, uint8_t irflag);
 IR* vp_ir_store_s(VReg* dst, VReg* src);
 IR* vp_ir_load_s(VReg* dst, VReg* src, uint8_t flag);
 IR* vp_ir_ret(VReg* src, uint8_t flag);
 IR* vp_ir_cond(VReg* src1, VReg* src2, CondKind cond);
 IR* vp_ir_jmp(BB* bb);
 void vp_ir_cjmp(VReg* src1, VReg* src2, CondKind cond, BB* bb);
-IR* vp_ir_memzero(VReg* dst, uint32_t size);
-IR* vp_ir_memcpy(VReg* dst, VReg* src, uint32_t size);
 IR* vp_ir_pusharg(VReg* src, uint32_t idx);
 IR* vp_ir_call(IRCallInfo* ci, VReg* dst, VReg* freg);
 IR* vp_ir_cast(VReg* src, VRSize dstsize, uint8_t vflag);

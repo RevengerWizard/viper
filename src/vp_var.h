@@ -29,24 +29,24 @@ typedef struct VarInfo
 typedef struct Scope
 {
     struct Scope* parent;
-    VarInfo** vars;
+    vec_t(VarInfo*) vars;
 } Scope;
 
 /* Scopes */
 Scope* vp_scope_new(Scope* parent);
-VarInfo* vp_scope_find(Scope* scope, Str* name, Scope** p);
+VarInfo* vp_scope_find(Scope* scope, Str* name, vec_t(Scope*) p);
 VarInfo* vp_scope_add(Scope* scope, Str* name, Type* ty);
 Scope* vp_scope_begin();
 void vp_scope_end();
 
 /* Check if variable is local storage */
-static inline bool vp_var_isloc(VarInfo* vi)
+static VP_AINLINE bool vp_var_isloc(VarInfo* vi)
 {
     return !(vi->storage & VS_GLOBAL);
 }
 
 /* Check if it's global scope */
-static inline bool vp_scope_isglob(Scope* scope)
+static VP_AINLINE bool vp_scope_isglob(Scope* scope)
 {
     vp_assertX(scope->parent || scope == V->globscope, "glob");
     return scope->parent == NULL;

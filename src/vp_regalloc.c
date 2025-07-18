@@ -3,9 +3,6 @@
 ** Register allocation
 */
 
-#include <stdbool.h>
-#include <stdlib.h>
-
 #include "vp_regalloc.h"
 #include "vp_ir.h"
 #include "vp_mem.h"
@@ -29,7 +26,7 @@ VReg* vp_vreg_ki(int64_t i64, VRSize vsize)
     return vr;
 }
 
-/* Spawn a floating vreg */
+/* Spawn a float vreg */
 VReg* vp_vreg_kf(double n, VRSize vsize)
 {
     RegAlloc* ra = V->ra;
@@ -116,7 +113,7 @@ static void live_expire(PhysRegSet* p, uint32_t start)
 static int live_sort(const void* pa, const void* pb)
 {
     LiveInterval* ia = *(LiveInterval**)pa, *ib = *(LiveInterval**)pb;
-    uint32_t d = ia->start - ib->start;
+    int d = ia->start - ib->start;
     if(d == 0)
     {
         d = ib->end - ia->end;
@@ -162,8 +159,8 @@ static void live_spill(RegAlloc* ra, LiveInterval** active, uint32_t len, LiveIn
 /* Detect occupied registers and flags */
 static void live_detect(RegAlloc* ra, BB** bbs, uint32_t vreglen, LiveInterval** sorted)
 {
-    LiveInterval** inactives = NULL;
-    LiveInterval** actives = NULL;
+    vec_t(LiveInterval*) inactives = NULL;
+    vec_t(LiveInterval*) actives = NULL;
 
     /* Initialize active/inactive intervals */
     for(uint32_t i = 0; i < vreglen; i++)
@@ -547,12 +544,11 @@ void vp_ra_alloc(RegAlloc *ra, BB** bbs)
     /* Map virtual registers to physical ones */
     for(uint32_t i = 0; i < vreglen; i++)
     {
-        LiveInterval* li = &intervals[i];
         VReg* vr = ra->vregs[i];
         if(vr)
         {
-            vp_assertX(!vrf_const(vr), "const vreg");
-            vr->phys = li->phys;
+            vp_assertX(!vrf_const(vr) && vr->virt >= 0, "invalid vreg");
+            vr->phys = ra->intervals[vr->virt].phys;
         }
     }
 }
@@ -581,7 +577,6 @@ VReg* vp_ra_spawn(VRSize vsize, uint8_t vflag)
     vr->flag = vflag;
     if(!(vflag & VRF_CONST))
     {
-        vr->vreg = vr;
         vr->virt = vec_len(ra->vregs);
         vr->phys = REG_NO;
         vr->param = REG_NO;

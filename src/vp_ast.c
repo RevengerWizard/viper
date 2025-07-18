@@ -129,7 +129,7 @@ Expr* vp_expr_name(SrcLoc loc, Str* name)
     return expr;
 }
 
-Expr* vp_expr_comp(SrcLoc loc, TypeSpec* spec, Field* fields)
+Expr* vp_expr_comp(SrcLoc loc, TypeSpec* spec, vec_t(Field) fields)
 {
     Expr* expr = expr_new(EX_COMPLIT, loc);
     expr->comp.spec = spec;
@@ -137,7 +137,7 @@ Expr* vp_expr_comp(SrcLoc loc, TypeSpec* spec, Field* fields)
     return expr;
 }
 
-Expr* vp_expr_call(SrcLoc loc, Expr* e, Expr** args)
+Expr* vp_expr_call(SrcLoc loc, Expr* e, vec_t(Expr*) args)
 {
     Expr* expr = expr_new(EX_CALL, loc);
     expr->call.expr = e;
@@ -223,7 +223,7 @@ Stmt* vp_stmt_decl(SrcLoc loc, Decl* d)
     return st;
 }
 
-Stmt* vp_stmt_block(SrcLoc loc, Stmt** block)
+Stmt* vp_stmt_block(SrcLoc loc, vec_t(Stmt*) block)
 {
     Stmt* st = stmt_new(ST_BLOCK, loc);
     st->block = block;
@@ -346,7 +346,7 @@ TypeSpec* vp_typespec_arr(SrcLoc loc, TypeSpec* base, Expr* e)
     return ts;
 }
 
-TypeSpec* vp_typespec_fn(SrcLoc loc, TypeSpec* ret, TypeSpec** args)
+TypeSpec* vp_typespec_fn(SrcLoc loc, TypeSpec* ret, vec_t(TypeSpec*) args)
 {
     TypeSpec* ts = new_typespec(SPEC_FUNC, loc);
     ts->fn.ret = ret;

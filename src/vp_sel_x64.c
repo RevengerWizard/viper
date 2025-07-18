@@ -378,14 +378,14 @@ static void sel_mov(IR* ir)
 static void sel_store(IR* ir)
 {
     int32_t disp = 0;
-    uint32_t base = ir->src1->phys;
-    uint32_t dst = ir->src2->phys;
+    uint32_t base = ir->src2->phys;
+    uint32_t src = ir->src1->phys;
     if(ir->kind == IR_STORE_S)
     {
-        vp_assertX(vrf_spill(ir->src2), "not spilled");
-        disp = ir->src2->fi.ofs;
+        vp_assertX(!vrf_const(ir->src2), "const src2");
+        vp_assertX(vrf_spill(ir->src2), "src2 not spilled");
         base = RBP;
-        dst = ir->src1->phys;
+        disp = ir->src2->fi.ofs;
     }
 
     if(vrf_flo(ir->src1))
@@ -393,8 +393,8 @@ static void sel_store(IR* ir)
         vp_assertX(!vrf_const(ir->src1), "const src1");
         switch(ir->src1->vsize)
         {
-        case VRSize4: emit_movss_mr(V, dst, MEM(base, NOREG, 1, disp)); break;
-        case VRSize8: emit_movsd_mr(V, dst, MEM(base, NOREG, 1, disp)); break;
+        case VRSize4: emit_movss_mr(V, src, MEM(base, NOREG, 1, disp)); break;
+        case VRSize8: emit_movsd_mr(V, src, MEM(base, NOREG, 1, disp)); break;
         default: vp_assertX(0, "?");
         }
     }
@@ -406,20 +406,20 @@ static void sel_store(IR* ir)
         {
             switch(p)
             {
-            case VRSize1: emit_mov8_mi(V, dst, ir->src1->i64); break;
-            case VRSize2: emit_mov16_mi(V, dst, ir->src1->i64); break;
-            case VRSize4: emit_mov32_mi(V, dst, ir->src1->i64); break;
-            case VRSize8: emit_mov64_mi(V, dst, ir->src1->i64); break;
+            case VRSize1: emit_mov8_mi(V, ir->src2->phys, ir->src1->i64); break;
+            case VRSize2: emit_mov16_mi(V, ir->src2->phys, ir->src1->i64); break;
+            case VRSize4: emit_mov32_mi(V, ir->src2->phys, ir->src1->i64); break;
+            case VRSize8: emit_mov64_mi(V, ir->src2->phys, ir->src1->i64); break;
             }
         }
         else
         {
             switch(p)
             {
-            case VRSize1: emit_mov8_mr(V, dst, MEM(base, NOREG, 1, disp)); break;
-            case VRSize2: emit_mov16_mr(V, dst, MEM(base, NOREG, 1, disp)); break;
-            case VRSize4: emit_mov32_mr(V, dst, MEM(base, NOREG, 1, disp)); break;
-            case VRSize8: emit_mov64_mr(V, dst, MEM(base, NOREG, 1, disp)); break;
+            case VRSize1: emit_mov8_mr(V, MEM(base, NOREG, 1, disp), src); break;
+            case VRSize2: emit_mov16_mr(V, MEM(base, NOREG, 1, disp), src); break;
+            case VRSize4: emit_mov32_mr(V, MEM(base, NOREG, 1, disp), src); break;
+            case VRSize8: emit_mov64_mr(V, MEM(base, NOREG, 1, disp), src); break;
             }
         }
     }
@@ -436,26 +436,39 @@ static void sel_load(IR* ir)
         base = RBP;
     }
 
-    if(vrf_flo(ir->src1))
+    if(vrf_flo(ir->dst))
     {
         vp_assertX(!vrf_const(ir->src1), "const src1");
         switch(ir->src1->vsize)
         {
         case VRSize4: emit_movss_rm(V, dst, MEM(base, NOREG, 1, disp)); break;
         case VRSize8: emit_movsd_rm(V, dst, MEM(base, NOREG, 1, disp)); break;
-        default: vp_assertX(0, "?");
+        default: vp_assertX(0, "?"); break;
         }
     }
     else
     {
         VRSize p = ir->dst->vsize;
         vp_assertVSize(p, VRSize1, VRSize8);
-        switch(p)
+        if(vrf_const(ir->src1))
         {
-        case VRSize1: emit_mov8_rm(V, dst, MEM(base, NOREG, 1, disp)); break;
-        case VRSize2: emit_mov16_rm(V, dst, MEM(base, NOREG, 1, disp)); break;
-        case VRSize4: emit_mov32_rm(V, dst, MEM(base, NOREG, 1, disp)); break;
-        case VRSize8: emit_mov64_rm(V, dst, MEM(base, NOREG, 1, disp)); break;
+            switch(p)
+            {
+            case VRSize1: emit_mov8_mi(V, dst, ir->src1->i64); break;
+            case VRSize2: emit_mov16_mi(V, dst, ir->src1->i64); break;
+            case VRSize4: emit_mov32_mi(V, dst, ir->src1->i64); break;
+            case VRSize8: emit_mov64_mi(V, dst, ir->src1->i64); break;
+            }
+        }
+        else
+        {
+            switch(p)
+            {
+            case VRSize1: emit_mov8_rm(V, dst, MEM(base, NOREG, 1, disp)); break;
+            case VRSize2: emit_mov16_rm(V, dst, MEM(base, NOREG, 1, disp)); break;
+            case VRSize4: emit_mov32_rm(V, dst, MEM(base, NOREG, 1, disp)); break;
+            case VRSize8: emit_mov64_rm(V, dst, MEM(base, NOREG, 1, disp)); break;
+            }
         }
     }
 }
@@ -498,8 +511,8 @@ static void sel_pusharg(IR* ir)
     }
 }
 
-static PatchInfo* jmps = NULL;
-static PatchInfo* calls = NULL;
+static vec_t(PatchInfo) jmps = NULL;
+static vec_t(PatchInfo) calls = NULL;
 
 static void patchinfo_add(BB* target, uint32_t ofs)
 {
@@ -694,11 +707,6 @@ static void sel_jmp(IR* ir)
     X64CC cc = cond2cc(cond);
     emit_jcc_rel32(V, cc, 0);
     patchinfo_add(ir->jmp.bb, patch);
-}
-
-static void sel_mem(IR* ir)
-{
-    UNUSED(ir);
 }
 
 static void sel_add(IR* ir)
@@ -1027,8 +1035,6 @@ static const SelIRFn seltab[] = {
     [IR_RET] = sel_ret,
     [IR_COND] = sel_cond,
     [IR_JMP] = sel_jmp,
-    [IR_MEMCPY] = sel_mem,
-    [IR_MEMZERO] = sel_mem,
     [IR_PUSHARG] = sel_pusharg,
     [IR_CALL] = sel_call,
     [IR_CAST] = sel_cast,
@@ -1247,13 +1253,14 @@ static void emit_body(Code* c)
     emit_bbs(c->bbs);
 
     /* Epilogue */
-    if(saverbp)
-    {
-        emit_pop64_r(V, RBP);
-    }
     if(framesize > 0)
     {
         emit_add64_ri(V, RSP, framesize);
+    }
+    if(saverbp)
+    {
+        emit_mov64_rr(V, RSP, RBP);
+        emit_pop64_r(V, RBP);
     }
     pop_callee_save(ra, ra->iregbits);
     emit_ret(V);

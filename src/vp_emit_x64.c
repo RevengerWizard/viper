@@ -326,10 +326,10 @@ static void emit_mov32_rm(VpState* V, X64Reg dst, X64Mem mem) { emit_mov_mem(V, 
 static void emit_mov64_rm(VpState* V, X64Reg dst, X64Mem mem) { emit_mov_mem(V, dst, mem, 64, true); }
 
 /* MOV [base + index*scale + disp32], reg */
-static void emit_mov8_mr(VpState* V, X64Reg src, X64Mem mem) { emit_mov_mem(V, src, mem, 8, false); }
-static void emit_mov16_mr(VpState* V, X64Reg src, X64Mem mem) { emit_mov_mem(V, src, mem, 16, false); }
-static void emit_mov32_mr(VpState* V, X64Reg src, X64Mem mem) { emit_mov_mem(V, src, mem, 32, false); }
-static void emit_mov64_mr(VpState* V, X64Reg src, X64Mem mem) { emit_mov_mem(V, src, mem, 64, false); }
+static void emit_mov8_mr(VpState* V, X64Mem mem, X64Reg src) { emit_mov_mem(V, src, mem, 8, false); }
+static void emit_mov16_mr(VpState* V, X64Mem mem, X64Reg src) { emit_mov_mem(V, src, mem, 16, false); }
+static void emit_mov32_mr(VpState* V, X64Mem mem, X64Reg src) { emit_mov_mem(V, src, mem, 32, false); }
+static void emit_mov64_mr(VpState* V, X64Mem mem, X64Reg src) { emit_mov_mem(V, src, mem, 64, false); }
 
 /* Helper to emit MOV [reg], imm instructions */
 static void emit_mov_mi_common(VpState* V, X64Reg dst, int size, int64_t imm)
@@ -1930,7 +1930,7 @@ static void emit_movss_rm(VpState* V, X64Reg dst, X64Mem mem)
 }
 
 /* MOVSS [base + index*scale + disp32], xmm */
-static void emit_movss_mr(VpState* V, X64Reg src, X64Mem mem)
+static void emit_movss_mr(VpState* V, X64Mem mem, X64Reg src)
 {
     emit_sse_mem(V, 0xF3, 0x11, src, mem);
 }
@@ -1942,7 +1942,7 @@ static void emit_movsd_rm(VpState* V, X64Reg dst, X64Mem mem)
 }
 
 /* MOVSD [base + index*scale + disp32], xmm */
-static void emit_movsd_mr(VpState* V, X64Reg src, X64Mem mem)
+static void emit_movsd_mr(VpState* V, X64Mem mem, X64Reg src)
 {
     emit_sse_mem(V, 0xF2, 0x11, src, mem);
 }

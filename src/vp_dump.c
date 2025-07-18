@@ -209,21 +209,6 @@ static void dump_ir(IR* ir)
             printf("\n");
             break;
         }
-        case IR_MEMZERO:
-        {
-            printf("");
-            dump_vreg(ir->dst);
-            printf(", %d", ir->mem.size);
-            break;
-        }
-        case IR_MEMCPY:
-        {
-            dump_vreg(ir->dst);
-            printf(", ");
-            dump_vreg(ir->src1);
-            printf(", %d", ir->mem.size);
-            break;
-        }
         case IR_PUSHARG:
         {
             printf("%d, ", ir->arg.idx);

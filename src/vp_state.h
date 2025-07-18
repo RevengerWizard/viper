@@ -22,8 +22,8 @@ typedef struct VpState
 {
     SBuf code;
     Map cacheptr;
-    Type** cachefunc;
-    Type** cachearr;
+    vec_t(Type*) cachefunc;
+    vec_t(Type*) cachearr;
     Tab strtab;
     Arena strarena;
     Arena astarena;

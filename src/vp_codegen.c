@@ -53,6 +53,106 @@ static VReg* gen_varinfo(VarInfo* vi)
     return vr;
 }
 
+static VRSize vreg_elem(uint32_t size, uint32_t align)
+{
+    uint32_t s = MIN(align, size);
+    if(!IS_POW2(s) || s > 8)
+    {
+        for(s = 8; s > 1; s >>= 1)
+        {
+            if(s <= size && size % s == 0)
+                break;
+        }
+    }
+    vp_assertX(s > 0, "s == 0");
+    return vp_msb(s);
+}
+
+/* Zero a memory vreg */
+static void gen_memzero(Type* ty, VReg* dst)
+{
+#if 0
+    uint32_t size = vp_type_sizeof(ty);
+    uint32_t align = vp_type_alignof(ty);
+    vp_assertX(size, "size == 0");
+    VRSize velem = vreg_elem(size, align);
+    uint32_t count = size >> velem;
+    vp_assertX(count, "count == 0");
+    VReg* vzero = vp_vreg_ki(0, velem);
+    if(count == 1)
+    {
+        vp_ir_store(dst, vzero, 0);
+    }
+    else
+    {
+        VReg* dstp = vp_ra_spawn(VRSize8, 0);
+        vp_ir_mov(dstp, dst, IRF_UNSIGNED);
+
+        VRSize vsize = VRSize8;
+        VReg* vcount = vp_ra_spawn(vsize, 0);
+        vp_ir_mov(vcount, vp_vreg_ki(count, vsize), IRF_UNSIGNED);
+        VReg* vadd = vp_vreg_ki(1 << velem, vsize);
+
+        BB* bbloop = vp_bb_new();
+        vp_bb_setcurr(bbloop);
+        /* *dstp = 0 */
+        vp_ir_store(dstp, vzero, 0);
+        /* dstp += velem */
+        vp_ir_mov(dstp, vp_ir_binop(IR_ADD, dstp, vadd, dstp->vsize, IRF_UNSIGNED), IRF_UNSIGNED);
+        /* vcount -= 1 */
+        vp_ir_mov(vcount, vp_ir_binop(IR_SUB, vcount, vp_vreg_ki(1, vsize), vcount->vsize, IRF_UNSIGNED), IRF_UNSIGNED);
+        /* vcount != 0 */
+        vp_ir_cjmp(vcount, vp_vreg_ki(0, vcount->vsize), COND_NEQ, bbloop);
+        vp_bb_setcurr(vp_bb_new());
+    }
+#endif
+}
+
+static void gen_memcpy(Type* ty, VReg* dst, VReg* src)
+{
+#if 0
+    uint32_t size = vp_type_sizeof(ty);
+    uint32_t align = vp_type_alignof(ty);
+    vp_assertX(size, "size == 0");
+    VRSize velem = vreg_elem(size, align);
+    printf("VELEM %d\n", velem);
+    uint32_t count = size >> velem;
+    vp_assertX(count, "count == 0");
+    if(count == 1)
+    {
+        VReg* tmp = vp_ir_load(src, velem, vp_vflag(ty), 0)->dst;
+        vp_ir_store(dst, tmp, 0);
+    }
+    else
+    {
+        VReg* srcp = vp_ra_spawn(VRSize8, 0);
+        vp_ir_mov(srcp, src, IRF_UNSIGNED);
+        VReg* dstp = vp_ra_spawn(VRSize8, 0);
+        vp_ir_mov(dstp, dst, IRF_UNSIGNED);
+
+        VRSize vsize = VRSize8;
+        VReg* vcount = vp_ra_spawn(vsize, 0);
+        vp_ir_mov(vcount, vp_vreg_ki(count, vsize), IRF_UNSIGNED);
+        VReg* vadd = vp_vreg_ki(1 << velem, vsize);
+
+        BB* bbloop = vp_bb_new();
+        vp_bb_setcurr(bbloop);
+        VReg* tmp = vp_ir_load(srcp, velem, vp_vflag(ty), 0)->dst;
+        /* srcp += velem */
+        vp_ir_mov(srcp, vp_ir_binop(IR_ADD, srcp, vadd, srcp->vsize, IRF_UNSIGNED), IRF_UNSIGNED);
+        /* *dstp = *srcp */
+        vp_ir_store(dstp, tmp, 0);
+        /* dstp += velem */
+        vp_ir_mov(dstp, vp_ir_binop(IR_ADD, dstp, vadd, dstp->vsize, IRF_UNSIGNED), IRF_UNSIGNED);
+        /* vcount -= 1 */
+        vp_ir_mov(vcount, vp_ir_binop(IR_SUB, vcount, vp_vreg_ki(1, vsize), vcount->vsize, IRF_UNSIGNED), IRF_UNSIGNED);
+        /* vcount != 0 */
+        vp_ir_cjmp(vcount, vp_vreg_ki(0, vcount->vsize), COND_NEQ, bbloop);
+        vp_bb_setcurr(vp_bb_new());
+    }
+#endif
+}
+
 /* Generate store operation, based on type */
 static void gen_store(VReg* dst, VReg* src, Type* ty)
 {
@@ -62,8 +162,7 @@ static void gen_store(VReg* dst, VReg* src, Type* ty)
     }
     else if(ty_isaggr(ty))
     {
-        uint32_t tsize = vp_type_sizeof(ty);
-        vp_ir_memcpy(dst, src, tsize);
+        gen_memcpy(ty, dst, src);
     }
     else
     {
@@ -133,7 +232,7 @@ static VReg* gen_name(Expr* e)
             return vi->vreg;
         }
         VReg* src = gen_lval(e);
-        VReg* dst = vp_ir_load(src, vp_vsize(e->ty), ir_flag(e->ty))->dst;
+        VReg* dst = vp_ir_load(src, vp_vsize(e->ty), vp_vflag(e->ty), ir_flag(e->ty))->dst;
         return dst;
     }
     else if(e->ty->kind == TY_array || e->ty->kind == TY_struct)
@@ -248,9 +347,10 @@ static VReg* gen_field(Expr* e)
 {
     vp_assertX(e->kind == EX_FIELD, "not a field expression");
     VReg* freg = gen_lval(e);
-    if(ty_isscalar(e->ty))
+    Type* ty = e->ty;
+    if(ty_isscalar(ty))
     {
-        return vp_ir_load(freg, vp_vsize(e->ty), ir_flag(e->ty))->dst;
+        return vp_ir_load(freg, vp_vsize(ty), vp_vflag(ty), ir_flag(ty))->dst;
     }
     return freg;
 }
@@ -260,9 +360,10 @@ static VReg* gen_idx(Expr* e)
 {
     vp_assertX(e->kind == EX_IDX, "not an index expression");
     VReg* addr = gen_lval(e);
-    if(ty_isscalar(e->ty))
+    Type* ty = e->ty;
+    if(ty_isscalar(ty))
     {
-        return vp_ir_load(addr, vp_vsize(e->ty), ir_flag(e->ty))->dst;
+        return vp_ir_load(addr, vp_vsize(ty), vp_vflag(ty), ir_flag(ty))->dst;
     }
     return addr;
 }
@@ -281,8 +382,8 @@ static VReg* gen_call(Expr* e)
         bool flo;   /* Is a float argument */
     } ArgInfo;
 
-    VReg** args = NULL;
-    ArgInfo* arginfos = NULL;
+    vec_t(VReg*) args = NULL;
+    vec_t(ArgInfo) arginfos = NULL;
     uint32_t offset = 0;
     uint32_t regargs = 0;
     uint32_t argnum = vec_len(e->call.args);
@@ -322,26 +423,19 @@ static VReg* gen_call(Expr* e)
     {
         for(uint32_t i = argnum; i-- > 0;)
         {
-            VReg* vr = gen_expr(e->call.args[i]);
-            vec_push(args, vr);
+            VReg* src = gen_expr(e->call.args[i]);
+            vec_push(args, src);
 
             ArgInfo* p = &arginfos[i];
             if(p->stack)
             {
                 Type* argty = e->call.args[i]->ty;
                 VReg* dst = vp_ir_sofs(p->offset)->dst;
-                if(ty_isscalar(argty))
-                {
-                    vp_ir_store(dst, vr, ir_flag(argty));
-                }
-                else
-                {
-                    vp_ir_memcpy(dst, vr, p->size);
-                }
+                gen_memcpy(argty, dst, src);
             }
             else
             {
-                vp_ir_pusharg(vr, p->regidx);
+                vp_ir_pusharg(src, p->regidx);
             }
         }
     }
@@ -410,7 +504,7 @@ typedef struct FlatField
 } FlatField;
 
 /* Flatten a compound literal */
-static void flatten_complit(Expr* e, uint32_t base_offset, FlatField** flat_fields)
+static void flatten_complit(Expr* e, uint32_t base_offset, vec_t(FlatField*) flat_fields)
 {
     vp_assertX(e->kind == EX_COMPLIT, "not a compound literal");
     
@@ -512,8 +606,7 @@ static VReg* gen_complit(Expr* e)
     Slot sl = {.type = e->ty, .fi = fi};
     vec_push(V->fncode->slots, sl);
     
-    uint32_t size = vp_type_sizeof(e->ty);
-    vp_ir_memzero(base, size);
+    gen_memzero(e->ty, base);
 
     return gen_complit_base(e, base);
 }
@@ -593,9 +686,10 @@ static void gen_cond_jmp(Expr* e, BB* tbb, BB* fbb)
 static VReg* gen_deref(Expr* e)
 {
     VReg* vr = gen_expr(e->unary);
-    if(ty_isscalar(e->ty))
+    Type* ty = e->ty;
+    if(ty_isscalar(ty))
     {
-        vr = vp_ir_load(vr, vp_vsize(e->ty), ir_flag(e->ty))->dst;
+        vr = vp_ir_load(vr, vp_vsize(ty), vp_vflag(ty), ir_flag(ty))->dst;
     }
     return vr;
 }
@@ -681,7 +775,7 @@ static void gen_assign(Expr* lhs, Expr* rhs)
     if(lhs->kind == EX_NAME)
     {
         VarInfo* vi = vp_scope_find(lhs->scope, lhs->name, NULL);
-        if(!vp_scope_isglob(lhs->scope))
+        if(ty_isscalar(lhs->ty) && !vp_scope_isglob(lhs->scope))
         {
             if(vp_var_isloc(vi))
             {
@@ -726,8 +820,7 @@ static void gen_var(Decl* d)
             else
             {
                 VReg* src = gen_expr(d->var.expr);
-                uint32_t size = vp_type_sizeof(vi->type);
-                vp_ir_memcpy(dst, src, size);
+                gen_memcpy(vi->type, dst, src);
             }
         }
     }
@@ -735,8 +828,7 @@ static void gen_var(Decl* d)
     {
         vp_assertX(vi->fi, "missing frame info");
         VReg* dst = vp_ir_bofs(vi->fi)->dst;
-        uint32_t size = vp_type_sizeof(vi->type);
-        vp_ir_memzero(dst, size);
+        gen_memzero(vi->type, dst);
     }
 }
 
@@ -881,17 +973,16 @@ static Code* gen_fn(Decl* d)
 {
     vp_assertX(d->kind == DECL_FN, "not function declaration");
 
+    RegAlloc* ra = V->ra = vp_ra_new(&winx64_ra);
     Code* code = vp_mem_calloc(1, sizeof(*code));
     code->name = d->name;
     code->numparams = vec_len(d->fn.params);
     code->scopes = d->fn.scopes;
-    vp_tab_set(&V->funcs, code->name, code);
-
-    RegAlloc* ra = V->ra = vp_ra_new(&winx64_ra);
     code->ra = ra;
+    vp_tab_set(&V->funcs, code->name, code);
     V->fncode = code;
-    BB* bb = vp_bb_new();
-    vp_bb_setcurr(bb);
+
+    vp_bb_setcurr(vp_bb_new());
 
     if(d->fn.params)
     {
@@ -903,18 +994,19 @@ static Code* gen_fn(Decl* d)
     V->bb = NULL;
 
     vp_sel_tweak(code);
-
     vp_ra_alloc(ra, code->bbs);
-
     gen_stack(code);
 
     vp_dump_bb(code);
+
+    V->fncode = NULL;
+    V->ra = NULL;
 
     return code;
 }
 
 /* Generate code IR for all declarations */
-Code** vp_codegen(Decl** decls)
+vec_t(Code*) vp_codegen(Decl** decls)
 {
     Code** codes = NULL;
     for(uint32_t i = 0; i < vec_len(decls); i++)

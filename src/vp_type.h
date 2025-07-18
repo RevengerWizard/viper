@@ -7,6 +7,7 @@
 #define _VP_TYPE_H
 
 #include "vp_str.h"
+#include "vp_vec.h"
 
 /* Viper types */
 #define TYDEF(_) \
@@ -52,12 +53,12 @@ typedef struct Type
         struct
         {
             struct Type* ret;
-            struct Type** params;
+            vec_t(struct Type*) params;
         } fn;
         struct
         {
             Str* name;
-            TypeField* fields;
+            vec_t(TypeField) fields;
             uint32_t size;
             uint32_t align;
         } st;

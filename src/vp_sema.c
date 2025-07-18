@@ -18,10 +18,10 @@
 
 #include "vp_dump.h"
 
-Decl** sorted;
+vec_t(Decl*) sorted;
 Tab globsyms;
-Sym** syms;
-Sym** localsyms;
+vec_t(Sym*) syms;
+vec_t(Sym*) localsyms;
 Decl* currfn;
 
 /* -- Symbols ------------------------------------------------------- */
@@ -174,7 +174,7 @@ static void sym_complete(Type* ty)
     ty->kind = TY_name;
     vp_assertX(d->kind == DECL_STRUCT || d->kind == DECL_UNION, "struct/union");
     
-    TypeField* fields = NULL;
+    vec_t(TypeField) fields = NULL;
     for(uint32_t i = 0; i < vec_len(d->agr->items); i++)
     {
         AggregateItem* item = &d->agr->items[i];
@@ -1506,7 +1506,7 @@ static Type* sema_typespec(TypeSpec* spec)
         }
         case SPEC_FUNC:
         {
-            Type** args = NULL;
+            vec_t(Type*) args = NULL;
             for(uint32_t i = 0; i < vec_len(spec->fn.args); i++)
             {
                 Type* targ = sema_typespec(spec->fn.args[i]);
@@ -1541,7 +1541,7 @@ static Type* sema_fn(Decl* d)
     vp_assertX(d->kind == DECL_FN, "fn declaration");
     
     vec_push(sorted, d);
-    Type** params = NULL;
+    vec_t(Type*) params = NULL;
     for(uint32_t i = 0; i < vec_len(d->fn.params); i++)
     {
         Type* typaram = sema_typespec(d->fn.params[i].spec);

@@ -75,12 +75,12 @@ IR* vp_ir_store(VReg* dst, VReg* src, uint8_t flag)
     return ir;
 }
 
-IR* vp_ir_load(VReg* src, VRSize vsize, uint8_t flag)
+IR* vp_ir_load(VReg* src, VRSize vsize, uint8_t vflag, uint8_t irflag)
 {
     IR* ir = ir_new(IR_LOAD);
-    ir->flag = flag;
+    ir->flag = irflag;
     ir->src1 = src;
-    ir->dst = vp_ra_spawn(vsize, src->flag);
+    ir->dst = vp_ra_spawn(vsize, vflag);
     return ir;
 }
 
@@ -137,24 +137,6 @@ void vp_ir_cjmp(VReg* src1, VReg* src2, CondKind cond, BB* bb)
     ir->src2 = src2;
     ir->jmp.bb = bb;
     ir->jmp.cond = cond;
-}
-
-/* Zero memory */
-IR* vp_ir_memzero(VReg* dst, uint32_t size)
-{
-    IR* ir = ir_new(IR_MEMZERO);
-    ir->dst = dst;
-    ir->mem.size = size;
-    return ir;
-}
-
-IR* vp_ir_memcpy(VReg* dst, VReg* src, uint32_t size)
-{
-    IR* ir = ir_new(IR_MEMCPY);
-    ir->dst = dst;
-    ir->src1 = src;
-    ir->mem.size = size;
-    return ir;
 }
 
 IR* vp_ir_pusharg(VReg* src, uint32_t idx)
@@ -401,6 +383,7 @@ BB* vp_bb_new()
 void vp_bb_setcurr(BB* bb)
 {
     vp_assertX(bb, "missing basic block");
+    vp_assertX(V->fncode, "missing function");
     if(V->bb)
     {
         V->bb->next = bb;

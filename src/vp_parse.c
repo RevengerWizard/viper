@@ -188,7 +188,7 @@ static Expr* expr_offsetof(LexState* ls, SrcLoc loc)
 /* Parse call expression */
 static Expr* expr_call(LexState* ls, Expr* lhs, SrcLoc loc)
 {
-    Expr** args = NULL;
+    vec_t(Expr*) args = NULL;
     if(!lex_check(ls, ')'))
     {
         do
@@ -305,7 +305,7 @@ static Field expr_field(LexState* ls)
 static Expr* expr_comp_type(LexState* ls, TypeSpec* spec)
 {
     SrcLoc loc = lex_srcloc(ls);
-    Field* fields = NULL;
+    vec_t(Field) fields = NULL;
     while(!lex_check(ls, '}'))
     {
         Field c = expr_field(ls);
@@ -502,7 +502,7 @@ static TypeSpec* parse_type_fn(LexState* ls);
 static TypeSpec* parse_type_fnarr(LexState* ls)
 {
     SrcLoc loc = lex_srcloc(ls);
-    TypeSpec** arrdims = NULL;
+    vec_t(TypeSpec*) arrdims = NULL;
     while(lex_check(ls, '['))
     {
         lex_consume(ls, '[');
@@ -530,7 +530,7 @@ static TypeSpec* parse_type_fnarr(LexState* ls)
 static TypeSpec* parse_type_fn(LexState* ls)
 {
     SrcLoc loc = lex_srcloc(ls);
-    TypeSpec** args = NULL;
+    vec_t(TypeSpec*) args = NULL;
     lex_consume(ls, '(');
     if(!lex_check(ls, ')'))
     {
@@ -648,7 +648,7 @@ static Decl* parse_note(LexState* ls)
 /* Parse code block {} */
 static Stmt* parse_block(LexState* ls)
 {
-    Stmt** stmts = NULL;
+    vec_t(Stmt*) stmts = NULL;
     lex_consume(ls, '{');
     SrcLoc loc = lex_srcloc(ls);
     while(!lex_check(ls, '}') && !lex_check(ls, TK_eof))
@@ -748,7 +748,7 @@ static AggregateItem parse_aggr_item(LexState* ls)
     else
     {
         SrcLoc loc = lex_srcloc(ls);
-        Str** names = NULL;
+        vec_t(Str*) names = NULL;
         do
         {
             Str* name = lex_name(ls);
@@ -898,12 +898,12 @@ static Decl* parse_decl(LexState* ls)
     return d;
 }
 
-Decl** vp_parse(VpState* V, LexState* ls)
+vec_t(Decl*) vp_parse(VpState* V, LexState* ls)
 {
     UNUSED(V);
     vp_lex_next(ls);    /* Read the first token into ls->curr */
 
-    Decl** decls = NULL;
+    vec_t(Decl*) decls = NULL;
     while(!lex_match(ls, TK_eof))
     {
         Decl* d = parse_decl(ls);
