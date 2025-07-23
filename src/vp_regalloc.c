@@ -253,6 +253,30 @@ static void live_detect(RegAlloc* ra, BB** bbs, uint32_t vreglen, LiveInterval**
     vec_free(actives);
 }
 
+static void live_set_inout(vec_t(VReg*) vregs, LiveInterval* intervals, uint32_t nip)
+{
+    for(uint32_t i = 0; i < vec_len(vregs); i++)
+    {
+        VReg* vr = vregs[i];
+        LiveInterval* li = &intervals[vr->virt];
+        if(vr->flag & VRF_PARAM)
+        {
+            /* Keep live interval start as is for parameters */
+        }
+        else
+        {
+            if(li->start == REG_NO || li->start > nip)
+            {
+                li->start = nip;
+            }
+        }
+        if(li->end == REG_NO || li->end < nip)
+        {
+            li->end = nip;
+        }
+    }
+}
+
 /* Build live intervals by scanning the IR instructions */
 static void live_build(RegAlloc* ra, BB** bbs, uint32_t vreglen, LiveInterval* intervals)
 {
@@ -282,6 +306,7 @@ static void live_build(RegAlloc* ra, BB** bbs, uint32_t vreglen, LiveInterval* i
     for(uint32_t i = 0; i < vec_len(bbs); i++)
     {
         BB* bb = bbs[i];
+        live_set_inout(bb->inregs, intervals, nip);
         for(uint32_t j = 0; j < vec_len(bb->irs); j++, nip++)
         {
             IR* ir = bb->irs[j];
@@ -304,6 +329,7 @@ static void live_build(RegAlloc* ra, BB** bbs, uint32_t vreglen, LiveInterval* i
                 }
             }
         }
+        live_set_inout(bb->outregs, intervals, nip);
     }
 }
 

@@ -42,8 +42,20 @@ typedef struct VecHeader
     (vp_assertX((v) && (idx) < vec_len(v), "remove index out of bounds"), \
      vp_vec_remove_at((v), (idx), sizeof(*(v))))
 
+#define vec_contains(v, elem) \
+    vp_vec_contains((v), &(elem), sizeof(*(v)))
+
+#define vec_concat(dst, src) \
+    (vp_vec_concat((void**)&(dst), (src), sizeof(*(dst))))
+
+#define vec_pop(v) \
+    (vp_assertX((v) && vec_len(v) > 0, "pop from empty vector"), \
+     vec_hdr(v)->len--, (v)[vec_hdr(v)->len])
+
 void* vp_vec_grow(const void* vec, size_t len, size_t size);
 void vp_vec_insert(const void* vec, size_t idx, size_t elemsize);
 void vp_vec_remove_at(const void* vec, size_t idx, size_t elemsize);
+bool vp_vec_contains(const void* vec, const void* elem, size_t elemsize);
+void vp_vec_concat(void** dstp, const void* src, size_t elemsize);
 
 #endif

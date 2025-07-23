@@ -71,7 +71,6 @@ static VRSize vreg_elem(uint32_t size, uint32_t align)
 /* Zero a memory vreg */
 static void gen_memzero(Type* ty, VReg* dst)
 {
-#if 0
     uint32_t size = vp_type_sizeof(ty);
     uint32_t align = vp_type_alignof(ty);
     vp_assertX(size, "size == 0");
@@ -105,17 +104,14 @@ static void gen_memzero(Type* ty, VReg* dst)
         vp_ir_cjmp(vcount, vp_vreg_ki(0, vcount->vsize), COND_NEQ, bbloop);
         vp_bb_setcurr(vp_bb_new());
     }
-#endif
 }
 
 static void gen_memcpy(Type* ty, VReg* dst, VReg* src)
 {
-#if 0
     uint32_t size = vp_type_sizeof(ty);
     uint32_t align = vp_type_alignof(ty);
     vp_assertX(size, "size == 0");
     VRSize velem = vreg_elem(size, align);
-    printf("VELEM %d\n", velem);
     uint32_t count = size >> velem;
     vp_assertX(count, "count == 0");
     if(count == 1)
@@ -150,7 +146,6 @@ static void gen_memcpy(Type* ty, VReg* dst, VReg* src)
         vp_ir_cjmp(vcount, vp_vreg_ki(0, vcount->vsize), COND_NEQ, bbloop);
         vp_bb_setcurr(vp_bb_new());
     }
-#endif
 }
 
 /* Generate store operation, based on type */
@@ -563,8 +558,20 @@ static void flatten_complit(Expr* e, uint32_t base_offset, vec_t(FlatField*) fla
     }
 }
 
-static VReg* gen_complit_base(Expr* e, VReg* base)
+/* Generate compound literal */
+static VReg* gen_complit(Expr* e)
 {
+    vp_assertX(e->kind == EX_COMPLIT, "compound literal");
+    vp_assertX(e->ty, "missing compound type");
+    
+    FrameInfo* fi = vp_frameinfo_new();
+    VReg* base = vp_ir_bofs(fi)->dst;
+
+    Slot sl = {.type = e->ty, .fi = fi};
+    vec_push(V->fncode->slots, sl);
+    
+    gen_memzero(e->ty, base);
+
     FlatField* flat_fields = NULL;
     flatten_complit(e, 0, &flat_fields);
 
@@ -592,23 +599,6 @@ static VReg* gen_complit_base(Expr* e, VReg* base)
     vec_free(flat_fields);
     
     return base;
-}
-
-/* Generate compound literal */
-static VReg* gen_complit(Expr* e)
-{
-    vp_assertX(e->kind == EX_COMPLIT, "compound literal");
-    vp_assertX(e->ty, "missing compound type");
-    
-    FrameInfo* fi = vp_frameinfo_new();
-    VReg* base = vp_ir_bofs(fi)->dst;
-
-    Slot sl = {.type = e->ty, .fi = fi};
-    vec_push(V->fncode->slots, sl);
-    
-    gen_memzero(e->ty, base);
-
-    return gen_complit_base(e, base);
 }
 
 typedef struct CmpExpr
@@ -764,13 +754,6 @@ static void gen_expr_stmt(Expr* e)
 /* Generate assignment */
 static void gen_assign(Expr* lhs, Expr* rhs)
 {
-    if(ty_isaggr(lhs->ty) && rhs->kind == EX_COMPLIT)
-    {
-        VReg* dst = gen_lval(lhs);
-        gen_complit_base(rhs, dst);
-        return;
-    }
-
     VReg* src = gen_expr(rhs);
     if(lhs->kind == EX_NAME)
     {
@@ -813,15 +796,8 @@ static void gen_var(Decl* d)
         {
             vp_assertX(vi->fi, "missing frame info");
             VReg* dst = vp_ir_bofs(vi->fi)->dst;
-            if(d->var.expr->kind == EX_COMPLIT)
-            {
-                gen_complit_base(d->var.expr, dst);
-            }
-            else
-            {
-                VReg* src = gen_expr(d->var.expr);
-                gen_memcpy(vi->type, dst, src);
-            }
+            VReg* src = gen_expr(d->var.expr);
+            gen_memcpy(vi->type, dst, src);
         }
     }
     else if(!ty_isscalar(vi->type))
@@ -991,9 +967,12 @@ static Code* gen_fn(Decl* d)
 
     gen_block(d->fn.body->block);
 
+    vp_bb_detect(code->bbs);
+
     V->bb = NULL;
 
     vp_sel_tweak(code);
+    vp_bb_analyze(code->bbs);
     vp_ra_alloc(ra, code->bbs);
     gen_stack(code);
 
@@ -1006,9 +985,9 @@ static Code* gen_fn(Decl* d)
 }
 
 /* Generate code IR for all declarations */
-vec_t(Code*) vp_codegen(Decl** decls)
+vec_t(Code*) vp_codegen(vec_t(Decl*) decls)
 {
-    Code** codes = NULL;
+    vec_t(Code*) codes = NULL;
     for(uint32_t i = 0; i < vec_len(decls); i++)
     {
         Code* cd;

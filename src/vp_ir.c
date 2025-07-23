@@ -376,6 +376,10 @@ BB* vp_bb_new()
     bb->next = NULL;
     bb->irs = NULL;
     bb->ofs = 0;
+    bb->frombbs = NULL;
+    bb->inregs = NULL;
+    bb->outregs = NULL;
+    bb->assignregs = NULL;
     return bb;
 }
 
@@ -390,6 +394,136 @@ void vp_bb_setcurr(BB* bb)
     }
     V->bb = bb;
     vec_push(V->fncode->bbs, bb);
+}
+
+/* Identify basic blocks reachability */
+void vp_bb_detect(vec_t(BB*) bbs)
+{
+    uint32_t len = vec_len(bbs);
+    if(!len) return;
+
+    /* Clear all frombbs */
+    for(uint32_t i = 0; i < len; i++)
+    {
+        BB* bb = bbs[i];
+        vec_clear(bb->frombbs);
+    }
+
+    Tab checked;
+    vp_tab_init(&checked);
+    vec_t(BB*) unchecked = NULL;
+    vec_push(unchecked, bbs[0]);
+
+    do
+    {
+        BB* bb = vec_pop(unchecked);
+        if(vp_tab_get(&checked, bb->label))
+            continue;
+        vp_tab_set(&checked, bb->label, bb);
+
+        vec_t(IR*) irs = bb->irs;
+        uint32_t lenirs = vec_len(irs);
+        if(lenirs > 0)
+        {
+            IR* ir = irs[lenirs - 1];   /* JMP must be the last IR */
+            if(ir->kind == IR_JMP)
+            {
+                BB* dst = ir->jmp.bb;
+                vec_push(dst->frombbs, bb);
+                vec_push(unchecked, dst);
+                if(ir->jmp.cond == COND_ANY)
+                    continue;   /* Next BB is not reachable */
+            }
+        }
+        BB* next = bb->next;
+        if(next)
+        {
+            vec_push(next->frombbs, bb);
+            vec_push(unchecked, next);
+        }
+    }
+    while(vec_len(unchecked) > 0);
+}
+
+static bool insert_vreg_into_vec(vec_t(VReg*)* vregs, VReg* vr)
+{
+    uint32_t lo = UINT32_MAX;
+    uint32_t hi = vec_len(*vregs);
+    while(hi - lo > 1)
+    {
+        uint32_t m = lo + (hi - lo) / 2;
+        VReg* mid = (*vregs)[m];
+
+        if(mid->virt < vr->virt) lo = m;
+        else if(mid->virt > vr->virt) hi = m;
+        else return false;
+    }
+    vp_assertX(hi <= vec_len(*vregs), "hi out of bounds");
+    vp_assertX(hi == vec_len(*vregs) || ((*vregs)[hi])->virt != vr->virt, "duplicate vreg");
+    vec_insert(*vregs, hi, vr);
+    return true;
+}
+
+static void propagate_out_regs(VReg* vr, vec_t(BB*)* froms)
+{
+    BB* bb;
+    while(vec_len(*froms) > 0)
+    {
+        bb = vec_pop(*froms);
+        insert_vreg_into_vec(&bb->outregs, vr);
+        if(vec_contains(bb->assignregs, vr) ||
+            !insert_vreg_into_vec(&bb->inregs, vr))
+            continue;
+        vec_concat(*froms, bb->frombbs);
+    }
+}
+
+/* Analyze register flow between basic blocks */
+void vp_bb_analyze(vec_t(BB*) bbs)
+{
+    /* Enumerate in and assign registers for each BB */
+    for(uint32_t i = 0; i < vec_len(bbs); i++)
+    {
+        BB* bb = bbs[i];
+        vec_clear(bb->inregs);
+        vec_clear(bb->assignregs);
+        vec_clear(bb->outregs);
+
+        vec_t(IR*) irs = bb->irs;
+        for(uint32_t j = 0; j < vec_len(irs); j++)
+        {
+            IR* ir = irs[j];
+            VReg* vregs[] = { ir->src1, ir->src2 };
+            for(uint32_t k = 0; k < 2; k++)
+            {
+                VReg* vr = vregs[k];
+                if(vr == NULL || vrf_const(vr))
+                    continue;
+                if(!vec_contains(bb->assignregs, vr))
+                {
+                    insert_vreg_into_vec(&bb->inregs, vr);
+                }
+            }
+            if(ir->dst)
+            {
+                insert_vreg_into_vec(&bb->assignregs, ir->dst);
+            }
+        }
+    }
+
+    /* Propagate inregs to outregs to frombbs recursively */
+    vec_t(BB*) dstbbs = NULL;
+    for(uint32_t i = vec_len(bbs); i-- > 0;)
+    {
+        BB* bb = bbs[i];
+        for(uint32_t j = 0; j < vec_len(bb->inregs); j++)
+        {
+            vp_assertX(vec_len(dstbbs) == 0, "bad dstbbs?");
+            vec_concat(dstbbs, bb->frombbs);
+            VReg* vr = bb->inregs[j];
+            propagate_out_regs(vr, &dstbbs);
+        }
+    }
 }
 
 static uint32_t labelno;

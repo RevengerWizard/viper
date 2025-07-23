@@ -192,9 +192,13 @@ typedef struct IR
 typedef struct BB
 {
     struct BB* next;
+    vec_t(struct BB*) frombbs;
     Str* label;
     vec_t(IR*) irs;
     int32_t ofs;
+    vec_t(VReg*) inregs;    /* Input vregs */
+    vec_t(VReg*) outregs;   /* Output vregs */
+    vec_t(VReg*) assignregs;    /* Assigned vregs */
 } BB;
 
 typedef struct PatchInfo
@@ -238,6 +242,8 @@ CondKind vp_cond_invert(CondKind cond);
 /* Basic blocks */
 BB* vp_bb_new();
 void vp_bb_setcurr(BB* bb);
+void vp_bb_detect(vec_t(BB*) bbs);
+void vp_bb_analyze(vec_t(BB*) bbs);
 
 Str* vp_label_new();
 

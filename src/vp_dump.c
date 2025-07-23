@@ -105,6 +105,17 @@ static void dump_vreg(VReg* vr)
     }
 }
 
+static void dump_vregs(const char* title, vec_t(VReg*) vregs)
+{
+    printf("%s=[", title);
+    for(uint32_t i = 0; i < vec_len(vregs); i++)
+    {
+        VReg* vr = vregs[i];
+        printf("%s%d", i == 0 ? "" : ", ", vr->virt);
+    }
+    printf("]");
+}
+
 static const char* const kcond[] = {
     NULL, "MP", "EQ", "NEQ", "LT", "LE", "GT", "GE",
     NULL, "MP", "EQ", "NEQ", "LT", "LE", "GT", "GE"};
@@ -206,7 +217,6 @@ static void dump_ir(IR* ir)
                 printf("goto %.*s", 
                     ir->jmp.bb->label->len, str_data(ir->jmp.bb->label));
             }
-            printf("\n");
             break;
         }
         case IR_PUSHARG:
@@ -281,12 +291,12 @@ static void dump_ir(IR* ir)
             vp_assertX(0, "unknown ir %d", ir->kind);
             break;
     }
-    putchar('\n');
 }
 
 void vp_dump_bb(Code* cd)
 {
     printf("\nparams and locals:\n");
+    vec_t(VarInfo*) stackvars = NULL;
     for(uint32_t i = 0; i < vec_len(cd->scopes); i++)
     {
         Scope* scope = cd->scopes[i];
@@ -297,13 +307,23 @@ void vp_dump_bb(Code* cd)
             VarInfo* vi = scope->vars[j];
             VReg* vr = vi->vreg;
             if(vr == NULL)
+            {
+                vec_push(stackvars, vi);
                 continue;
+            }
             printf("v%d (flag=", vr->virt);
             dump_vreg_flags(vr->flag);
             printf(") %.*s : ", vi->name->len, str_data(vi->name));
             vp_dump_type(vi->type);
             printf("\n");
         }
+    }
+    for(uint32_t i = 0; i < vec_len(stackvars); i++)
+    {
+        VarInfo* vi = stackvars[i];
+        printf("stack (offset=%d, size=%d) %.*s : ", vi->fi->ofs, vp_type_sizeof(vi->type), vi->name->len, str_data(vi->name));
+        vp_dump_type(vi->type);
+        printf("\n");
     }
 
     RegAlloc* ra = cd->ra;
@@ -350,12 +370,36 @@ void vp_dump_bb(Code* cd)
     for(uint32_t i = 0; i < vec_len(bbs); i++)
     {
         BB* bb = bbs[i];
-        printf("%.*s:\n", bb->label->len, str_data(bb->label));
+        printf("%.*s:", bb->label->len, str_data(bb->label));
+        if(vec_len(bb->frombbs) > 0)
+        {
+            printf(" from=[");
+            for(uint32_t j = 0; j < vec_len(bb->frombbs); j++)
+            {
+                BB* fbb = bb->frombbs[j];
+                printf("%s%.*s", (j > 0 ? ", " : ""), fbb->label->len, str_data(fbb->label));
+            }
+            printf(" ]");
+        }
+        if(vec_len(bb->inregs) > 0)
+        {
+            dump_vregs(" in", bb->inregs);
+        }
+        if(vec_len(bb->outregs) > 0)
+        {
+            dump_vregs(" out", bb->outregs);
+        }
+        printf("\n");
         for(uint32_t j = 0; j < vec_len(bb->irs); j++, nip++)
         {
             printf("%6d|\t", nip);
             IR* ir = bb->irs[j];
             dump_ir(ir);
+            printf("\n");
+        }
+        if(i != vec_len(bbs) - 1)
+        {
+            printf("\n");
         }
     }
 }

@@ -61,3 +61,38 @@ void vp_vec_remove_at(const void* vec, size_t idx, size_t elemsize)
     }
     hdr->len--;
 }
+
+bool vp_vec_contains(const void* vec, const void* elem, size_t elemsize)
+{
+    if(!vec) return false;
+    
+    size_t len = vec_len(vec);
+    const char* data = (const char*)vec;
+    
+    for(size_t i = 0; i < len; i++)
+    {
+        if(memcmp(data + i * elemsize, elem, elemsize) == 0)
+            return true;
+    }
+    return false;
+}
+
+void vp_vec_concat(void** dst_ptr, const void* src, size_t elemsize)
+{
+    if(!src) return;
+    
+    void* dst = *dst_ptr;
+    size_t srclen = vec_len(src);
+    size_t dstlen = vec_len(dst);
+    size_t newlen = dstlen + srclen;
+    
+    /* Ensure dst has enough capacity */
+    if(newlen > vec_size(dst))
+    {
+        dst = vp_vec_grow(dst, newlen, elemsize);
+        *dst_ptr = dst;
+    }
+    
+    memcpy((char*)dst + dstlen * elemsize, src, srclen * elemsize);
+    vec_hdr(dst)->len = newlen;
+}
