@@ -1095,7 +1095,7 @@ static uint32_t tmp_fmov(VReg** vp, vec_t(IR*)* irs, uint32_t pos)
 static void tmp_mov(VReg** vp, vec_t(IR*)* irs, uint32_t pos, uint8_t flag)
 {
     VReg* v = *vp;
-    VReg* tmp = vp_ra_spawn(v->vsize, v->flag);
+    VReg* tmp = vp_ra_spawn(v->vsize, v->flag & VRF_MASK);
     IR* mov = vp_ir_mov(tmp, v, flag);
     vec_insert(*irs, pos, mov);
     *vp = tmp;
@@ -1112,6 +1112,7 @@ static void sel_conv3to2(vec_t(BB*) bbs)
             IR* ir = bb->irs[j];
             switch(ir->kind)
             {
+                case IR_NEG:
                 case IR_ADD:
                 case IR_SUB:
                 case IR_MUL:
@@ -1191,6 +1192,7 @@ void vp_sel_tweak(Code* c)
                 {
                     tmp_mov(&ir->src1, &bb->irs, j++, ir->flag);
                 }
+                break;
             default: break;
             }
         }
