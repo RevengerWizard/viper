@@ -470,6 +470,32 @@ static void emit_movsx_r64r32(VpState* V, X64Reg dst, X64Reg src)
     emit_u8(V, MODRM(3, dst & 7, src & 7));
 }
 
+/* MOVQ xmm, reg64 */
+static void emit_movq_xr(VpState* V, X64Reg dst, X64Reg src)
+{
+    emit_u8(V, 0x66);
+    uint8_t rex = REX_W;
+    if(regext(dst)) rex |= REX_R;
+    if(regext(src)) rex |= REX_B;
+    emit_u8(V, rex);
+    emit_u8(V, 0x0F);
+    emit_u8(V, 0x6E); /* MOVQ opcode */
+    emit_u8(V, MODRM(3, dst & 7, src & 7));
+}
+
+/* MOVD xmm, reg32 */
+static void emit_movd_xr(VpState* V, X64Reg dst_xmm, X64Reg src_gpr32)
+{
+    emit_u8(V, 0x66);
+    uint8_t rex = 0;
+    if(regext(dst_xmm)) rex |= REX_R;
+    if(regext(src_gpr32)) rex |= REX_B;
+    if(rex) emit_u8(V, rex);
+    emit_u8(V, 0x0F);
+    emit_u8(V, 0x6E);
+    emit_u8(V, MODRM(3, dst_xmm & 7, src_gpr32 & 7));
+}
+
 /* -- LEA instructions ---------------------------------------------- */
 
 /* LEA reg64, [base + idx * scale + disp32] */
@@ -1802,7 +1828,7 @@ static VP_AINLINE void emit_sse_rr(VpState* V, uint8_t prefix, uint8_t op, X64Re
     if(rex) emit_u8(V, rex);
     emit_u8(V, 0x0F);
     emit_u8(V, op);
-    emit_u8(V, MODRM(3, src & 7, dst & 7));
+    emit_u8(V, MODRM(3, dst & 7, src & 7));
 }
 
 /* MOVSD xmm, xmm */

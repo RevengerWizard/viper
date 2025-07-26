@@ -445,7 +445,8 @@ void vp_bb_detect(vec_t(BB*) bbs)
     while(vec_len(unchecked) > 0);
 }
 
-static bool insert_vreg_into_vec(vec_t(VReg*)* vregs, VReg* vr)
+/* Insert vreg in a BB's input/output/assign */
+static bool bb_insert_vreg(vec_t(VReg*)* vregs, VReg* vr)
 {
     uint32_t lo = UINT32_MAX;
     uint32_t hi = vec_len(*vregs);
@@ -464,15 +465,16 @@ static bool insert_vreg_into_vec(vec_t(VReg*)* vregs, VReg* vr)
     return true;
 }
 
-static void propagate_out_regs(VReg* vr, vec_t(BB*)* froms)
+/* Propagate a vreg backwards through basic blocks (liveness analysis) */
+static void bb_propagate(VReg* vr, vec_t(BB*)* froms)
 {
     BB* bb;
     while(vec_len(*froms) > 0)
     {
         bb = vec_pop(*froms);
-        insert_vreg_into_vec(&bb->outregs, vr);
+        bb_insert_vreg(&bb->outregs, vr);
         if(vec_contains(bb->assignregs, vr) ||
-            !insert_vreg_into_vec(&bb->inregs, vr))
+            !bb_insert_vreg(&bb->inregs, vr))
             continue;
         vec_concat(*froms, bb->frombbs);
     }
@@ -501,12 +503,12 @@ void vp_bb_analyze(vec_t(BB*) bbs)
                     continue;
                 if(!vec_contains(bb->assignregs, vr))
                 {
-                    insert_vreg_into_vec(&bb->inregs, vr);
+                    bb_insert_vreg(&bb->inregs, vr);
                 }
             }
             if(ir->dst)
             {
-                insert_vreg_into_vec(&bb->assignregs, ir->dst);
+                bb_insert_vreg(&bb->assignregs, ir->dst);
             }
         }
     }
@@ -521,7 +523,7 @@ void vp_bb_analyze(vec_t(BB*) bbs)
             vp_assertX(vec_len(dstbbs) == 0, "bad dstbbs?");
             vec_concat(dstbbs, bb->frombbs);
             VReg* vr = bb->inregs[j];
-            propagate_out_regs(vr, &dstbbs);
+            bb_propagate(vr, &dstbbs);
         }
     }
 }

@@ -197,3 +197,11 @@ rax, rcx, rdx, rsi, rdi, r8, r9, r10, r11
 
 - callee-saved
 rbx, rbp, r12, r13, r14, r15
+
+# win32 API
+
+```c
+HANDLE h = GetStdHandle(STD_OUTPUT_HANDLE);
+DWORD written;
+WriteConsoleA(h, "Hello\n", 6, &written, NULL);
+```

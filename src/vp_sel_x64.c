@@ -319,34 +319,45 @@ static void emit_cmp_rr(VRSize p, uint32_t r1, uint32_t r2)
     }
 }
 
-static void emit_mov(uint32_t dst, VReg* src1)
+static void emit_mov(VReg* dst, VReg* src)
 {
-    uint32_t src = src1->phys;
-    if(vrf_flo(src1))
+    if(vrf_flo(dst))
     {
-        vp_assertX(!vrf_const(src1), "const src1");
-        if(src1->phys != dst)
+        vp_assertX(!vrf_const(src), "const src1");
+        if(!vrf_flo(src))
         {
-            switch(src1->vsize)
+            switch(src->vsize)
             {
-            case VRSize4: emit_movss_rr(V, dst, src); break;
-            case VRSize8: emit_movsd_rr(V, dst, src); break;
+            case VRSize4: emit_movq_xr(V, dst->phys, src->phys); break;
+            case VRSize8: emit_movd_xr(V, dst->phys, src->phys); break;
             default: vp_assertX(0, "?"); break;
+            }
+        }
+        else
+        {
+            if(src->phys != dst->phys)
+            {
+                switch(src->vsize)
+                {
+                case VRSize4: emit_movss_rr(V, dst->phys, src->phys); break;
+                case VRSize8: emit_movsd_rr(V, dst->phys, src->phys); break;
+                default: vp_assertX(0, "?"); break;
+                }
             }
         }
     }
     else
     {
-        VRSize pow = src1->vsize;
-        if(vrf_const(src1))
+        VRSize pow = src->vsize;
+        if(vrf_const(src))
         {
-            emit_mov_ri(pow, dst, src1->i64);
+            emit_mov_ri(pow, dst->phys, src->i64);
         }
         else
         {
             if(src != dst)
             {
-                emit_mov_rr(pow, dst, src);
+                emit_mov_rr(pow, dst->phys, src->phys);
             }
         }
     }
@@ -372,7 +383,7 @@ static void sel_sofs(IR* ir)
 
 static void sel_mov(IR* ir)
 {
-    emit_mov(ir->dst->phys, ir->src1);
+    emit_mov(ir->dst, ir->src1);
 }
 
 static void sel_store(IR* ir)
@@ -475,8 +486,7 @@ static void sel_load(IR* ir)
 
 static void sel_ret(IR* ir)
 {
-    uint32_t dst = vrf_flo(ir->src1) ? XMM0 : RAX;
-    emit_mov(dst, ir->src1);
+    emit_mov(ir->src1, ir->src1);
 }
 
 static void sel_pusharg(IR* ir)
@@ -1052,17 +1062,47 @@ static void sel_ir(IR* ir)
     return (*seltab[ir->kind])(ir);
 }
 
-static void tmp_mov(VReg** vp, IR*** irs, uint32_t pos, uint8_t flag)
+static uint32_t tmp_fmov(VReg** vp, vec_t(IR*)* irs, uint32_t pos)
 {
     VReg* v = *vp;
-    VReg* tmp = vp_ra_spawn(v->vsize, v->flag & VRF_MASK);
+    vp_assertX(vrf_const(v) && (v->flag & VRF_FLO), "not const float");
+
+    uint64_t bits = 0;
+    if(v->vsize == VRSize4)
+    {
+        float f = (float)v->n;
+        memcpy(&bits, &f, sizeof(float));
+    }
+    else
+    {
+        double d = v->n;
+        memcpy(&bits, &d, sizeof(double));
+    }
+    v = vp_vreg_ki(bits, v->vsize);
+    VReg* tmp1 = vp_ra_spawn(v->vsize, 0);
+    IR* mov1 = vp_ir_mov(tmp1, v, 0);
+    vec_insert(*irs, pos, mov1); pos++;
+
+    VReg* tmp2 = vp_ra_spawn(v->vsize, VRF_FLO);
+    IR* mov2 = vp_ir_mov(tmp2, tmp1, 0);
+    vec_insert(*irs, pos, mov2); pos++;
+
+    *vp = tmp2;
+
+    return pos;
+}
+
+static void tmp_mov(VReg** vp, vec_t(IR*)* irs, uint32_t pos, uint8_t flag)
+{
+    VReg* v = *vp;
+    VReg* tmp = vp_ra_spawn(v->vsize, v->flag);
     IR* mov = vp_ir_mov(tmp, v, flag);
     vec_insert(*irs, pos, mov);
     *vp = tmp;
 }
 
 /* Convert `A = B op C` to `A = B; A = A op C` */
-static void sel_conv3to2(BB** bbs)
+static void sel_conv3to2(vec_t(BB*) bbs)
 {
     for(uint32_t i = 0; i < vec_len(bbs); i++)
     {
@@ -1100,7 +1140,7 @@ static void sel_conv3to2(BB** bbs)
 /* Tweak the IR for x64 */
 void vp_sel_tweak(Code* c)
 {
-    BB** bbs = c->bbs;
+    vec_t(BB*) bbs = c->bbs;
     sel_conv3to2(bbs);
     for(uint32_t i = 0; i < vec_len(bbs); i++)
     {
@@ -1108,6 +1148,19 @@ void vp_sel_tweak(Code* c)
         for(uint32_t j = 0; j < vec_len(bb->irs); j++)
         {
             IR* ir = bb->irs[j];
+            /* Constant floats */
+            {
+                VReg** vregs[] = {&ir->src1, &ir->src2};
+                for(uint32_t k = 0; k < 2; k++)
+                {
+                    VReg** vp = vregs[k], *vr = *vp;
+                    if(vr && vrf_const(vr) && ((vr->flag & (VRF_FLO | VRF_CONST)) == (VRF_FLO | VRF_CONST)))
+                    {
+                        j = tmp_fmov(vp, &bb->irs, j);
+                    }
+                }
+            }
+
             /* Only MOV can embed a 64 bit immediate */
             if(ir->kind != IR_MOV)
             {
