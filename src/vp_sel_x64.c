@@ -242,6 +242,28 @@ static void emit_shr_rcl(VRSize p, uint32_t r)
     }
 }
 
+static void emit_sar_ri(VRSize p, uint32_t r, uint8_t i)
+{
+    switch(p)
+    {
+    case VRSize1: emit_sar_r8i8(V, r, i); break;
+    case VRSize2: emit_sar_r16i8(V, r, i); break;
+    case VRSize4: emit_sar_r32i8(V, r, i); break;
+    case VRSize8: emit_sar_r64i8(V, r, i); break;
+    }
+}
+
+static void emit_sar_rcl(VRSize p, uint32_t r)
+{
+    switch(p)
+    {
+    case VRSize1: emit_sar_r8cl(V, r); break;
+    case VRSize2: emit_sar_r16cl(V, r); break;
+    case VRSize4: emit_sar_r32cl(V, r); break;
+    case VRSize8: emit_sar_r64cl(V, r); break;
+    }
+}
+
 static void emit_inc_r(VRSize p, uint32_t r)
 {
     switch(p)
@@ -998,14 +1020,28 @@ static void sel_rshift(IR* ir)
     VRSize p = ir->dst->vsize;
     if(vrf_const(ir->src2))
     {
-        emit_shr_ri(p, ir->dst->phys, ir->src2->i64 & 255);
+        if(ir->flag & IRF_UNSIGNED)
+        {
+            emit_shr_ri(p, ir->dst->phys, ir->src2->i64 & 255);
+        }
+        else
+        {
+            emit_sar_ri(p, ir->dst->phys, ir->src2->i64 & 255);
+        }
     }
     else
     {
         vp_assertX(ir->src2->phys != RCX, "src2 == RCX");
         vp_assertX(ir->dst->phys != RCX, "dst == RCX");
         emit_mov8_rr(V, RCX, ir->src2->phys);
-        emit_shr_rcl(p, ir->dst->phys);
+        if(ir->flag & IRF_UNSIGNED)
+        {
+            emit_shr_rcl(p, ir->dst->phys);
+        }
+        else
+        {
+            emit_sar_rcl(p, ir->dst->phys);
+        }
     }
 }
 

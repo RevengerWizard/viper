@@ -25,6 +25,7 @@ typedef struct FrameInfo
     _(STACK_PARAM, 4)   /* Stack parameter (spilled) */ \
     _(SPILL, 5)         /* Spilled register */ \
     _(NO_SPILL, 6)      /* Stop spilling */ \
+    _(UNUSED, 7)        /* Discarded registers */ \
 
 #define VRF_MASK (VRF_FLO)
 
@@ -112,8 +113,8 @@ typedef enum CondKind
     COND_NEQ,
     COND_LT,
     COND_LE,
-    COND_GT,
     COND_GE,
+    COND_GT,
 
     /* Condition masks */
     COND_MASK = 0x07,

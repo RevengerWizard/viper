@@ -104,8 +104,10 @@ void vp_tab_set(Tab* tab, Str* key, void* val)
     }
 
     TabEntry* entry = tab_findkey(tab->entries, tab->size, key);
-    if(entry->key == NULL)
+    if(entry->key == NULL && entry->val == NULL)
+    {
         tab->count++;
+    }
 
     entry->key = key;
     entry->val = val;

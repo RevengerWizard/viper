@@ -4,7 +4,6 @@
 */
 
 #include <string.h>
-#include <stdlib.h>
 
 #include "vp_str.h"
 #include "vp_mem.h"

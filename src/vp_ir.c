@@ -130,8 +130,7 @@ IR* vp_ir_jmp(BB* bb)
 /* Conditional jump */
 void vp_ir_cjmp(VReg* src1, VReg* src2, CondKind cond, BB* bb)
 {
-    if((cond & COND_MASK) == COND_NONE)
-        return;
+    vp_assertX((cond & COND_MASK) != COND_NONE, "no condition?");
     IR* ir = ir_new(IR_JMP);
     ir->src1 = src1;
     ir->src2 = src2;
@@ -362,7 +361,7 @@ CondKind vp_cond_swap(CondKind cond)
 CondKind vp_cond_invert(CondKind cond)
 {
     uint8_t c = cond & COND_MASK;
-    vp_assertX(COND_EQ <= c && c <= COND_GT, "not a condition");
+    vp_assertX(COND_EQ <= c && c <= COND_GT, "%d not a condition", c);
     uint8_t ic = c <= COND_NEQ ? (COND_NEQ + COND_EQ) - c
             : (vp_assertX((COND_LT & 3) == 0, "COND_LT must be aligned to 4 (LSBs 00)"), c ^ 2);
     return ic | (cond & ~COND_MASK);

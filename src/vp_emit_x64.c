@@ -171,8 +171,19 @@ static void emit_mov64_ri(VpState* V, X64Reg reg, int64_t imm)
     uint8_t rex = REX_W;
     if(regext(reg)) rex |= REX_B;
     emit_u8(V, rex);
-    emit_u8(V, 0xB8 + (reg & 7));
-    emit_im64(V, imm);
+    if(vp_isimm32(imm))
+    {
+        /* imm32 */
+        emit_u8(V, 0xC7);
+        emit_u8(V, MODRM(3, 0, reg & 7));
+        emit_im32(V, (int32_t)imm);
+    }
+    else
+    {
+        /* imm64 */
+        emit_u8(V, 0xB8 + (reg & 7));
+        emit_im64(V, imm);
+    }
 }
 
 /* MOV reg32, imm32 */
@@ -1658,6 +1669,114 @@ static void emit_shr_r8cl(VpState* V, X64Reg reg)
     if(regext(reg) || (reg >= RSP && reg <= RDI)) emit_u8(V, REX_B);
     emit_u8(V, 0xD2);
     emit_u8(V, MODRM(3, 5, reg & 7));
+}
+
+/* -- SAR instructions ---------------------------------------------- */
+
+/* SAR reg64, imm8 */
+static void emit_sar_r64i8(VpState* V, X64Reg reg, uint8_t imm)
+{
+    uint8_t rex = REX_W;
+    if(regext(reg)) rex |= REX_B;
+    emit_u8(V, rex);
+    if(imm == 1)
+    {
+        emit_u8(V, 0xD1);
+        emit_u8(V, MODRM(3, 7, reg & 7));
+    }
+    else
+    {
+        emit_u8(V, 0xC1);
+        emit_u8(V, MODRM(3, 7, reg & 7));
+        emit_u8(V, (uint8_t)imm);
+    }
+}
+
+/* SAR reg32, imm8 */
+static void emit_sar_r32i8(VpState* V, X64Reg reg, uint8_t imm)
+{
+    if(regext(reg)) emit_u8(V, REX_B);
+    if(imm == 1)
+    {
+        emit_u8(V, 0xD1);
+        emit_u8(V, MODRM(3, 7, reg & 7));
+    }
+    else
+    {
+        emit_u8(V, 0xC1);
+        emit_u8(V, MODRM(3, 7, reg & 7));
+        emit_u8(V, imm);
+    }
+}
+
+/* SAR reg16, imm8 */
+static void emit_sar_r16i8(VpState* V, X64Reg reg, uint8_t imm)
+{
+    emit_u8(V, 0x66);
+    if(regext(reg)) emit_u8(V, REX_B);
+    if(imm == 1)
+    {
+        emit_u8(V, 0xD1);
+        emit_u8(V, MODRM(3, 7, reg & 7));
+    }
+    else
+    {
+        emit_u8(V, 0xC1);
+        emit_u8(V, MODRM(3, 7, reg & 7));
+        emit_u8(V, imm);
+    }
+}
+
+/* SAR reg8, imm8 */
+static void emit_sar_r8i8(VpState* V, X64Reg reg, uint8_t imm)
+{
+    if(regext(reg) || (reg >= RSP && reg <= RDI)) emit_u8(V, REX_B);
+    if(imm == 1)
+    {
+        emit_u8(V, 0xD0);
+        emit_u8(V, MODRM(3, 7, reg & 7));
+    }
+    else
+    {
+        emit_u8(V, 0xC0);
+        emit_u8(V, MODRM(3, 7, reg & 7));
+        emit_u8(V, imm);
+    }
+}
+
+/* SAR reg64, CL */
+static void emit_sar_r64cl(VpState* V, X64Reg reg)
+{
+    uint8_t rex = REX_W;
+    if(regext(reg)) rex |= REX_B;
+    emit_u8(V, rex);
+    emit_u8(V, 0xD3);
+    emit_u8(V, MODRM(3, 7, reg & 7));
+}
+
+/* SAR reg32, CL */
+static void emit_sar_r32cl(VpState* V, X64Reg reg)
+{
+    if(regext(reg)) emit_u8(V, REX_B);
+    emit_u8(V, 0xD3);
+    emit_u8(V, MODRM(3, 7, reg & 7));
+}
+
+/* SAR reg16, CL */
+static void emit_sar_r16cl(VpState* V, X64Reg reg)
+{
+    emit_u8(V, 0x66);
+    if(regext(reg)) emit_u8(V, REX_B);
+    emit_u8(V, 0xD3);
+    emit_u8(V, MODRM(3, 7, reg & 7));
+}
+
+/* SAR reg8, CL */
+static void emit_sar_r8cl(VpState* V, X64Reg reg)
+{
+    if(regext(reg) || (reg >= RSP && reg <= RDI)) emit_u8(V, REX_B);
+    emit_u8(V, 0xD2);
+    emit_u8(V, MODRM(3, 7, reg & 7));
 }
 
 /* -- TEST instructions --------------------------------------------- */
