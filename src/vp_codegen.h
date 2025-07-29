@@ -29,6 +29,7 @@ typedef struct Code
     uint32_t numparams;
     int32_t ofs;    /* Code begin offset */
     uint32_t framesize; /* Stack frame size */
+    BB* retbb;
 } Code;
 
 vec_t(Code*) vp_codegen(vec_t(Decl*) decls);

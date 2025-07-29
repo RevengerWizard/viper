@@ -10,7 +10,7 @@ vp_buf.o: vp_buf.c vp_buf.h vp_def.h vp_mem.h vp_vec.h
 vp_char.o: vp_char.c vp_char.h vp_def.h
 vp_codegen.o: vp_codegen.c vp_codegen.h vp_ast.h vp_lex.h vp_buf.h \
   vp_def.h vp_state.h vp_ir.h vp_str.h vp_type.h vp_vec.h vp_mem.h \
-  vp_regalloc.h vp_tab.h vp_map.h vp_var.h vp_sel.h vp_target.h \
+  vp_regalloc.h vp_tab.h vp_map.h vp_var.h vp_opt.h vp_sel.h vp_target.h \
   vp_dump.h
 vp_dump.o: vp_dump.c vp_dump.h vp_codegen.h vp_ast.h vp_lex.h vp_buf.h \
   vp_def.h vp_state.h vp_ir.h vp_str.h vp_type.h vp_vec.h vp_mem.h \
@@ -30,6 +30,9 @@ vp_load.o: vp_load.c vp_lex.h vp_buf.h vp_def.h vp_state.h vp_ir.h \
   vp_parse.h vp_ast.h vp_var.h vp_sema.h vp_codegen.h vp_sel.h
 vp_map.o: vp_map.c vp_map.h vp_def.h vp_mem.h vp_vec.h
 vp_mem.o: vp_mem.c vp_mem.h vp_vec.h vp_def.h
+vp_opt.o: vp_opt.c vp_opt.h vp_codegen.h vp_ast.h vp_lex.h vp_buf.h \
+  vp_def.h vp_state.h vp_ir.h vp_str.h vp_type.h vp_vec.h vp_mem.h \
+  vp_regalloc.h vp_tab.h vp_map.h vp_var.h
 vp_parse.o: vp_parse.c vp_parse.h vp_ast.h vp_lex.h vp_buf.h vp_def.h \
   vp_state.h vp_ir.h vp_str.h vp_type.h vp_vec.h vp_mem.h vp_regalloc.h \
   vp_tab.h vp_map.h vp_var.h vp_err.h

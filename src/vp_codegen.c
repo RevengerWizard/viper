@@ -5,6 +5,7 @@
 
 #include "vp_codegen.h"
 #include "vp_mem.h"
+#include "vp_opt.h"
 #include "vp_regalloc.h"
 #include "vp_ast.h"
 #include "vp_ir.h"
@@ -288,6 +289,7 @@ static VReg* gen_ref(Expr* e)
             {
                 if(!vrf_spill(vi->vreg))
                 {
+                    vi->vreg->flag |= VRF_REF;
                     vreg_spill(vi->vreg);
                 }
                 vi->fi = &vi->vreg->fi;
@@ -812,11 +814,14 @@ static void gen_var(Decl* d)
 static void gen_ret(Stmt* st)
 {
     vp_assertX(st->kind == ST_RETURN, "not return statement");
+    BB* bb = vp_bb_new();
     if(st->expr)
     {
         VReg* vreg = gen_expr(st->expr);
         vp_ir_ret(vreg, ir_flag(st->expr->ty));
     }
+    vp_ir_jmp(V->fncode->retbb);
+    vp_bb_setcurr(bb);
 }
 
 /* Generate block of statements */
@@ -965,11 +970,15 @@ static Code* gen_fn(Decl* d)
         gen_params(d);
     }
 
+    V->fncode->retbb = vp_bb_new();
+
     gen_block(d->fn.body->block);
 
-    vp_bb_detect(code->bbs);
-
+    vp_bb_setcurr(V->fncode->retbb);
     V->bb = NULL;
+
+    vp_bb_detect(code->bbs);
+    vp_opt(code);
 
     vp_sel_tweak(code);
     vp_bb_analyze(code->bbs);

@@ -377,7 +377,7 @@ static void emit_mov(VReg* dst, VReg* src)
         }
         else
         {
-            if(src != dst)
+            if(dst->phys != src->phys)
             {
                 emit_mov_rr(pow, dst->phys, src->phys);
             }
@@ -508,7 +508,8 @@ static void sel_load(IR* ir)
 
 static void sel_ret(IR* ir)
 {
-    emit_mov(ir->src1, ir->src1);
+    VReg dst = {.phys = vrf_flo(ir->src1) ? XMM0 : RAX};
+    emit_mov(&dst, ir->src1);
 }
 
 static void sel_pusharg(IR* ir)
