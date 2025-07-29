@@ -49,8 +49,8 @@ intel syntax!
 ```
 asm
 {
-    mov eax, $a;
-    imul eax, $b;
+    mov eax, a;
+    imul eax, b;
 }
 ```
 
