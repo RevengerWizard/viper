@@ -811,31 +811,31 @@ static void dump_ast_note(Note* note)
     }
 }
 
-static void dump_ast_stmt(Stmt* stm)
+static void dump_ast_stmt(Stmt* st)
 {
-    switch(stm->kind)
+    switch(st->kind)
     {
         case ST_IF:
             dump_indent();
             printf("if ");
-            dump_ast_expr(stm->ifst.cond);
+            dump_ast_expr(st->ifst.cond);
             printf("\n");
             dump_indent();
             printf("{\n");
             indent++;
-            dump_ast_stmt(stm->ifst.tblock);
+            dump_ast_stmt(st->ifst.tblock);
             indent--;
             dump_indent();
             printf("}\n");
             /* Else block, if any */
-            if(stm->ifst.fblock)
+            if(st->ifst.fblock)
             {
                 dump_indent();
                 printf("else\n");
                 dump_indent();
                 printf("{\n");
                 indent++;
-                dump_ast_stmt(stm->ifst.fblock);
+                dump_ast_stmt(st->ifst.fblock);
                 indent--;
                 dump_indent();
                 printf("}\n");
@@ -844,38 +844,48 @@ static void dump_ast_stmt(Stmt* stm)
         case ST_RETURN:
             dump_indent();
             printf("return ");
-            dump_ast_expr(stm->expr);
+            dump_ast_expr(st->expr);
             printf("\n");
             break;
         case ST_ASSIGN:
+        case ST_ADD_ASSIGN:
+        case ST_SUB_ASSIGN:
+        case ST_MUL_ASSIGN:
+        case ST_DIV_ASSIGN:
+        case ST_MOD_ASSIGN:
+        case ST_BAND_ASSIGN:
+        case ST_BOR_ASSIGN:
+        case ST_BXOR_ASSIGN:
+        case ST_LSHIFT_ASSIGN:
+        case ST_RSHIFT_ASSIGN:
             dump_indent();
-            dump_ast_type(stm->lhs->ty);
-            dump_ast_expr(stm->lhs);
-            printf(" = ");
-            dump_ast_type(stm->rhs->ty);
-            dump_ast_expr(stm->rhs);
+            dump_ast_type(st->lhs->ty);
+            dump_ast_expr(st->lhs);
+            printf(" %s ", ast_assignname(st->kind));
+            dump_ast_type(st->rhs->ty);
+            dump_ast_expr(st->rhs);
             printf("\n");
             break;
         case ST_EXPR:
         {
             dump_indent();
-            dump_ast_type(stm->expr->ty);
-            dump_ast_expr(stm->expr);
+            dump_ast_type(st->expr->ty);
+            dump_ast_expr(st->expr);
             printf("\n");
             break;
         }
         case ST_BLOCK:
         {
-            for(uint32_t i = 0; i < vec_len(stm->block); i++)
+            for(uint32_t i = 0; i < vec_len(st->block); i++)
             {
-                Stmt* st = stm->block[i];
-                dump_ast_stmt(st);
+                Stmt* stmt = st->block[i];
+                dump_ast_stmt(stmt);
             }
             break;
         }
         case ST_DECL:
         {
-            vp_dump_ast(stm->decl);
+            vp_dump_ast(st->decl);
             break;
         }
         default:

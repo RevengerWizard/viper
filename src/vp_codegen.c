@@ -753,21 +753,43 @@ static void gen_expr_stmt(Expr* e)
     gen_expr(e);
 }
 
+static void gen_compound_assign(ExprKind op, Expr* lhs, Expr* rhs)
+{
+    if(lhs->kind == EX_NAME && ty_isscalar(lhs->ty))
+    {
+        Scope* scope;
+        VarInfo* vi = vp_scope_find(lhs->scope, lhs->name, &scope);
+        if(vp_var_isloc(vi))
+        {
+            vp_assertX(vi->vreg, "empty vreg");
+            VReg* vlhs = vi->vreg;
+            VReg* vrhs = gen_expr(rhs);
+            VReg* res = vp_ir_binop(op + (IR_ADD - EX_ADD), vlhs, vrhs, vp_vsize(lhs->ty), ir_flag(lhs->ty));
+            vp_ir_mov(vlhs, res, ir_flag(lhs->ty));
+            return;
+        }
+    }
+
+    /* (ptr = &lhs, *ptr = *ptr + rhs) */
+    VReg* pvlhs = gen_lval(lhs);
+    VReg* lvlhs = vp_ir_load(pvlhs, vp_vsize(lhs->ty), vp_vflag(lhs->ty), ir_flag(lhs->ty))->dst;
+    VReg* vrhs = gen_expr(rhs);
+    VReg* res = vp_ir_binop(op + (IR_ADD - EX_ADD), lvlhs, vrhs, vp_vsize(lhs->ty), ir_flag(lhs->ty));
+    gen_store(pvlhs, res, lhs->ty);
+}
+
 /* Generate assignment */
 static void gen_assign(Expr* lhs, Expr* rhs)
 {
     VReg* src = gen_expr(rhs);
-    if(lhs->kind == EX_NAME)
+    if(lhs->kind == EX_NAME && ty_isscalar(lhs->ty))
     {
         VarInfo* vi = vp_scope_find(lhs->scope, lhs->name, NULL);
-        if(ty_isscalar(lhs->ty) && !vp_scope_isglob(lhs->scope))
+        if(vp_var_isloc(vi))
         {
-            if(vp_var_isloc(vi))
-            {
-                vp_assertX(vi->vreg, "empty vreg");
-                vp_ir_mov(vi->vreg, src, ir_flag(rhs->ty));
-                return;
-            }
+            vp_assertX(vi->vreg, "empty vreg");
+            vp_ir_mov(vi->vreg, src, ir_flag(rhs->ty));
+            return;
         }
     }
 
@@ -867,6 +889,18 @@ static void gen_stmt(Stmt* st)
         case ST_BLOCK: gen_block(st->block); break;
         case ST_DECL: gen_var(st->decl); break;
         case ST_ASSIGN: gen_assign(st->lhs, st->rhs); break;
+        case ST_ADD_ASSIGN:
+        case ST_SUB_ASSIGN:
+        case ST_MUL_ASSIGN:
+        case ST_DIV_ASSIGN:
+        case ST_MOD_ASSIGN:
+        case ST_BAND_ASSIGN:
+        case ST_BOR_ASSIGN:
+        case ST_BXOR_ASSIGN:
+        case ST_LSHIFT_ASSIGN:
+        case ST_RSHIFT_ASSIGN:
+            gen_compound_assign(st->kind - ST_ADD_ASSIGN + EX_ADD, st->lhs, st->rhs);
+            break;
         case ST_EXPR: gen_expr_stmt(st->expr); break;
         case ST_IF: gen_if_stmt(st); break;
         case ST_RETURN: gen_ret(st); break;

@@ -15,6 +15,10 @@ const char* const vp_ast_binop[] = {
     "+", "-", "*", "/", "%", "&", "|", "^", "<<", ">>", "==", "!=", "<", "<=", ">", ">=", "and", "or"
 };
 
+const char* const vp_ast_assign[] = {
+    "=", "+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=", "<<=", ">>="
+};
+
 const char* const vp_ast_unary[] = {
     "-", "not ", "~", "&", "*"
 };
@@ -201,9 +205,9 @@ static Stmt* stmt_new(StmtKind kind, SrcLoc loc)
     return st;
 }
 
-Stmt* vp_stmt_assign(SrcLoc loc, Expr* lhs, Expr* rhs)
+Stmt* vp_stmt_assign(SrcLoc loc, StmtKind kind, Expr* lhs, Expr* rhs)
 {
-    Stmt* st = stmt_new(ST_ASSIGN, loc);
+    Stmt* st = stmt_new(kind, loc);
     st->lhs = lhs;
     st->rhs = rhs;
     return st;

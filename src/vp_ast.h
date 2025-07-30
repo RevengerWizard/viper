@@ -183,6 +183,16 @@ typedef struct Expr
 typedef enum StmtKind
 {
     ST_ASSIGN,
+    ST_ADD_ASSIGN,
+    ST_SUB_ASSIGN,
+    ST_MUL_ASSIGN,
+    ST_DIV_ASSIGN,
+    ST_MOD_ASSIGN,
+    ST_BAND_ASSIGN,
+    ST_BOR_ASSIGN,
+    ST_BXOR_ASSIGN,
+    ST_LSHIFT_ASSIGN,
+    ST_RSHIFT_ASSIGN,
     ST_EXPR,
     ST_DECL,
     ST_BLOCK,
@@ -322,9 +332,11 @@ typedef struct Decl
 } Decl;
 
 #define ast_binname(i) (vp_ast_binop[(i) - EX_BINOP])
+#define ast_assignname(i) (vp_ast_assign[(i) - ST_ASSIGN])
 #define ast_unaryname(i) (vp_ast_unary[(i) - EX_UNARY])
 
 extern const char* const vp_ast_binop[];
+extern const char* const vp_ast_assign[];
 extern const char* const vp_ast_unary[];
 
 /* Expressions */
@@ -351,7 +363,7 @@ Expr* vp_expr_alignof(SrcLoc loc, TypeSpec* spec);
 Expr* vp_expr_offsetof(SrcLoc loc, TypeSpec* spec, Str* name);
 
 /* Statements */
-Stmt* vp_stmt_assign(SrcLoc loc, Expr* lhs, Expr* rhs);
+Stmt* vp_stmt_assign(SrcLoc loc, StmtKind kind, Expr* lhs, Expr* rhs);
 Stmt* vp_stmt_expr(SrcLoc loc, Expr* e);
 Stmt* vp_stmt_decl(SrcLoc loc, Decl* d);
 Stmt* vp_stmt_block(SrcLoc loc, Stmt** block);

@@ -837,13 +837,31 @@ static Stmt* parse_stmt_simple(LexState* ls)
 {
     Expr* e = expr(ls);
     Stmt* st;
-    if(lex_match(ls, '='))
+    switch(ls->curr)
     {
-        st = vp_stmt_assign(e->loc, e, expr(ls));
-    }
-    else
-    {
-        st = vp_stmt_expr(e->loc, e);
+        case '=':
+            vp_lex_next(ls);
+            st = vp_stmt_assign(e->loc, ST_ASSIGN, e, expr(ls));
+            break;
+        case TK_pluseq:
+        case TK_mineq:
+        case TK_muleq:
+        case TK_diveq:
+        case TK_modeq:
+        case TK_bandeq:
+        case TK_boreq:
+        case TK_bxoreq:
+        case TK_lshifteq:
+        case TK_rshifteq:
+        {
+            StmtKind kind = (ls->curr - TK_pluseq) + ST_ADD_ASSIGN;
+            vp_lex_next(ls);
+            st = vp_stmt_assign(e->loc, kind, e, expr(ls));
+            break;
+        }
+        default:
+            st = vp_stmt_expr(e->loc, e);
+            break;
     }
     lex_consume(ls, ';');
     return st;
