@@ -61,6 +61,13 @@ static void sym_leave(uint32_t len)
     }
 }
 
+/* Add a global symbol */
+static void sym_glob_put(Sym* sym)
+{
+    vp_tab_set(&globsyms, sym->name, sym);
+    vec_push(syms, sym);
+}
+
 static Sym* sym_find(Str* name)
 {
     uint32_t len = vec_len(localsyms);
@@ -72,51 +79,6 @@ static Sym* sym_find(Str* name)
     }
     return vp_tab_get(&globsyms, name);
 }
-
-#if 0
-/* Enter scope */
-static Scope* scope_enter()
-{
-    Scope* sc = vp_arena_alloc(&V->symarena, sizeof(*sc));
-    sc->parent = currscope;
-    sc->locals = NULL;
-    currscope = sc;
-    return sc;
-}
-
-/* Leave scope */
-static void scope_leave(Scope* sc)
-{
-    vp_assertX(currscope == sc, "scope mismatch");
-    currscope = currscope->parent;
-}
-
-/* Add local to current scope */
-static void scope_add(Str* name, Type* ty)
-{
-    vp_assertX(currscope, "no scope");
-    Sym* sym = sym_new(SYM_VAR, name, NULL);
-    sym->state = SYM_DONE;
-    sym->type = ty;
-    vec_push(currscope->locals, sym);
-}
-
-/* Find a symbol in local or global scope */
-static Sym* scope_find(Str* name)
-{
-    for(Scope* scope = currscope; scope != NULL; scope = scope->parent)
-    {
-        for(uint32_t i = 0; i < vec_len(scope->locals); i++)
-        {
-            Sym* sym = scope->locals[i];
-            if(sym->name == name)
-                return sym;
-        }
-    }
-    return vp_tab_get(&globs, name);
-}
-
-#endif
 
 static void sema_resolve(Sym* sym);
 static Type* sema_typespec(TypeSpec* spec);
@@ -131,6 +93,17 @@ static Sym* sym_name(Str* name)
     return sym;
 }
 
+/* Create symbols for enum declarations */
+static void sym_enum(Decl* d)
+{
+    vp_assertX(0, "to be done");
+    /*for(uint32_t i = 0; i < vec_len(d->enm.items); i++)
+    {
+        Str* name = d->enm.items[i].name;
+        Sym* itemsym = sym_new(SYM_ENUM_CONST, name, d);
+    }*/
+}
+
 /* Create symbols for top-level declarations */
 static Sym* sym_decl(Decl* d)
 {
@@ -140,6 +113,7 @@ static Sym* sym_decl(Decl* d)
         case DECL_TYPE:
         case DECL_STRUCT:
         case DECL_UNION:
+        case DECL_ENUM:
             kind = SYM_TYPE;
             break;
         case DECL_FN:
@@ -1795,7 +1769,7 @@ static void sema_resolve(Sym* sym)
     sym->state = SYM_DONE;
 }
 
-Decl** vp_sema(Decl** decls)
+vec_t(Decl*) vp_sema(vec_t(Decl*) decls)
 {
     /* Create symbols */
     for(uint32_t i = 0; i < vec_len(decls); i++)
@@ -1808,8 +1782,11 @@ Decl** vp_sema(Decl** decls)
         else
         {
             Sym* sym = sym_decl(d);
-            vp_tab_set(&globsyms, sym->name, sym);
-            vec_push(syms, sym);
+            sym_glob_put(sym);
+            if(d->kind == DECL_ENUM)
+            {
+                sym_enum(d);
+            }
         }
     }
     /* Resolve symbols */

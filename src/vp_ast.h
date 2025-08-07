@@ -354,7 +354,7 @@ Expr* vp_expr_flit(SrcLoc loc, float f);
 Expr* vp_expr_str(SrcLoc loc, Str* str);
 Expr* vp_expr_name(SrcLoc loc, Str* name);
 Expr* vp_expr_comp(SrcLoc loc, TypeSpec* spec, Field* fields);
-Expr* vp_expr_call(SrcLoc loc, Expr* e, Expr** args);
+Expr* vp_expr_call(SrcLoc loc, Expr* e, vec_t(Expr*) args);
 Expr* vp_expr_idx(SrcLoc loc, Expr* e, Expr* idx);
 Expr* vp_expr_field(SrcLoc loc, Expr* e, Str* name);
 Expr* vp_expr_cast(SrcLoc loc, TypeSpec* spec, Expr* e);
@@ -366,7 +366,7 @@ Expr* vp_expr_offsetof(SrcLoc loc, TypeSpec* spec, Str* name);
 Stmt* vp_stmt_assign(SrcLoc loc, StmtKind kind, Expr* lhs, Expr* rhs);
 Stmt* vp_stmt_expr(SrcLoc loc, Expr* e);
 Stmt* vp_stmt_decl(SrcLoc loc, Decl* d);
-Stmt* vp_stmt_block(SrcLoc loc, Stmt** block);
+Stmt* vp_stmt_block(SrcLoc loc, vec_t(Stmt*) block);
 Stmt* vp_stmt_return(SrcLoc loc, Expr* e);
 Stmt* vp_stmt_if(SrcLoc loc, Expr* cond, Stmt* tblock, Stmt* fblock);
 
@@ -376,6 +376,7 @@ Decl* vp_decl_var(SrcLoc loc, Str* name, TypeSpec* spec, Expr* e);
 Decl* vp_decl_type(SrcLoc loc, Str* name, TypeSpec* spec);
 Decl* vp_decl_aggr(SrcLoc loc, DeclKind kind, Str* name, Aggregate* agr);
 Decl* vp_decl_note(SrcLoc loc, Note note);
+Decl* vp_decl_enum(SrcLoc loc, Str* name, TypeSpec* spec, vec_t(EnumItem) items);
 
 Aggregate* vp_aggr_new(SrcLoc loc, AggregateKind kind, AggregateItem* items);
 
@@ -384,7 +385,7 @@ TypeSpec* vp_typespec_name(SrcLoc loc, Str* name);
 TypeSpec* vp_typespec_type(SrcLoc loc, Type* ty);
 TypeSpec* vp_typespec_ptr(SrcLoc loc, TypeSpec* base);
 TypeSpec* vp_typespec_arr(SrcLoc loc, TypeSpec* base, Expr* e);
-TypeSpec* vp_typespec_fn(SrcLoc loc, TypeSpec* ret, TypeSpec** args);
+TypeSpec* vp_typespec_fn(SrcLoc loc, TypeSpec* ret, vec_t(TypeSpec*) args);
 TypeSpec* vp_typespec_typeof(SrcLoc loc, Expr* e);
 
 #endif

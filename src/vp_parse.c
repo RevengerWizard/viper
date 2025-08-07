@@ -772,7 +772,7 @@ static Aggregate* parse_aggr(LexState* ls)
 {
     lex_consume(ls, '{');
     SrcLoc loc = lex_srcloc(ls);
-    AggregateItem* items = NULL;
+    vec_t(AggregateItem) items = NULL;
     while(!lex_check(ls, '}') && !lex_check(ls, TK_eof))
     {
         AggregateItem item = parse_aggr_item(ls);
@@ -790,6 +790,41 @@ static Decl* parse_struct(LexState* ls)
     Str* name = lex_name(ls);
     Aggregate* aggr = parse_aggr(ls);
     return vp_decl_aggr(loc, DECL_STRUCT, name, aggr);
+}
+
+/* Parse enum items */
+static EnumItem parse_enum_item(LexState* ls)
+{
+    SrcLoc loc = lex_srcloc(ls);
+    Str* name = lex_name(ls);
+    Expr* init = lex_match(ls, '=') ? expr(ls) : NULL;
+    return (EnumItem){.loc = loc, .name = name, .init = init};
+}
+
+/* Parse 'enum' declaration */
+static Decl* parse_enum(LexState* ls)
+{
+    vp_lex_next(ls);    /* Skip 'enum' */
+    SrcLoc loc = lex_srcloc(ls);
+    Str* name = lex_name(ls);
+    TypeSpec* spec = NULL;
+    if(lex_match(ls, ':'))
+    {
+        spec = parse_type(ls);
+    }
+    lex_consume(ls, '{');
+    vec_t(EnumItem) items = NULL;
+    while(!lex_check(ls, '}') && !lex_check(ls, TK_eof))
+    {
+        EnumItem item = parse_enum_item(ls);
+        vec_push(items, item);
+        if(!lex_match(ls, ','))
+        {
+            break;
+        }
+    }
+    lex_consume(ls, '}');
+    return vp_decl_enum(loc, name, spec, items);
 }
 
 /* Parse 'fn' declaration */
@@ -909,6 +944,9 @@ static Decl* parse_decl(LexState* ls)
             break;
         case TK_struct:
             d = parse_struct(ls);
+            break;
+        case TK_enum:
+            d = parse_enum(ls);
             break;
         default:
             break;

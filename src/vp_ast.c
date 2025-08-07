@@ -302,6 +302,14 @@ Decl* vp_decl_note(SrcLoc loc, Note note)
     return d;
 }
 
+Decl* vp_decl_enum(SrcLoc loc, Str* name, TypeSpec* spec, vec_t(EnumItem) items)
+{
+    Decl* d = decl_new(DECL_NOTE, loc, name);
+    d->enm.items = items;
+    d->enm.spec = spec;
+    return d;
+}
+
 Aggregate* vp_aggr_new(SrcLoc loc, AggregateKind kind, AggregateItem* items)
 {
     UNUSED(loc);

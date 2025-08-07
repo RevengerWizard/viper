@@ -15,7 +15,8 @@ typedef enum SymKind
     SYM_NONE,
     SYM_VAR,
     SYM_FN,
-    SYM_TYPE
+    SYM_TYPE,
+    SYM_ENUM_CONST
 } SymKind;
 
 typedef enum SymState
