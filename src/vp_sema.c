@@ -1629,6 +1629,14 @@ static void sema_stmt(Stmt* st, Type* ret)
                 sema_stmt(st->ifst.fblock, ret);
             }
             break;
+        case ST_BREAK:
+        case ST_CONTINUE:
+            /* Ignore */
+            break;
+        case ST_WHILE:
+            sema_cond(st->whst.cond);
+            sema_stmt(st->whst.body, ret);
+            break;
         case ST_EXPR:
             sema_expr(st->expr, NULL);
             break;

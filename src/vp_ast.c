@@ -241,12 +241,27 @@ Stmt* vp_stmt_return(SrcLoc loc, Expr* e)
     return st;
 }
 
+Stmt* vp_stmt_break(SrcLoc loc, StmtKind kind)
+{
+    vp_assertX(kind == ST_BREAK || kind == ST_CONTINUE, "break/continue");
+    Stmt* st = stmt_new(kind, loc);
+    return st;
+}
+
 Stmt* vp_stmt_if(SrcLoc loc, Expr* cond, Stmt* tblock, Stmt* fblock)
 {
     Stmt* st = stmt_new(ST_IF, loc);
     st->ifst.cond = cond;
     st->ifst.tblock = tblock;
     st->ifst.fblock = fblock;
+    return st;
+}
+
+Stmt* vp_stmt_while(SrcLoc loc, Expr* cond, Stmt* body)
+{
+    Stmt* st = stmt_new(ST_WHILE, loc);
+    st->whst.cond = cond;
+    st->whst.body = body;
     return st;
 }
 

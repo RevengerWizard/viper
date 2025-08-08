@@ -691,6 +691,35 @@ static Stmt* parse_if(LexState* ls)
     return vp_stmt_if(loc, cond, tblock, fblock);
 }
 
+static uint32_t loopcount = 0;
+
+/* Parse 'while' statement */
+static Stmt* parse_while(LexState* ls)
+{
+    vp_lex_next(ls);    /* Skip 'while' */
+    SrcLoc loc = lex_srcloc(ls);
+    Expr* cond = expr(ls);
+    loopcount++;
+    Stmt* body = parse_block(ls);
+    loopcount--;
+    return vp_stmt_while(loc, cond, body);
+}
+
+/* Parse 'break' or 'continue' statement */
+static Stmt* parse_breakcontinue(LexState* ls, LexToken tok)
+{
+    StmtKind kind = tok == TK_break ? ST_BREAK : ST_CONTINUE;
+    vp_lex_next(ls);    /* Skip 'break'/'continue' */
+    SrcLoc loc = lex_srcloc(ls);
+    Str* name = ls->val.name;
+    lex_consume(ls, ';');
+    if(loopcount == 0)
+    {
+        vp_err_error(loc, "'%.*s' cannot be used", name->len, str_data(name));
+    }
+    return vp_stmt_break(loc, kind);
+}
+
 /* Parse 'return' statement */
 static Stmt* parse_return(LexState* ls)
 {
@@ -910,6 +939,13 @@ static Stmt* parse_stmt(LexState* ls)
     {
         case TK_if:
             st = parse_if(ls);
+            break;
+        case TK_while:
+            st = parse_while(ls);
+            break;
+        case TK_break:
+        case TK_continue:
+            st = parse_breakcontinue(ls, ls->curr);
             break;
         case TK_return:
             st = parse_return(ls);

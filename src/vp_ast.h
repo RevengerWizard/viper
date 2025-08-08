@@ -197,7 +197,10 @@ typedef enum StmtKind
     ST_DECL,
     ST_BLOCK,
     ST_RETURN,
+    ST_BREAK,
+    ST_CONTINUE,
     ST_IF,
+    ST_WHILE,
 } StmtKind;
 
 typedef struct Stmt
@@ -220,6 +223,11 @@ typedef struct Stmt
             struct Stmt* tblock;   /* Then block */
             struct Stmt* fblock;   /* Else block */
         } ifst;
+        struct
+        {
+            Expr* cond;
+            struct Stmt* body;
+        } whst;
     };
 } Stmt;
 
@@ -368,7 +376,9 @@ Stmt* vp_stmt_expr(SrcLoc loc, Expr* e);
 Stmt* vp_stmt_decl(SrcLoc loc, Decl* d);
 Stmt* vp_stmt_block(SrcLoc loc, vec_t(Stmt*) block);
 Stmt* vp_stmt_return(SrcLoc loc, Expr* e);
+Stmt* vp_stmt_break(SrcLoc loc, StmtKind kind);
 Stmt* vp_stmt_if(SrcLoc loc, Expr* cond, Stmt* tblock, Stmt* fblock);
+Stmt* vp_stmt_while(SrcLoc loc, Expr* cond, Stmt* body);
 
 /* Declarations */
 Decl* vp_decl_fn(SrcLoc loc, TypeSpec* ret, Str* name, Param* params, Stmt* body);

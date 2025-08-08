@@ -846,6 +846,53 @@ static void gen_ret(Stmt* st)
     vp_bb_setcurr(bb);
 }
 
+static BB* breakbb;
+static BB* continuebb;
+
+static BB* bb_push_break(BB** bb)
+{
+    *bb = breakbb;
+    BB* bb1 = vp_bb_new();
+    breakbb = bb1;
+    return bb1;
+}
+
+static BB* bb_push_continue(BB** bb)
+{
+    *bb = continuebb;
+    BB* bb1 = vp_bb_new();
+    continuebb = bb1;
+    return bb1;
+}
+
+static void bb_pop_break(BB* bb)
+{
+    breakbb = bb;
+}
+
+static void bb_pop_continue(BB* bb)
+{
+    continuebb = bb;
+}
+
+/* Generate break statement */
+static void gen_break(void)
+{
+    vp_assertX(breakbb != NULL, "missing loop");
+    BB* bb = vp_bb_new();
+    vp_ir_jmp(breakbb);
+    vp_bb_setcurr(bb);
+}
+
+/* Generate continue statement */
+static void gen_continue(void)
+{
+    vp_assertX(continuebb != NULL, "missing loop");
+    BB* bb = vp_bb_new();
+    vp_ir_jmp(continuebb);
+    vp_bb_setcurr(bb);
+}
+
 /* Generate block of statements */
 static void gen_block(Stmt** block)
 {
@@ -881,6 +928,30 @@ static void gen_if_stmt(Stmt* st)
     }
 }
 
+/* Generate while statement */
+static void gen_while_stmt(Stmt* st)
+{
+    vp_assertX(st->kind == ST_WHILE, "not a while statement");
+
+    BB* breakbb1, *contbb1;
+    BB* loopbb = vp_bb_new();
+    BB* condbb = bb_push_continue(&contbb1);
+    BB* exitbb = bb_push_break(&breakbb1);
+
+    vp_ir_jmp(condbb);
+
+    vp_bb_setcurr(loopbb);
+    gen_stmt(st->whst.body);
+
+    /* Set up the condition block */
+    vp_bb_setcurr(condbb);
+    gen_cond_jmp(st->whst.cond, loopbb, exitbb);
+
+    vp_bb_setcurr(exitbb);
+    bb_pop_break(breakbb1);
+    bb_pop_continue(contbb1);
+}
+
 /* Generate a statement */
 static void gen_stmt(Stmt* st)
 {
@@ -903,7 +974,10 @@ static void gen_stmt(Stmt* st)
             break;
         case ST_EXPR: gen_expr_stmt(st->expr); break;
         case ST_IF: gen_if_stmt(st); break;
+        case ST_WHILE: gen_while_stmt(st); break;
         case ST_RETURN: gen_ret(st); break;
+        case ST_BREAK: gen_break(); break;
+        case ST_CONTINUE: gen_continue(); break;
         default: vp_assertX(0, "?");
     }
 }

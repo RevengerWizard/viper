@@ -841,10 +841,33 @@ static void dump_ast_stmt(Stmt* st)
                 printf("}\n");
             }
             break;
+        case ST_WHILE:
+            dump_indent();
+            printf("while ");
+            dump_ast_expr(st->whst.cond);
+            printf("\n");
+            dump_indent();
+            printf("{\n");
+            indent++;
+            dump_ast_stmt(st->whst.body);
+            indent--;
+            dump_indent();
+            printf("}\n");
+            break;
         case ST_RETURN:
             dump_indent();
             printf("return ");
             dump_ast_expr(st->expr);
+            printf("\n");
+            break;
+        case ST_BREAK:
+            dump_indent();
+            printf("break ");
+            printf("\n");
+            break;
+        case ST_CONTINUE:
+            dump_indent();
+            printf("continue ");
             printf("\n");
             break;
         case ST_ASSIGN:
