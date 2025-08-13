@@ -45,6 +45,11 @@ int main(int argc, char** argv)
         fwrite(code->b, 1, sbuf_len(code), f);
         fclose(f);
     }
+    else
+    {
+        fprintf(stderr, "unable to open out.bin\n");
+        return EXIT_FAILURE;
+    }
 
     SBuf sb;
     vp_buf_init(&sb);
@@ -55,6 +60,11 @@ int main(int argc, char** argv)
     {
         fwrite(sb.b, 1, sbuf_len(&sb), f);
         fclose(f);
+    }
+    else
+    {
+        fprintf(stderr, "unable to open out.exe\n");
+        return EXIT_FAILURE;
     }
 
     vp_state_close(V);
