@@ -1218,6 +1218,68 @@ static Operand sema_expr_cast(Expr* e)
     return isconst ? opr_const(opr.ty, opr.val) : opr_lval(opr.ty);
 }
 
+/* Resolve intcast */
+static Operand sema_expr_intcast(Expr* e)
+{
+    vp_assertX(e->kind == EX_INTCAST, "intcast");
+    Type* ty = sema_typespec(e->cast.spec);
+    Operand opr = sema_expr_rval(e->cast.expr, NULL);
+    bool isconst = opr.isconst;
+    if(!ty_isint(ty) || ty_isint(opr.ty))
+    {
+        vp_err_error(e->loc, "illegal 'intcast' from '%s' to '%s'", type_name(opr.ty), type_name(ty));
+    }
+    return isconst ? opr_const(opr.ty, opr.val) : opr_lval(opr.ty);
+}
+
+/* Resolve floatcast */
+static Operand sema_expr_floatcast(Expr* e)
+{
+    vp_assertX(e->kind == EX_FLOATCAST, "floatcast");
+    Type* ty = sema_typespec(e->cast.spec);
+    Operand opr = sema_expr_rval(e->cast.expr, NULL);
+    bool isconst = opr.isconst;
+    if(!ty_isnum(ty) || !ty_isnum(opr.ty) || (!ty_isflo(ty) && !ty_isflo(opr.ty)))
+    {
+        vp_err_error(e->loc, "illegal 'floatcast' from '%s' to '%s'", type_name(opr.ty), type_name(ty));
+    }
+    return isconst ? opr_const(opr.ty, opr.val) : opr_lval(opr.ty);
+}
+
+/* Resolve ptrcast */
+static Operand sema_expr_ptrcast(Expr* e)
+{
+    vp_assertX(e->kind == EX_PTRCAST, "ptrcast");
+    Type* ty = sema_typespec(e->cast.spec);
+    Operand opr = sema_expr_rval(e->cast.expr, NULL);
+    bool isconst = opr.isconst;
+
+    bool srcvalid = ty_isptrlike(opr.ty) || ty_isint(opr.ty);
+    bool dstvalid = ty_isptrlike(ty);
+    if(!srcvalid || !dstvalid)
+    {
+        vp_err_error(e->loc, "invalid 'ptrcast' between '%s' and '%s'; requires a combination of pointer, function pointer, or integer types.", type_name(opr.ty), type_name(ty));
+    }
+    return isconst ? opr_const(ty, opr.val) : opr_lval(ty);
+}
+
+/* Resolve bitcast */
+static Operand sema_expr_bitcast(Expr* e, Type* ret)
+{
+    vp_assertX(e->kind == EX_BITCAST, "bitcast");
+    Type* ty = sema_typespec(e->cast.spec);
+    Operand opr = sema_expr_rval(e->cast.expr, NULL);
+    bool isconst = opr.isconst;
+
+    uint32_t lsize = vp_type_sizeof(ty);
+    uint32_t rsize = vp_type_sizeof(opr.ty);
+    if(lsize != rsize)
+    {
+        vp_err_error(e->loc, "bitcast size mismatch: destination type '%s' has %d bits but source type '%s' has %d bits", type_name(ty), lsize, type_name(opr.ty), rsize);
+    }
+    return isconst ? opr_const(ret, opr.val) : opr_lval(ty);
+}
+
 /* Resolve integer literal */
 static Operand sema_expr_int(Expr* e, Type* ret, uint64_t u64)
 {
@@ -1358,6 +1420,18 @@ static Operand sema_expr(Expr* e, Type* ret)
             break;
         case EX_CAST:
             res = sema_expr_cast(e);
+            break;
+        case EX_INTCAST:
+            res = sema_expr_intcast(e);
+            break;
+        case EX_FLOATCAST:
+            res = sema_expr_floatcast(e);
+            break;
+        case EX_PTRCAST:
+            res = sema_expr_ptrcast(e);
+            break;
+        case EX_BITCAST:
+            res = sema_expr_bitcast(e, ret);
             break;
         case EX_SIZEOF:
         {

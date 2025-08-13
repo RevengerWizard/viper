@@ -236,6 +236,7 @@ static void peep(BB* bb)
     }
 }
 
+/* Optimization pass */
 void vp_opt(Code* code)
 {
     RegAlloc* ra = code->ra;

@@ -474,23 +474,43 @@ static VReg* gen_call(Expr* e)
 /* Generate cast expression */
 static VReg* gen_cast(Expr* e)
 {
-    vp_assertX(e->kind == EX_CAST, "not a cast expression");
+    vp_assertX(e->kind == EX_CAST || e->kind == EX_PTRCAST || e->kind == EX_INTCAST, "not a cast expression");
 
     Type* dstty = e->ty;
-    VReg* src = gen_expr(e->cast.expr);
+    Type* srcty = e->cast.expr->ty;
+    VReg* vr = gen_expr(e->cast.expr);
     switch(dstty->kind)
     {
         case TY_void:
         case TY_struct:
         case TY_union:
-            return src;
+            return vr;
         default:
             break;
     }
 
-    IR* ir = vp_ir_cast(src, vp_vsize(dstty), vp_vflag(dstty));
+    uint32_t dstsize = vp_type_sizeof(dstty);
+
+    uint32_t srcsize = 1U << vr->vsize;
+    if(dstsize == srcsize &&
+        ty_isflo(dstty) == (vrf_flo(vr) != 0) &&
+        (ty_isflo(dstty) || ty_isunsigned(dstty) == ty_isunsigned(srcty)))
+    {
+        /* Ignore cast between equal integers/floats */
+        return vr;
+    }
+
+    IR* ir = vp_ir_cast(vr, ty_isunsigned(srcty), vp_vsize(dstty), vp_vflag(dstty));
     ir->flag = ir_flag(dstty);
     return ir->dst;
+}
+
+static VReg* gen_bitcast(Expr* e)
+{
+    vp_assertX(e->kind == EX_BITCAST, "not a bitcast expression");
+
+    /* Do nothing */
+    return gen_expr(e->cast.expr);
 }
 
 typedef struct FlatField
@@ -716,7 +736,7 @@ static VReg* gen_logical(Expr* e)
 }
 
 typedef VReg* (*GenExprFn)(Expr*);
-static const GenExprFn gentab[] = {
+static const GenExprFn genexprtab[] = {
     [EX_NIL] = gen_nil,
     [EX_TRUE] = gen_true, [EX_FALSE] = gen_false,
     [EX_INT] = gen_int, [EX_UINT] = gen_uint,
@@ -736,25 +756,32 @@ static const GenExprFn gentab[] = {
     [EX_FIELD] = gen_field, [EX_IDX] = gen_idx,
     [EX_CALL] = gen_call,
     [EX_CAST] = gen_cast,
+    [EX_INTCAST] = gen_cast,
+    [EX_FLOATCAST] = gen_cast,
+    [EX_PTRCAST] = gen_cast,
+    [EX_BITCAST] = gen_bitcast,
 };
 
 /* Generate expression */
 static VReg* gen_expr(Expr* e)
 {
     vp_assertX(e->ty, "missing type");
-    vp_assertX(e->kind < (int)ARRSIZE(gentab), "out of bounds expression kind");
-    vp_assertX(gentab[e->kind], "empty entry %d", e->kind);
-    return (*gentab[e->kind])(e);
+    vp_assertX(e->kind < (int)ARRSIZE(genexprtab), "out of bounds expression kind");
+    vp_assertX(genexprtab[e->kind], "empty entry %d", e->kind);
+    return (*genexprtab[e->kind])(e);
 }
 
 /* Generate expression statement */
-static void gen_expr_stmt(Expr* e)
+static void gen_expr_stmt(Stmt* st)
 {
-    gen_expr(e);
+    gen_expr(st->expr);
 }
 
-static void gen_compound_assign(ExprKind op, Expr* lhs, Expr* rhs)
+static void gen_comp_assign(Stmt* st)
 {
+    ExprKind op = st->kind - ST_ADD_ASSIGN + EX_ADD;
+    Expr* lhs = st->lhs;
+    Expr* rhs = st->rhs;
     if(lhs->kind == EX_NAME && ty_isscalar(lhs->ty))
     {
         Scope* scope;
@@ -779,8 +806,10 @@ static void gen_compound_assign(ExprKind op, Expr* lhs, Expr* rhs)
 }
 
 /* Generate assignment */
-static void gen_assign(Expr* lhs, Expr* rhs)
+static void gen_assign(Stmt* st)
 {
+    Expr* lhs = st->lhs;
+    Expr* rhs = st->rhs;
     VReg* src = gen_expr(rhs);
     if(lhs->kind == EX_NAME && ty_isscalar(lhs->ty))
     {
@@ -798,8 +827,10 @@ static void gen_assign(Expr* lhs, Expr* rhs)
 }
 
 /* Generate variable declaration */
-static void gen_var(Decl* d)
+static void gen_var(Stmt* st)
 {
+    Decl* d = st->decl;
+    if(d->kind == DECL_NOTE) return;
     vp_assertX(d->kind == DECL_VAR, "?");
     
     VarInfo* vi = d->var.vi;
@@ -876,8 +907,9 @@ static void bb_pop_continue(BB* bb)
 }
 
 /* Generate break statement */
-static void gen_break(void)
+static void gen_break(Stmt* st)
 {
+    UNUSED(st);
     vp_assertX(breakbb != NULL, "missing loop");
     BB* bb = vp_bb_new();
     vp_ir_jmp(breakbb);
@@ -885,8 +917,9 @@ static void gen_break(void)
 }
 
 /* Generate continue statement */
-static void gen_continue(void)
+static void gen_continue(Stmt* st)
 {
+    UNUSED(st);
     vp_assertX(continuebb != NULL, "missing loop");
     BB* bb = vp_bb_new();
     vp_ir_jmp(continuebb);
@@ -894,8 +927,9 @@ static void gen_continue(void)
 }
 
 /* Generate block of statements */
-static void gen_block(Stmt** block)
+static void gen_block(Stmt* st)
 {
+    vec_t(Stmt*) block = st->block;
     for(uint32_t i = 0; i < vec_len(block); i++)
     {
         gen_stmt(block[i]);
@@ -952,34 +986,31 @@ static void gen_while_stmt(Stmt* st)
     bb_pop_continue(contbb1);
 }
 
+typedef void (*GenStmtFn)(Stmt*);
+static const GenStmtFn gensttab[] = {
+    [ST_DECL] = gen_var,
+    [ST_BLOCK] = gen_block,
+    [ST_ASSIGN] = gen_assign,
+    [ST_ADD_ASSIGN] = gen_comp_assign, [ST_SUB_ASSIGN] = gen_comp_assign, 
+    [ST_MUL_ASSIGN] = gen_comp_assign, [ST_DIV_ASSIGN] = gen_comp_assign, 
+    [ST_MOD_ASSIGN] = gen_comp_assign,
+    [ST_BAND_ASSIGN] = gen_comp_assign, [ST_BOR_ASSIGN] = gen_comp_assign,  
+    [ST_BXOR_ASSIGN] = gen_comp_assign,
+    [ST_LSHIFT_ASSIGN] = gen_comp_assign, [ST_RSHIFT_ASSIGN] = gen_comp_assign,
+    [ST_EXPR] = gen_expr_stmt,
+    [ST_IF] = gen_if_stmt,
+    [ST_WHILE] = gen_while_stmt,
+    [ST_RETURN] = gen_ret,
+    [ST_BREAK] = gen_break,
+    [ST_CONTINUE] = gen_continue,
+};
+
 /* Generate a statement */
 static void gen_stmt(Stmt* st)
 {
-    switch(st->kind)
-    {
-        case ST_BLOCK: gen_block(st->block); break;
-        case ST_DECL: gen_var(st->decl); break;
-        case ST_ASSIGN: gen_assign(st->lhs, st->rhs); break;
-        case ST_ADD_ASSIGN:
-        case ST_SUB_ASSIGN:
-        case ST_MUL_ASSIGN:
-        case ST_DIV_ASSIGN:
-        case ST_MOD_ASSIGN:
-        case ST_BAND_ASSIGN:
-        case ST_BOR_ASSIGN:
-        case ST_BXOR_ASSIGN:
-        case ST_LSHIFT_ASSIGN:
-        case ST_RSHIFT_ASSIGN:
-            gen_compound_assign(st->kind - ST_ADD_ASSIGN + EX_ADD, st->lhs, st->rhs);
-            break;
-        case ST_EXPR: gen_expr_stmt(st->expr); break;
-        case ST_IF: gen_if_stmt(st); break;
-        case ST_WHILE: gen_while_stmt(st); break;
-        case ST_RETURN: gen_ret(st); break;
-        case ST_BREAK: gen_break(); break;
-        case ST_CONTINUE: gen_continue(); break;
-        default: vp_assertX(0, "?");
-    }
+    vp_assertX(st->kind < (int)ARRSIZE(gensttab), "out of bounds statement kind");
+    vp_assertX(gensttab[st->kind], "empty entry %d", st->kind);
+    (*gensttab[st->kind])(st);
 }
 
 static void gen_stack(Code* cd)
@@ -1080,7 +1111,7 @@ static Code* gen_fn(Decl* d)
 
     V->fncode->retbb = vp_bb_new();
 
-    gen_block(d->fn.body->block);
+    gen_block(d->fn.body);
 
     vp_bb_setcurr(V->fncode->retbb);
     V->bb = NULL;

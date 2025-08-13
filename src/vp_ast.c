@@ -165,9 +165,10 @@ Expr* vp_expr_field(SrcLoc loc, Expr* e, Str* name)
     return expr;
 }
 
-Expr* vp_expr_cast(SrcLoc loc, TypeSpec* spec, Expr* e)
+Expr* vp_expr_cast(SrcLoc loc, ExprKind kind, TypeSpec* spec, Expr* e)
 {
-    Expr* expr = expr_new(EX_CAST, loc);
+    vp_assertX(kind <= EX_CAST || kind >= EX_BITCAST, "not a cast");
+    Expr* expr = expr_new(kind, loc);
     expr->cast.spec = spec;
     expr->cast.expr = e;
     return expr;

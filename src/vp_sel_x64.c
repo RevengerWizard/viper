@@ -337,7 +337,111 @@ static void emit_cmp_rr(VRSize p, uint32_t r1, uint32_t r2)
     case VRSize1: emit_cmp8_rr(V, r1, r2); break;
     case VRSize2: emit_cmp16_rr(V, r1, r2); break;
     case VRSize4: emit_cmp32_rr(V, r1, r2); break;
-    case VRSize8: emit_cmp64_rr(V, r1, r2);break;
+    case VRSize8: emit_cmp64_rr(V, r1, r2); break;
+    }
+}
+
+static void emit_movsx_rr(VRSize pd, VRSize ps, X64Reg dst, X64Reg src)
+{
+    switch(pd)
+    {
+        case VRSize8:
+            switch(ps)
+            {
+                case VRSize4: emit_movsx_r64r32(V, dst, src); break;
+                case VRSize2: emit_movsx_r64r16(V, dst, src); break;
+                case VRSize1: emit_movsx_r64r8(V, dst, src); break;
+                default: vp_assertX(0, "?"); break;
+            }
+            break;
+        case VRSize4:
+            switch(ps)
+            {
+                case VRSize2: emit_movsx_r32r16(V, dst, src); break;
+                case VRSize1: emit_movsx_r32r8(V, dst, src); break;
+                default: vp_assertX(0, "?"); break;
+            }
+            break;
+        case VRSize2:
+            switch(ps)
+            {
+                case VRSize1: emit_movsx_r16r8(V, dst, src); break;
+                default: vp_assertX(0, "?"); break;
+            }
+            break;
+        default:
+            vp_assertX(0, "?");
+            break;
+    }
+}
+
+static void emit_movzx_rr(VRSize pd, VRSize ps, uint32_t r1, uint32_t r2)
+{
+    switch(pd)
+    {
+    case VRSize2:
+        vp_assertX(ps == VRSize1, "invalid size combination");
+        emit_movzx_r16r8(V, r1, r2);
+        break;
+    case VRSize4:
+        switch(ps)
+        {
+        case VRSize1: emit_movzx_r32r8(V, r1, r2); break;
+        case VRSize2: emit_movzx_r32r16(V, r1, r2); break;
+        default: vp_assertX(0, "?"); break;
+        }
+        break;
+    case VRSize8:
+        switch(ps)
+        {
+        case VRSize1: emit_movzx_r64r8(V, r1, r2); break;
+        case VRSize2: emit_movzx_r64r16(V, r1, r2); break;
+        default: vp_assertX(0, "?"); break;
+        }
+        break;
+    default:
+        vp_assertX(0, "?");
+        break;
+    }
+}
+
+static void emit_cvttss2si_rx(VRSize p, uint32_t r1, uint32_t r2)
+{
+    switch(p)
+    {
+    case VRSize4: emit_cvttss2si_r32x(V, r1, r2); break;
+    case VRSize8: emit_cvttss2si_r64x(V, r1, r2); break;
+    default: vp_assertX(0, "?"); break;
+    }
+}
+
+static void emit_cvttsd2si_rx(VRSize p, uint32_t r1, uint32_t r2)
+{
+    switch(p)
+    {
+    case VRSize4: emit_cvttsd2si_r32x(V, r1, r2); break;
+    case VRSize8: emit_cvttsd2si_r64x(V, r1, r2); break;
+    default: vp_assertX(0, "?"); break;
+    }
+}
+
+static void emit_cvtsi2ss_xr(VRSize p, uint32_t r1, uint32_t r2)
+{
+    switch(p)
+    {
+        case VRSize4: emit_cvtsi2ss_xr64(V, r1, r2);
+        case VRSize8: emit_cvtsi2ss_xr32(V, r1, r2);
+        default: vp_assertX(0, "?"); break;
+    }
+}
+
+static void emit_cvtsi2sd_xr(VRSize p, uint32_t r1, uint32_t r2)
+{
+    switch(p)
+    {
+        case VRSize4: emit_cvtsi2sd_xr64(V, r1, r2);
+        case VRSize8: emit_cvtsi2sd_xr32(V, r1, r2);
+        default: vp_assertX(0, "?"); break;
     }
 }
 
@@ -350,8 +454,8 @@ static void emit_mov(VReg* dst, VReg* src)
         {
             switch(src->vsize)
             {
-            case VRSize4: emit_movq_xr(V, dst->phys, src->phys); break;
-            case VRSize8: emit_movd_xr(V, dst->phys, src->phys); break;
+            case VRSize4: emit_movd_xr(V, dst->phys, src->phys); break;
+            case VRSize8: emit_movq_xr(V, dst->phys, src->phys); break;
             default: vp_assertX(0, "?"); break;
             }
         }
@@ -508,7 +612,7 @@ static void sel_load(IR* ir)
 
 static void sel_ret(IR* ir)
 {
-    VReg dst = {.phys = vrf_flo(ir->src1) ? XMM0 : RAX};
+    VReg dst = {.phys = vrf_flo(ir->src1) ? XMM0 : RAX, .vsize = VRSize8, .flag = ir->src1->flag};
     emit_mov(&dst, ir->src1);
 }
 
@@ -599,6 +703,117 @@ static void sel_call(IR* ir)
 }
 
 static void sel_cast(IR* ir)
+{
+    vp_assertX(!vrf_const(ir->src1), "const src1");
+    if(vrf_flo(ir->dst))
+    {
+        if(vrf_flo(ir->src1))
+        {
+            /* float -> float */
+            vp_assertX(!vrf_const(ir->src1), "const src1");
+            vp_assertX(ir->dst->vsize != ir->src1->vsize, "dst == src1");
+            switch(ir->dst->vsize)
+            {
+                case VRSize4: emit_cvtsd2ss_rr(V, ir->dst->phys, ir->src1->phys);
+                case VRSize8: emit_cvtss2sd_rr(V, ir->dst->phys, ir->src1->phys);
+                default: vp_assertX(0, "?"); break;
+            }
+        }
+        else
+        {
+            /* int -> float */
+            VRSize ps = ir->src1->vsize;
+            if(ps < VRSize4)
+            {
+                if(ir->cast.srcunsigned)
+                {
+                    emit_movzx_rr(VRSize4, ps, ir->src1->phys, ir->src1->phys);
+                }
+                else
+                {
+                    emit_movsx_rr(VRSize4, ps, ir->src1->phys, ir->src1->phys);
+                }
+                ps = VRSize4;
+            }
+            if(!ir->cast.srcunsigned)
+            {
+                switch(ir->dst->vsize)
+                {
+                    case VRSize4: emit_cvtsi2ss_xr(ir->dst->vsize, ir->dst->phys, ir->src1->phys);
+                    case VRSize8: emit_cvtsi2sd_xr(ir->dst->vsize, ir->dst->phys, ir->src1->phys);
+                    default: vp_assertX(0, "?"); break;
+                }
+            }
+            else if(ps < VRSize8)
+            {
+                switch(ir->dst->vsize)
+                {
+                    case VRSize4: emit_cvtsi2ss_xr64(V, ir->dst->phys, ir->src1->phys);
+                    case VRSize8: emit_cvtsi2sd_xr64(V, ir->dst->phys, ir->src1->phys);
+                    default: vp_assertX(0, "?"); break;
+                }
+            }
+            else
+            {
+                vp_assertX(0, "not implemented");
+            }
+        }
+    }
+    else if(vrf_flo(ir->src1))
+    {
+        /* float -> int */
+        vp_assertX(!vrf_const(ir->src1), "const src1");
+        VRSize pd = ir->dst->vsize;
+        if(pd < VRSize4)
+        {
+            pd = VRSize4;
+        }
+        switch(ir->src1->vsize)
+        {
+            case VRSize4: emit_cvttss2si_rx(pd, ir->dst->phys, ir->src1->phys);
+            case VRSize8: emit_cvttsd2si_rx(pd, ir->dst->phys, ir->src1->phys);
+            default: vp_assertX(0, "?"); break;
+        }
+    }
+    else
+    {
+        /* int -> int */
+        if(ir->dst->vsize <= ir->src1->vsize)
+        {
+            if(ir->dst->phys != ir->src1->phys)
+            {
+                VRSize p = ir->dst->vsize;
+                vp_assertVSize(p, VRSize1, VRSize8);
+                emit_mov_rr(p, ir->dst->phys, ir->src1->phys);
+            }
+        }
+        else
+        {
+            VRSize ps = ir->src1->vsize;
+            VRSize pd = ir->dst->vsize;
+            vp_assertVSize(ps, VRSize1, VRSize8);
+            vp_assertVSize(pd, VRSize1, VRSize8);
+            if(ir->cast.srcunsigned)
+            {
+                if(ps == VRSize4)
+                {
+                    /* MOVZX 64bit, 32bit doesn't exist! */
+                    emit_mov_rr(ps, ir->dst->phys, ir->src1->phys);
+                }
+                else
+                {
+                    emit_movzx_rr(pd, ps, ir->dst->phys, ir->src1->phys);
+                }
+            }
+            else
+            {
+                emit_movsx_rr(pd, ps, ir->dst->phys, ir->src1->phys);
+            }
+        }
+    }
+}
+
+static void sel_keep(IR* ir)
 {
     UNUSED(ir);
 }
@@ -1048,10 +1263,41 @@ static void sel_rshift(IR* ir)
 
 static void sel_neg(IR* ir)
 {
-    vp_assertX(vrf_const(ir->dst), "const dst");
-    if(vrf_const(ir->src1))
+    vp_assertX(!vrf_const(ir->dst), "const dst");
+    if(vrf_flo(ir->src1))
     {
-        vp_assertX(0, "not implemented");
+        vp_assertX(!vrf_const(ir->src1), "const src1");
+        vp_assertX(ir->dst->phys != ir->src1->phys, "dst == src1");
+        switch(ir->src1->vsize)
+        {
+            case VRSize4:
+            case VRSize8:
+            {
+                bool single = ir->src1->vsize == VRSize4;
+                emit_push64_r(V, RAX);
+                uint64_t mask = single ? (1ULL << 31) : (1ULL << 63);
+                emit_mov64_ri(V, RAX, mask);
+                if(single)
+                {
+                    emit_movd_xr(V, ir->dst->phys, RAX);
+                }
+                else
+                {
+                    emit_movq_xr(V, ir->dst->phys, RAX);
+                }
+                emit_pop64_r(V, RAX);
+                if(single)
+                {
+                    emit_xorps_rr(V, ir->dst->phys, ir->src1->phys);
+                }
+                else
+                {
+                    emit_xorpd_rr(V, ir->dst->phys, ir->src1->phys);
+                }
+                break;
+            }
+            default: vp_assertX(0, "?"); break;
+        }
     }
     else
     {
@@ -1085,6 +1331,7 @@ static const SelIRFn seltab[] = {
     [IR_PUSHARG] = sel_pusharg,
     [IR_CALL] = sel_call,
     [IR_CAST] = sel_cast,
+    [IR_KEEP] = sel_keep,
     [IR_ADD] = sel_add, [IR_SUB] = sel_sub,
     [IR_MUL] = sel_mul, [IR_DIV] = sel_div, [IR_MOD] = sel_mod,
     [IR_BAND] = sel_band, [IR_BOR] = sel_bor, [IR_BXOR] = sel_bxor,
@@ -1150,6 +1397,17 @@ static void sel_conv3to2(vec_t(BB*) bbs)
             switch(ir->kind)
             {
                 case IR_NEG:
+                {
+                    if(vrf_flo(ir->dst))
+                    {
+                        vp_assertX(ir->dst->virt != ir->src1->virt, "dst == src1");
+                        tmp_mov(&ir->src1, &bb->irs, j++, ir->flag);
+
+                        IR* keep = vp_ir_keep(NULL, ir->src1, NULL);
+                        j++; vec_insert(bb->irs, j, keep);
+                    }
+                    break;
+                }
                 case IR_ADD:
                 case IR_SUB:
                 case IR_MUL:
@@ -1358,7 +1616,7 @@ static void emit_body(Code* c)
     emit_ret(V);
 }
 
-void vp_sel(Code** codes)
+void vp_sel(vec_t(Code*) codes)
 {
     for(uint32_t i = 0; i < vec_len(codes); i++)
     {

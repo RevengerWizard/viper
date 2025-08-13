@@ -118,7 +118,8 @@ static void dump_vregs(const char* title, vec_t(VReg*) vregs)
 
 static const char* const kcond[] = {
     NULL, "MP", "EQ", "NEQ", "LT", "LE", "GT", "GE",
-    NULL, "MP", "EQ", "NEQ", "LT", "LE", "GT", "GE"};
+    NULL, "MP", "EQ", "NEQ", "LT", "LE", "GT", "GE"
+};
 
 static const char* const kcond2[] = {
     NULL, NULL, "==", "!=", "<", "<=", ">", ">=",
@@ -223,6 +224,24 @@ static void dump_ir(IR* ir)
         {
             printf("%d, ", ir->arg.idx);
             dump_vreg(ir->src1);
+            break;
+        }
+        case IR_KEEP:
+        {
+            if(ir->dst)
+            {
+                dump_vreg(ir->dst);
+                printf(", ");
+            }
+            if(ir->src1)
+            {
+                dump_vreg(ir->src1);
+                if(ir->src2)
+                {
+                    printf(", ");
+                    dump_vreg(ir->src2);
+                }
+            }
             break;
         }
         case IR_CALL:
@@ -603,6 +622,8 @@ static void dump_ast_aggr(Aggregate* agr)
     }
 }
 
+static const char* const exprcast[] = {"cast", "intcast", "floatcast", "ptrcast", "bitcast"};
+
 static void dump_ast_expr(Expr* e)
 {
     switch(e->kind)
@@ -728,8 +749,12 @@ static void dump_ast_expr(Expr* e)
             break;
         }
         case EX_CAST:
+        case EX_INTCAST:
+        case EX_FLOATCAST:
+        case EX_PTRCAST:
+        case EX_BITCAST:
         {
-            printf("cast(");
+            printf("%s(", exprcast[e->kind - EX_CAST]);
             dump_typespec(e->cast.spec);
             printf(", ");
             dump_ast_expr(e->cast.expr);

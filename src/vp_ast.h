@@ -92,6 +92,10 @@ typedef enum ExprKind
     EX_ALIGNOF,
     EX_OFFSETOF,
     EX_CAST,
+    EX_BITCAST,
+    EX_INTCAST,
+    EX_FLOATCAST,
+    EX_PTRCAST,
     EX_CALL,
     EX_IDX,
     EX_FIELD,
@@ -365,7 +369,7 @@ Expr* vp_expr_comp(SrcLoc loc, TypeSpec* spec, Field* fields);
 Expr* vp_expr_call(SrcLoc loc, Expr* e, vec_t(Expr*) args);
 Expr* vp_expr_idx(SrcLoc loc, Expr* e, Expr* idx);
 Expr* vp_expr_field(SrcLoc loc, Expr* e, Str* name);
-Expr* vp_expr_cast(SrcLoc loc, TypeSpec* spec, Expr* e);
+Expr* vp_expr_cast(SrcLoc loc, ExprKind kind, TypeSpec* spec, Expr* e);
 Expr* vp_expr_sizeof(SrcLoc loc, TypeSpec* spec);
 Expr* vp_expr_alignof(SrcLoc loc, TypeSpec* spec);
 Expr* vp_expr_offsetof(SrcLoc loc, TypeSpec* spec, Str* name);

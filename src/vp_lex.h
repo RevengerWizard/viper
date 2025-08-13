@@ -18,7 +18,10 @@
     _(asm) \
     _(var) _(const) \
     _(not) _(and) _(or) \
-    _(type) _(void) _(cast) \
+    _(type) _(void) \
+    _(cast) \
+    _(intcast) _(floatcast) _(ptrcast) \
+    _(bitcast) \
     _(typeof) _(sizeof) _(alignof) _(offsetof) \
     _(bool) \
     _(int8) _(int16) _(int32) _(int64) \

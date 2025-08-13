@@ -88,6 +88,7 @@ typedef struct VReg
     _(PUSHARG, d12) \
     _(CALL, d12) \
     _(CAST, d12) \
+    _(KEEP, d12) \
     /* Binary operators */ \
     _(ADD, d12) _(SUB, d12) \
     _(MUL, d12) _(DIV, d12) _(MOD, d12) \
@@ -186,6 +187,10 @@ typedef struct IR
             uint32_t idx;   /* Parameter index */
         } arg;
         IRCallInfo* call;
+        struct
+        {
+            bool srcunsigned;
+        } cast;
     };
 } IR;
 
@@ -215,20 +220,21 @@ extern const char* const vp_ir_name[];
 IR* vp_ir_bofs(FrameInfo* fi);
 IR* vp_ir_iofs(Str* label);
 IR* vp_ir_sofs(uint32_t ofs);
-IR* vp_ir_mov(VReg* dst, VReg* src, uint8_t flag);
-IR* vp_ir_store(VReg* dst, VReg* src, uint8_t flag);
+IR* vp_ir_mov(VReg* dst, VReg* src, uint8_t irflag);
+IR* vp_ir_store(VReg* dst, VReg* src, uint8_t irflag);
 IR* vp_ir_load(VReg* src, VRSize vsize, uint8_t vflag, uint8_t irflag);
 IR* vp_ir_store_s(VReg* dst, VReg* src);
-IR* vp_ir_load_s(VReg* dst, VReg* src, uint8_t flag);
-IR* vp_ir_ret(VReg* src, uint8_t flag);
+IR* vp_ir_load_s(VReg* dst, VReg* src, uint8_t irflag);
+IR* vp_ir_ret(VReg* src, uint8_t irflag);
 IR* vp_ir_cond(VReg* src1, VReg* src2, CondKind cond);
 IR* vp_ir_jmp(BB* bb);
 void vp_ir_cjmp(VReg* src1, VReg* src2, CondKind cond, BB* bb);
 IR* vp_ir_pusharg(VReg* src, uint32_t idx);
 IR* vp_ir_call(IRCallInfo* ci, VReg* dst, VReg* freg);
-IR* vp_ir_cast(VReg* src, VRSize dstsize, uint8_t vflag);
-VReg* vp_ir_binop(IrKind kind, VReg* src1, VReg* src2, VRSize vsize, uint8_t flag);
-VReg* vp_ir_unary(IrKind kind, VReg* src, VRSize vsize, uint8_t flag);
+IR* vp_ir_cast(VReg* src, bool srcunsigned, VRSize dstsize, uint8_t vflag);
+IR* vp_ir_keep(VReg* dst, VReg* src1, VReg* src2);
+VReg* vp_ir_binop(IrKind kind, VReg* src1, VReg* src2, VRSize vsize, uint8_t irflag);
+VReg* vp_ir_unary(IrKind kind, VReg* src, VRSize vsize, uint8_t irflag);
 
 /* Frame info */
 FrameInfo* vp_frameinfo_new();

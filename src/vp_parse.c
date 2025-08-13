@@ -142,18 +142,29 @@ static Expr* expr_tycast(LexState* ls, SrcLoc loc)
     lex_consume(ls, '(');
     Expr* e = expr(ls);
     lex_consume(ls, ')');
-    return vp_expr_cast(loc, spec, e);
+    return vp_expr_cast(loc, EX_CAST, spec, e);
 }
 
 /* Parse cast expression */
 static Expr* expr_cast(LexState* ls, SrcLoc loc)
 {
+    LexToken tok = ls->prev;
     lex_consume(ls, '(');
     TypeSpec* spec = parse_type(ls);
     lex_consume(ls, ',');
     Expr* e = expr(ls);
     lex_consume(ls, ')');
-    return vp_expr_cast(loc, spec, e);
+    ExprKind kind = EX__MAX;
+    switch(tok)
+    {
+        case TK_cast: kind = EX_CAST; break;
+        case TK_bitcast: kind = EX_BITCAST; break;
+        case TK_intcast: kind = EX_INTCAST; break;
+        case TK_floatcast: kind = EX_FLOATCAST; break;
+        case TK_ptrcast: kind = EX_PTRCAST; break;
+        default: vp_assertX(0, "?");
+    }
+    return vp_expr_cast(loc, kind, spec, e);
 }
 
 /* Parse sizeof expression */
@@ -417,6 +428,10 @@ static ParseRule expr_rule(LexToken t)
         case TK_void:
             return PREFIX(expr_tycast);
         case TK_cast:
+        case TK_intcast:
+        case TK_floatcast:
+        case TK_ptrcast:
+        case TK_bitcast:
             return PREFIX(expr_cast);
         case TK_sizeof:
             return PREFIX(expr_sizeof);
