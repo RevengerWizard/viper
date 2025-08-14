@@ -157,7 +157,6 @@ static VP_AINLINE bool ty_isfunc(const Type* t)
 
 extern const char* const vp_type_names[];
 
-int vp_type_rank(Type* t);
 uint32_t vp_type_sizeof(Type* t);
 uint32_t vp_type_alignof(Type* t);
 bool vp_type_isconv(Type* dst, Type* src);
@@ -173,6 +172,7 @@ Type* vp_type_none(struct Sym* sym);
 Type* vp_type_ptr(Type* t);
 Type* vp_type_arr(Type* t, uint32_t size);
 Type* vp_type_func(Type* ret, Type** params);
+Type* vp_type_const(Type* t);
 void vp_type_struct(Str* name, Type* ty, TypeField* fields);
 void vp_type_union(Str* name, Type* ty, TypeField* fields);
 uint32_t vp_type_fieldidx(Type* ty, Str* name);

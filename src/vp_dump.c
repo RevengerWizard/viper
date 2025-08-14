@@ -595,6 +595,10 @@ static void dump_typespec(TypeSpec* spec)
             dump_ast_expr(spec->expr);
             printf(")");
             break;
+        case SPEC_CONST:
+            printf("const ");
+            dump_typespec(spec->ptr);
+            break;
         default:
             vp_assertX(0, "unknown typespec");
             break;

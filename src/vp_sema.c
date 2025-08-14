@@ -1526,7 +1526,7 @@ static Type* sema_typespec(TypeSpec* spec)
             Sym* sym = sym_name(spec->name);
             if(sym->kind != SYM_TYPE)
             {
-                vp_err_error(spec->loc, "%s must denote a type", str_data(spec->name));
+                vp_err_error(spec->loc, "'%s' must denote a type", str_data(spec->name));
             }
             ty = sym->type;
             break;
@@ -1570,8 +1570,13 @@ static Type* sema_typespec(TypeSpec* spec)
             break;
         }
         case SPEC_TYPEOF:
-        {
             ty = sema_expr(spec->expr, NULL).ty;
+            break;
+        case SPEC_CONST:
+        {
+            Type* tyconst = sema_typespec(spec->ptr);
+            /*sym_complete(tyconst);*/
+            ty = vp_type_const(tyconst);
             break;
         }
         default:
@@ -1652,6 +1657,14 @@ static void sema_stmt_assign(Stmt* st)
     {
         vp_err_error(st->loc, "cannot assign to non-lvalue");
     }
+    if(lop.ty->kind == TY_array)
+    {
+        vp_err_error(st->loc, "cannot assign to array");
+    }
+    /*if(ty_isconst(lop.ty))
+    {
+        vp_err_error(st->loc, "left-hand side of assign is const");
+    }*/
     Operand rop = sema_expr_rval(st->rhs, lop.ty);
     if(st->kind != ST_ASSIGN)
     {

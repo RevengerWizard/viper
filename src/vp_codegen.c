@@ -217,7 +217,8 @@ static VReg* gen_flo(Expr* e)
 /* Generate name reference */
 static VReg* gen_name(Expr* e)
 {
-    if(ty_isscalar(e->ty))
+    Type* ty = e->ty;
+    if(ty_isscalar(ty))
     {
         Scope* scope;
         VarInfo* vi = vp_scope_find(e->scope, e->name, &scope);
@@ -228,10 +229,10 @@ static VReg* gen_name(Expr* e)
             return vi->vreg;
         }
         VReg* src = gen_lval(e);
-        VReg* dst = vp_ir_load(src, vp_vsize(e->ty), vp_vflag(e->ty), ir_flag(e->ty))->dst;
+        VReg* dst = vp_ir_load(src, vp_vsize(ty), vp_vflag(ty), ir_flag(ty))->dst;
         return dst;
     }
-    else if(e->ty->kind == TY_array || e->ty->kind == TY_struct)
+    else if(ty->kind == TY_array || ty->kind == TY_struct)
     {
         return gen_lval(e);
     }

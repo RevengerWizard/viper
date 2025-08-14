@@ -388,3 +388,10 @@ TypeSpec* vp_typespec_typeof(SrcLoc loc, Expr* e)
     ts->expr = e;
     return ts;
 }
+
+TypeSpec* vp_typespec_const(SrcLoc loc, TypeSpec* base)
+{
+    TypeSpec* ts = new_typespec(SPEC_CONST, loc);
+    ts->ptr = base;
+    return ts;
+}

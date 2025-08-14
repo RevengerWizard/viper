@@ -35,14 +35,14 @@ const char* const vp_type_names[] = {
 #undef TKSTR
 };
 
-static Type* type_alloc(TypeKind kind)
+static VP_AINLINE Type* type_alloc(TypeKind kind)
 {
     Type* t = vp_arena_alloc(&V->typearena, sizeof(*t));
     t->kind = kind;
     return t;
 }
 
-int vp_type_rank(Type* t)
+static int vp_type_rank(Type* t)
 {
     switch(t->kind)
     {
@@ -413,6 +413,15 @@ Type* vp_type_func(Type* ret, vec_t(Type*) params)
     ty->fn.params = params;
     vec_push(V->cachefunc, ty);
     return ty;
+}
+
+Type* vp_type_const(Type* t)
+{
+    /*if(ty_isconst(t))
+    {
+        return t;
+    }*/
+    return t;
 }
 
 void vp_type_struct(Str* name, Type* ty, vec_t(TypeField) fields)

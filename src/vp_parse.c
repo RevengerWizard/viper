@@ -579,6 +579,7 @@ static TypeSpec* parse_type(LexState* ls)
         return parse_typeof(ls);
     }
 
+    bool isconst = lex_match(ls, TK_const);
     if(lex_match(ls, TK_name))
     {
         SrcLoc loc = lex_srcloc(ls);
@@ -622,6 +623,10 @@ static TypeSpec* parse_type(LexState* ls)
             lex_consume(ls, '*');
             spec = vp_typespec_ptr(loc, spec);
         }
+    }
+    if(isconst)
+    {
+        spec = vp_typespec_const(loc, spec);
     }
     return spec;
 }
