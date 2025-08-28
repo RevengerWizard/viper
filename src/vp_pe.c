@@ -18,9 +18,31 @@
 ** ULONGLONG = uint64_t
 */
 
+/*
+** PE constants
+*/
+#define IMAGE_FILE_MACHINE_AMD64    0x8664
+#define IMAGE_FILE_EXECUTABLE_IMAGE 0x0002
+#define IMAGE_FILE_LARGE_ADDRESS_AWARE 0x0020
+#define IMAGE_FILE_DEBUG_STRIPPED   0x0200
+#define PE_CHARACTERISTICS \
+    (IMAGE_FILE_EXECUTABLE_IMAGE | IMAGE_FILE_LARGE_ADDRESS_AWARE | IMAGE_FILE_DEBUG_STRIPPED)
+#define PE32_PLUS_MAGIC         0x20b
+#define MAJOR_SUBSYSTEM_VERSION 4
+#define SUBSYSTEM_CONSOLE       3
+#define IMAGE_SCN_CNT_CODE              0x00000020
+#define IMAGE_SCN_MEM_EXECUTE           0x20000000
+#define IMAGE_SCN_MEM_READ              0x40000000
+#define TEXT_CHARACTERISTICS \
+    (IMAGE_SCN_CNT_CODE | IMAGE_SCN_MEM_EXECUTE | IMAGE_SCN_MEM_READ)
+
 static void pe_build(VpState* V, SBuf* sb)
 {
     size_t codesize = sbuf_len(&V->code);
+
+    Code* c = vp_tab_get(&V->funcs, vp_str_newlen("main"));
+    vp_assertX(c, "?");
+    int32_t entryofs = c->ofs;
 
     /* DOS header */
     char* p = vp_buf_need(sb, 64);
@@ -31,33 +53,26 @@ static void pe_build(VpState* V, SBuf* sb)
 
     /* PE header */
     p = vp_buf_more(sb, 24);
-    p[0] = 'P'; /* Signature = 'PE\0\0' */
-    p[1] = 'E';
-    p[2] = '\0';
-    p[3] = '\0';
-    *(uint16_t*)(&p[4]) = 0x8664;    /* Machine = IMAGE_FILE_MACHINE_AMD64 */
+    p[0] = 'P'; p[1] = 'E'; p[2] = '\0'; p[3] = '\0';   /* Signature = 'PE\0\0' */
+    *(uint16_t*)(&p[4]) = IMAGE_FILE_MACHINE_AMD64;    /* Machine */
     *(uint16_t*)(&p[6]) = 1;    /* NumberOfSections */
-    memset(&p[8], 0, 20);
+    memset(&p[8], 0, 20);   /* TimeDateStamp, PointerToSymbolTable, NumberOfSymbols */
     *(uint16_t*)(&p[20]) = 240;    /* SizeOfOptionalHeader */
-    *(uint16_t*)(&p[22]) = 0x103;    /* Characteristics */
+    *(uint16_t*)(&p[22]) = PE_CHARACTERISTICS;    /* Characteristics */
     sb->w = p + 24;
-
-    Code* c = vp_tab_get(&V->funcs, vp_str_newlen("main"));
-    vp_assertX(c, "?");
-    int32_t ofs = c->ofs;
 
     /* Optional header */
     p = vp_buf_more(sb, 240);
     memset(p, 0, 240);
-    *(uint16_t*)(&p[0]) = 0x20b;    /* Magic (PE32+) */
-    *(uint32_t*)(&p[16]) = 4096 + ofs;    /* AddressOfEntryPoint */
+    *(uint16_t*)(&p[0]) = PE32_PLUS_MAGIC;    /* Magic (PE32+) */
+    *(uint32_t*)(&p[16]) = 4096 + entryofs;    /* AddressOfEntryPoint */
     *(uint64_t*)(&p[24]) = 0x00400000ULL;    /* ImageBase (64-bit) */
     *(uint32_t*)(&p[32]) = 4096;    /* SectionAlignment */
     *(uint32_t*)(&p[36]) = 512;    /* FileAlignment (standard) */
-    *(uint16_t*)(&p[48]) = 4;    /* MajorSubsystemVersion */
+    *(uint16_t*)(&p[48]) = MAJOR_SUBSYSTEM_VERSION;    /* MajorSubsystemVersion */
     *(uint32_t*)(&p[56]) = 4096 * 2;    /* SizeOfImage (total runtime memory size) */
     *(uint32_t*)(&p[60]) = 512;    /* SizeOfHeaders */
-    *(uint16_t*)(&p[68]) = 3;    /* Subsystem (IMAGE_SUBSYSTEM_WINDOWS_CUI) */
+    *(uint16_t*)(&p[68]) = SUBSYSTEM_CONSOLE;    /* Subsystem */
     *(uint32_t*)(&p[108]) = 16;    /* NumberOfRvaAndSizes */
     sb->w = p + 240;
 
@@ -76,7 +91,7 @@ static void pe_build(VpState* V, SBuf* sb)
     *(uint32_t*)(&p[12]) = 4096;   /* VirtualAddress */
     *(uint32_t*)(&p[16]) = (uint32_t)codesize;   /* SizeOfRawData */
     *(uint32_t*)(&p[20]) = 512;   /* PointerToRawData */
-    *(uint32_t*)(&p[36]) = 0x60000020;   /* Characteristics */
+    *(uint32_t*)(&p[36]) = TEXT_CHARACTERISTICS;   /* Characteristics */
     sb->w = p + 40;
 
     /* Ensure alignment */
