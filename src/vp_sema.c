@@ -19,11 +19,17 @@
 
 #include "vp_dump.h"
 
-vec_t(Decl*) sorted;
-Tab globsyms;
-vec_t(Sym*) syms;
-vec_t(Sym*) localsyms;
-Decl* currfn;
+/* Semantic state */
+typedef struct
+{
+    vec_t(Decl*) sorted;
+    Tab globsyms;
+    vec_t(Sym*) syms;
+    vec_t(Sym*) localsyms;
+    Decl* currfn;
+} SemaState;
+
+SemaState S;
 
 /* -- Symbols ------------------------------------------------------- */
 
@@ -43,41 +49,41 @@ static void sym_add(Str* name, Type* ty)
     Sym* sym = sym_new(SYM_VAR, name, NULL);
     sym->state = SYM_DONE;
     sym->type = ty;
-    vec_push(localsyms, sym);
+    vec_push(S.localsyms, sym);
 }
 
 /* Enter symbol scope */
 static uint32_t sym_enter()
 {
-    return vec_len(localsyms);
+    return vec_len(S.localsyms);
 }
 
 /* Leave symbol scope */
 static void sym_leave(uint32_t len)
 {
-    if(localsyms)
+    if(S.localsyms)
     {
-        vec_hdr(localsyms)->len = len;
+        vec_hdr(S.localsyms)->len = len;
     }
 }
 
 /* Add a global symbol */
 static void sym_glob_put(Sym* sym)
 {
-    vp_tab_set(&globsyms, sym->name, sym);
-    vec_push(syms, sym);
+    vp_tab_set(&S.globsyms, sym->name, sym);
+    vec_push(S.syms, sym);
 }
 
 static Sym* sym_find(Str* name)
 {
-    uint32_t len = vec_len(localsyms);
+    uint32_t len = vec_len(S.localsyms);
     for(uint32_t i = len; i > 0; i--)
     {
-        Sym* sym = localsyms[i - 1];
+        Sym* sym = S.localsyms[i - 1];
         if(sym->name == name)
             return sym;
     }
-    return vp_tab_get(&globsyms, name);
+    return vp_tab_get(&S.globsyms, name);
 }
 
 static void sema_resolve(Sym* sym);
@@ -1524,6 +1530,10 @@ static Type* sema_typespec(TypeSpec* spec)
         case SPEC_NAME:
         {
             Sym* sym = sym_name(spec->name);
+            if(!sym)
+            {
+                vp_err_error(spec->loc, "unresolved type name '%s'", str_data(spec->name));
+            }
             if(sym->kind != SYM_TYPE)
             {
                 vp_err_error(spec->loc, "'%s' must denote a type", str_data(spec->name));
@@ -1598,7 +1608,7 @@ static Type* sema_fn(Decl* d)
 {
     vp_assertX(d->kind == DECL_FN, "fn declaration");
     
-    vec_push(sorted, d);
+    vec_push(S.sorted, d);
     vec_t(Type*) params = NULL;
     for(uint32_t i = 0; i < vec_len(d->fn.params); i++)
     {
@@ -1636,7 +1646,7 @@ static void sema_cond(Expr* e)
 static void sema_block(Stmt** stmts, Type* ret)
 {
     Scope* scope = vp_scope_begin();
-    vec_push(currfn->fn.scopes, scope);
+    vec_push(S.currfn->fn.scopes, scope);
     uint32_t len = sym_enter();
 
     for(uint32_t i = 0; i < vec_len(stmts); i++)
@@ -1716,6 +1726,7 @@ static void sema_stmt(Stmt* st, Type* ret)
                 sema_stmt(st->ifst.fblock, ret);
             }
             break;
+        case ST_ASM:
         case ST_BREAK:
         case ST_CONTINUE:
             /* Ignore */
@@ -1766,7 +1777,7 @@ static void sema_fn_body(Sym* sym)
 
     Scope* scope = vp_scope_begin();
     vec_push(d->fn.scopes, scope);
-    currfn = d;
+    S.currfn = d;
 
     uint32_t len = sym_enter();
     for(uint32_t i = 0; i < vec_len(d->fn.params); i++)
@@ -1885,7 +1896,7 @@ vec_t(Decl*) vp_sema(vec_t(Decl*) decls)
         }
     }
     /* Resolve symbols */
-    for(Sym** p = syms; p != vec_end(syms); p++)
+    for(Sym** p = S.syms; p != vec_end(S.syms); p++)
     {
         Sym* sym = *p;
         sema_resolve(sym);
@@ -1905,5 +1916,5 @@ vec_t(Decl*) vp_sema(vec_t(Decl*) decls)
     }
     //vp_dump_typecache();
 
-    return sorted;
+    return S.sorted;
 }

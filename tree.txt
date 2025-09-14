@@ -20,9 +20,11 @@ src/
 ├── vp_load.c         ← frontend driver: parse + compile
 ├── vp_dump.c/h       ← data structure print
 ├── vp_target.h       ← target machine configurations
-├── vp_asm_x64.c      ← x64 assembler
-├── vp_emit_x64.c     ← x64 instruction encoding
+├── vp_asm.h          ← inline assembler definitions
+├── vp_asm_x64.c      ← x64 inline assembler
+├── vp_emit_x64.c/h   ← x64 instruction encoding
 ├── vp_sel_x64.c      ← x64 instruction selection (IR -> x64)
 ├── vp_sel.h          ← instruction selection
 ├── vp_pe.c           ← Windows PE emitter
+├── vp_elf.c          ← ELF emitter
 ├── viper.c           ← CLI main

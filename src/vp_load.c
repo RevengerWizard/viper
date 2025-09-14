@@ -41,7 +41,7 @@ void vp_load(VpState* V, const char* filename)
     V->txtfile = fopen(filename, "r");
     if(!ctx.fp || !V->txtfile)
     {
-        fprintf(stderr, "Cannot open %s\n", filename);
+        fprintf(stderr, "cannot open '%s'\n", filename);
         exit(EXIT_FAILURE);
     }
     LexState ls;
