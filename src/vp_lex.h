@@ -117,10 +117,37 @@ typedef struct LexState
     LexOffset lineofst; /* Line offset */
 } LexState;
 
+/* Lexical source position */
+#define lex_srcloc(ls) \
+    ((SrcLoc){.line = (ls)->linenumber, .ofs = (ls)->lineofst, .name = (ls)->name})
+
 void vp_lex_setup(LexState* ls);
 const char* vp_lex_tok2str(LexState* ls, LexToken t);
 void vp_lex_error(LexState* ls, const char* msg, ...);
 void vp_lex_next(LexState* ls);
+void vp_lex_consume(LexState* ls, LexToken t);
 void vp_lex_init();
+
+/* Check for matching token */
+static VP_AINLINE bool lex_check(LexState* ls, LexToken t)
+{
+    return ls->curr == t;
+}
+
+/* Check and consume token */
+static VP_AINLINE bool lex_match(LexState* ls, LexToken t)
+{
+    if(ls->curr != t)
+        return false;
+    vp_lex_next(ls);
+    return true;
+}
+
+/* Consume a single name and return its name */
+static VP_AINLINE Str* lex_name(LexState* ls)
+{
+    vp_lex_consume(ls, TK_name);
+    return ls->val.name;
+}
 
 #endif

@@ -266,6 +266,13 @@ Stmt* vp_stmt_while(SrcLoc loc, Expr* cond, Stmt* body)
     return st;
 }
 
+Stmt* vp_stmt_asm(SrcLoc loc, vec_t(Inst*) insts)
+{
+    Stmt* st = stmt_new(ST_ASM, loc);
+    st->asm_.insts = insts;
+    return st;
+}
+
 /* -- AST declarations ---------------------------------------------- */
 
 static Decl* decl_new(DeclKind kind, SrcLoc loc, Str* name)

@@ -652,6 +652,18 @@ void vp_lex_next(LexState* ls)
     ls->curr = lex_scan(ls, &ls->nextval);
 }
 
+/* Check for matching token and consume it */
+void vp_lex_consume(LexState* ls, LexToken t)
+{
+    if(ls->curr == t)
+    {
+        vp_lex_next(ls);
+        return;
+    }
+    const char* tokstr = vp_lex_tok2str(ls, t);
+    vp_lex_error(ls, "'%s' expected", tokstr);
+}
+
 /* Initialize strings for reserved words */
 void vp_lex_init()
 {

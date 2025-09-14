@@ -26,6 +26,7 @@ typedef struct VpState
     vec_t(Type*) cachefunc;
     vec_t(Type*) cachearr;
     Tab strtab;
+    Arena instarena;
     Arena strarena;
     Arena astarena;
     Arena typearena;

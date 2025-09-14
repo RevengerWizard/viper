@@ -244,6 +244,7 @@ static void dump_ir(IR* ir)
             }
             break;
         }
+        case IR_ASM: break;
         case IR_CALL:
         {
             if(ir->dst)
@@ -892,6 +893,11 @@ static void dump_ast_stmt(Stmt* st)
         case ST_BREAK:
             dump_indent();
             printf("break ");
+            printf("\n");
+            break;
+        case ST_ASM:
+            dump_indent();
+            printf("asm ...");
             printf("\n");
             break;
         case ST_CONTINUE:

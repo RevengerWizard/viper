@@ -101,6 +101,7 @@ endif
 ##############################################################################
 
 VPCORE_O = vp_assert.o vp_mem.o vp_buf.o \
+	vp_asm_x64.o \
 	vp_target.o \
 	vp_str.o vp_vec.o vp_tab.o vp_map.o vp_type.o \
 	vp_char.o vp_strscan.o \

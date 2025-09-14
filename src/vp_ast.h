@@ -6,6 +6,7 @@
 #ifndef _VP_AST_H
 #define _VP_AST_H
 
+#include "vp_asm.h"
 #include "vp_lex.h"
 #include "vp_str.h"
 #include "vp_type.h"
@@ -206,6 +207,7 @@ typedef enum StmtKind
     ST_CONTINUE,
     ST_IF,
     ST_WHILE,
+    ST_ASM
 } StmtKind;
 
 typedef struct Stmt
@@ -233,6 +235,10 @@ typedef struct Stmt
             Expr* cond;
             struct Stmt* body;
         } whst;
+        struct
+        {
+            vec_t(Inst*) insts;
+        } asm_;
     };
 } Stmt;
 
@@ -384,6 +390,7 @@ Stmt* vp_stmt_return(SrcLoc loc, Expr* e);
 Stmt* vp_stmt_break(SrcLoc loc, StmtKind kind);
 Stmt* vp_stmt_if(SrcLoc loc, Expr* cond, Stmt* tblock, Stmt* fblock);
 Stmt* vp_stmt_while(SrcLoc loc, Expr* cond, Stmt* body);
+Stmt* vp_stmt_asm(SrcLoc loc, vec_t(Inst*) insts);
 
 /* Declarations */
 Decl* vp_decl_fn(SrcLoc loc, TypeSpec* ret, Str* name, Param* params, Stmt* body);

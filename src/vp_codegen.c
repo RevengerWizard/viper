@@ -987,6 +987,12 @@ static void gen_while_stmt(Stmt* st)
     bb_pop_continue(contbb1);
 }
 
+static void gen_asm(Stmt* st)
+{
+    vp_assertX(st->kind == ST_ASM, "not asm statement");
+    UNUSED(st);
+}
+
 typedef void (*GenStmtFn)(Stmt*);
 static const GenStmtFn gensttab[] = {
     [ST_DECL] = gen_var,
@@ -1004,6 +1010,7 @@ static const GenStmtFn gensttab[] = {
     [ST_RETURN] = gen_ret,
     [ST_BREAK] = gen_break,
     [ST_CONTINUE] = gen_continue,
+    [ST_ASM] = gen_asm,
 };
 
 /* Generate a statement */

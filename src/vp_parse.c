@@ -4,6 +4,7 @@
 */
 
 #include "vp_parse.h"
+#include "vp_asm.h"
 #include "vp_ast.h"
 #include "vp_def.h"
 #include "vp_lex.h"
@@ -41,44 +42,6 @@ typedef struct
     ParseInfixFn infix;
     Prec prec;
 } ParseRule;
-
-/* Lexical source position */
-#define lex_srcloc(ls) \
-    ((SrcLoc){.line = (ls)->linenumber, .ofs = (ls)->lineofst, .name = (ls)->name})
-
-/* Check for matching token and consume it */
-static void lex_consume(LexState* ls, LexToken t)
-{
-    if(ls->curr == t)
-    {
-        vp_lex_next(ls);
-        return;
-    }
-    const char* tokstr = vp_lex_tok2str(ls, t);
-    vp_lex_error(ls, "'%s' expected", tokstr);
-}
-
-/* Check for matching token */
-static bool lex_check(LexState* ls, LexToken t)
-{
-    return ls->curr == t;
-}
-
-/* Check and consume token */
-static bool lex_match(LexState* ls, LexToken t)
-{
-    if(ls->curr != t)
-        return false;
-    vp_lex_next(ls);
-    return true;
-}
-
-/* Consume a single name and return its name */
-static Str* lex_name(LexState* ls)
-{
-    lex_consume(ls, TK_name);
-    return ls->val.name;
-}
 
 /* Forward declarations */
 static Decl* parse_decl(LexState* ls);
@@ -125,7 +88,7 @@ static Expr* expr_group(LexState* ls, SrcLoc loc)
 {
     UNUSED(loc);
     Expr* e = expr(ls);
-    lex_consume(ls, ')');
+    vp_lex_consume(ls, ')');
     return e;
 }
 
@@ -139,9 +102,9 @@ static Expr* expr_tycast(LexState* ls, SrcLoc loc)
     Type* type = tok2type(ls->prev);
     vp_assertX(type, "no type");
     TypeSpec* spec = vp_typespec_type(loc, type);
-    lex_consume(ls, '(');
+    vp_lex_consume(ls, '(');
     Expr* e = expr(ls);
-    lex_consume(ls, ')');
+    vp_lex_consume(ls, ')');
     return vp_expr_cast(loc, EX_CAST, spec, e);
 }
 
@@ -149,11 +112,11 @@ static Expr* expr_tycast(LexState* ls, SrcLoc loc)
 static Expr* expr_cast(LexState* ls, SrcLoc loc)
 {
     LexToken tok = ls->prev;
-    lex_consume(ls, '(');
+    vp_lex_consume(ls, '(');
     TypeSpec* spec = parse_type(ls);
-    lex_consume(ls, ',');
+    vp_lex_consume(ls, ',');
     Expr* e = expr(ls);
-    lex_consume(ls, ')');
+    vp_lex_consume(ls, ')');
     ExprKind kind = EX__MAX;
     switch(tok)
     {
@@ -170,29 +133,29 @@ static Expr* expr_cast(LexState* ls, SrcLoc loc)
 /* Parse sizeof expression */
 static Expr* expr_sizeof(LexState* ls, SrcLoc loc)
 {
-    lex_consume(ls, '(');
+    vp_lex_consume(ls, '(');
     TypeSpec* spec = parse_type(ls);
-    lex_consume(ls, ')');
+    vp_lex_consume(ls, ')');
     return vp_expr_sizeof(loc, spec);
 }
 
 /* Parse alignof expression */
 static Expr* expr_alignof(LexState* ls, SrcLoc loc)
 {
-    lex_consume(ls, '(');
+    vp_lex_consume(ls, '(');
     TypeSpec* spec = parse_type(ls);
-    lex_consume(ls, ')');
+    vp_lex_consume(ls, ')');
     return vp_expr_alignof(loc, spec);
 }
 
 /* Parse offsetof expression */
 static Expr* expr_offsetof(LexState* ls, SrcLoc loc)
 {
-    lex_consume(ls, '(');
+    vp_lex_consume(ls, '(');
     TypeSpec* spec = parse_type(ls);
-    lex_consume(ls, ',');
+    vp_lex_consume(ls, ',');
     Str* name = lex_name(ls);
-    lex_consume(ls, ')');
+    vp_lex_consume(ls, ')');
     return vp_expr_offsetof(loc, spec, name);
 }
 
@@ -209,7 +172,7 @@ static Expr* expr_call(LexState* ls, Expr* lhs, SrcLoc loc)
         }
         while(lex_match(ls, ','));
     }
-    lex_consume(ls, ')');
+    vp_lex_consume(ls, ')');
     return vp_expr_call(loc, lhs, args);
 }
 
@@ -217,7 +180,7 @@ static Expr* expr_call(LexState* ls, Expr* lhs, SrcLoc loc)
 static Expr* expr_idx(LexState* ls, Expr* lhs, SrcLoc loc)
 {
     Expr* idx = expr(ls);
-    lex_consume(ls, ']');
+    vp_lex_consume(ls, ']');
     return vp_expr_idx(loc, lhs, idx);
 }
 
@@ -291,8 +254,8 @@ static Field expr_field(LexState* ls)
     if(lex_match(ls, '['))
     {
         Expr* idx = expr(ls);
-        lex_consume(ls, ']');
-        lex_consume(ls, '=');
+        vp_lex_consume(ls, ']');
+        vp_lex_consume(ls, '=');
         Expr* e = expr(ls);
         return (Field){.loc = loc, .kind = FIELD_IDX, .init = e, .idx = idx};
     }
@@ -324,7 +287,7 @@ static Expr* expr_comp_type(LexState* ls, TypeSpec* spec)
         if(!lex_match(ls, ','))
             break;
     }
-    lex_consume(ls, '}');
+    vp_lex_consume(ls, '}');
     return vp_expr_comp(loc, spec, fields);
 }
 
@@ -504,9 +467,9 @@ static Type* tok2type(LexToken tok)
 static TypeSpec* parse_typeof(LexState* ls)
 {
     SrcLoc loc = lex_srcloc(ls);
-    lex_consume(ls, '(');
+    vp_lex_consume(ls, '(');
     Expr* e = expr(ls);
-    lex_consume(ls, ')');
+    vp_lex_consume(ls, ')');
     return vp_typespec_typeof(loc, e);
 }
 
@@ -520,10 +483,10 @@ static TypeSpec* parse_type_fnarr(LexState* ls)
     vec_t(TypeSpec*) arrdims = NULL;
     while(lex_check(ls, '['))
     {
-        lex_consume(ls, '[');
+        vp_lex_consume(ls, '[');
         Expr* size = NULL;
         if(!lex_check(ls, ']')) size = expr(ls);
-        lex_consume(ls, ']');
+        vp_lex_consume(ls, ']');
         TypeSpec* arrspec = vp_typespec_arr(loc, NULL, size);
         vec_push(arrdims, arrspec);
     }
@@ -546,7 +509,7 @@ static TypeSpec* parse_type_fn(LexState* ls)
 {
     SrcLoc loc = lex_srcloc(ls);
     vec_t(TypeSpec*) args = NULL;
-    lex_consume(ls, '(');
+    vp_lex_consume(ls, '(');
     if(!lex_check(ls, ')'))
     {
         do
@@ -564,8 +527,8 @@ static TypeSpec* parse_type_fn(LexState* ls)
         }
         while(lex_match(ls, ','));
     }
-    lex_consume(ls, ')');
-    lex_consume(ls, ':');
+    vp_lex_consume(ls, ')');
+    vp_lex_consume(ls, ':');
     TypeSpec* ret = parse_type(ls);
     return vp_typespec_fn(loc, ret, args);
 }
@@ -615,12 +578,12 @@ static TypeSpec* parse_type(LexState* ls)
         {
             Expr* size = NULL;
             if(!lex_check(ls, ']')) size = expr(ls);
-            lex_consume(ls, ']');
+            vp_lex_consume(ls, ']');
             spec = vp_typespec_arr(loc, spec, size);
         }
         else
         {
-            lex_consume(ls, '*');
+            vp_lex_consume(ls, '*');
             spec = vp_typespec_ptr(loc, spec);
         }
     }
@@ -658,9 +621,9 @@ static Decl* parse_note(LexState* ls)
             if(!lex_match(ls, ','))
                 break;
         }
-        lex_consume(ls, ')');
+        vp_lex_consume(ls, ')');
     }
-    lex_consume(ls, ';');
+    vp_lex_consume(ls, ';');
     Note note = (Note){.loc = loc, .name = name, .args = args};
     return vp_decl_note(loc, note);
 }
@@ -669,7 +632,7 @@ static Decl* parse_note(LexState* ls)
 static Stmt* parse_block(LexState* ls)
 {
     vec_t(Stmt*) stmts = NULL;
-    lex_consume(ls, '{');
+    vp_lex_consume(ls, '{');
     SrcLoc loc = lex_srcloc(ls);
     while(!lex_check(ls, '}') && !lex_check(ls, TK_eof))
     {
@@ -685,7 +648,7 @@ static Stmt* parse_block(LexState* ls)
         }
         vec_push(stmts, st);
     }
-    lex_consume(ls, '}');
+    vp_lex_consume(ls, '}');
     return vp_stmt_block(loc, stmts);
 }
 
@@ -732,7 +695,7 @@ static Stmt* parse_breakcontinue(LexState* ls, LexToken tok)
     vp_lex_next(ls);    /* Skip 'break'/'continue' */
     SrcLoc loc = lex_srcloc(ls);
     Str* name = ls->val.name;
-    lex_consume(ls, ';');
+    vp_lex_consume(ls, ';');
     if(loopcount == 0)
     {
         vp_err_error(loc, "'%.*s' cannot be used", name->len, str_data(name));
@@ -746,29 +709,40 @@ static Stmt* parse_return(LexState* ls)
     vp_lex_next(ls);    /* Skip 'return' */
     SrcLoc loc = lex_srcloc(ls);
     Expr* e = expr(ls);
-    lex_consume(ls, ';');
+    vp_lex_consume(ls, ';');
     return vp_stmt_return(loc, e);
+}
+
+/* Parse 'asm' statement */
+static Stmt* parse_asm(LexState* ls)
+{
+    vp_lex_next(ls);    /* Skip 'asm' */
+    SrcLoc loc = lex_srcloc(ls);
+    vp_lex_consume(ls, '{');
+    vec_t(Inst*) insts = vp_asm_x64(ls);
+    vp_lex_consume(ls, '}');
+    return vp_stmt_asm(loc, insts);
 }
 
 /* Parse fn parameters */
 static Param* parse_params(LexState* ls)
 {
     Param* params = NULL;
-    lex_consume(ls, '(');
+    vp_lex_consume(ls, '(');
     if(!lex_check(ls, ')'))
     {
         do
         {
             SrcLoc loc = lex_srcloc(ls);
             Str* name = lex_name(ls);
-            lex_consume(ls, ':');
+            vp_lex_consume(ls, ':');
             TypeSpec* spec = parse_type(ls);
             Param p = (Param){.loc = loc, .name = name, .spec = spec};
             vec_push(params, p);
         }
         while(lex_match(ls, ','));
     }
-    lex_consume(ls, ')');
+    vp_lex_consume(ls, ')');
     return params;
 }
 
@@ -777,9 +751,9 @@ static Decl* parse_typedef(LexState* ls)
     vp_lex_next(ls);    /* Skip 'type' */
     SrcLoc loc = lex_srcloc(ls);
     Str* name = lex_name(ls);
-    lex_consume(ls, '=');
+    vp_lex_consume(ls, '=');
     TypeSpec* spec = parse_type(ls);
-    lex_consume(ls, ';');
+    vp_lex_consume(ls, ';');
     return vp_decl_type(loc, name, spec);
 }
 
@@ -804,9 +778,9 @@ static AggregateItem parse_aggr_item(LexState* ls)
             vec_push(names, name);
         }
         while(lex_match(ls, ','));
-        lex_consume(ls, ':');
+        vp_lex_consume(ls, ':');
         TypeSpec* spec = parse_type(ls);
-        lex_consume(ls, ';');
+        vp_lex_consume(ls, ';');
         return (AggregateItem) {
             .loc = loc,
             .kind = AGR_ITEM_FIELD,
@@ -819,7 +793,7 @@ static AggregateItem parse_aggr_item(LexState* ls)
 /* Parse struct/union item */
 static Aggregate* parse_aggr(LexState* ls)
 {
-    lex_consume(ls, '{');
+    vp_lex_consume(ls, '{');
     SrcLoc loc = lex_srcloc(ls);
     vec_t(AggregateItem) items = NULL;
     while(!lex_check(ls, '}') && !lex_check(ls, TK_eof))
@@ -827,7 +801,7 @@ static Aggregate* parse_aggr(LexState* ls)
         AggregateItem item = parse_aggr_item(ls);
         vec_push(items, item);
     }
-    lex_consume(ls, '}');
+    vp_lex_consume(ls, '}');
     return vp_aggr_new(loc, AGR_STRUCT, items);
 }
 
@@ -861,7 +835,7 @@ static Decl* parse_enum(LexState* ls)
     {
         spec = parse_type(ls);
     }
-    lex_consume(ls, '{');
+    vp_lex_consume(ls, '{');
     vec_t(EnumItem) items = NULL;
     while(!lex_check(ls, '}') && !lex_check(ls, TK_eof))
     {
@@ -872,7 +846,7 @@ static Decl* parse_enum(LexState* ls)
             break;
         }
     }
-    lex_consume(ls, '}');
+    vp_lex_consume(ls, '}');
     return vp_decl_enum(loc, name, spec, items);
 }
 
@@ -884,7 +858,7 @@ static Decl* parse_fn(LexState* ls)
     Str* name = lex_name(ls);
 
     Param* params = parse_params(ls);
-    lex_consume(ls, ':');
+    vp_lex_consume(ls, ':');
     TypeSpec* ret = parse_type(ls);
 
     Stmt* body;
@@ -911,7 +885,7 @@ static Decl* parse_var(LexState* ls)
         spec = parse_type(ls);
 
     Expr* e = lex_match(ls, '=') ? expr(ls) : NULL;
-    lex_consume(ls, ';');
+    vp_lex_consume(ls, ';');
 
     return vp_decl_var(loc, name, spec, e);
 }
@@ -947,7 +921,7 @@ static Stmt* parse_stmt_simple(LexState* ls)
             st = vp_stmt_expr(e->loc, e);
             break;
     }
-    lex_consume(ls, ';');
+    vp_lex_consume(ls, ';');
     return st;
 }
 
@@ -969,6 +943,9 @@ static Stmt* parse_stmt(LexState* ls)
             break;
         case TK_return:
             st = parse_return(ls);
+            break;
+        case TK_asm:
+            st = parse_asm(ls);
             break;
         case '{':
             st = parse_block(ls);
