@@ -12,6 +12,8 @@ typedef enum OpCode
 {
     NONE,
     MOV_RR, MOV_RI, MOV_RM, MOV_MR,
+    OR_RR,
+    SHL_RR, SHL_RI,
     RDTSC,
     CPUID,
     RET,

@@ -12,6 +12,8 @@ typedef enum RawOpCode
 {
     R_NONE,
     R_MOV,
+    R_OR,
+    R_SHL,
     R_RDTSC,
     R_CPUID,
     R_RET,
@@ -19,6 +21,8 @@ typedef enum RawOpCode
 
 const char* opcode[] = {
     "mov",
+    "or",
+    "shl",
     "rdtsc",
     "cpuid",
     "ret",
@@ -63,7 +67,7 @@ const RegInfo regs[] = {
 typedef struct
 {
     uint32_t op;
-    uint32_t flags[4 + 1];
+    uint32_t flags[4 + 1];  /* +1 for terminator */
 } OpArray;
 
 typedef struct
@@ -81,6 +85,14 @@ const InstTable insttab[] = {
         &(OpArray){MOV_RI, {R8 | R16 | R32 | R64, IMM}},  /* mov reg, imm */
         &(OpArray){MOV_RM, {R8 | R16 | R32 | R64, IND}},  /* mov reg, [mem] */
         &(OpArray){MOV_MR, {IND, R8 | R16 | R32 | R64}},  /* mov [mem], reg */
+        }
+    },
+    [R_OR] = { 1, (const OpArray*[]){
+        &(OpArray){OR_RR, {R64, R64}},  /* or reg64, reg64 */
+        }
+    },
+    [R_SHL] = { 1, (const OpArray*[]){
+        &(OpArray){SHL_RI, {R64, IMM}},  /* shl reg, imm */
         }
     },
     [R_RDTSC] = { 1, (const OpArray*[]){
@@ -346,10 +358,21 @@ static RawOpCode asm_opcode(Str* s)
     return R_NONE;
 }
 
+static Str* asm_consume(LexState* ls)
+{
+    if(!lex_check(ls, TK_name) && 
+        !lex_check(ls, TK_and) && !lex_check(ls, TK_or))
+    {
+        vp_lex_error(ls, "'<name>' expected");
+    }
+    vp_lex_next(ls);
+    return ls->val.name;
+}
+
 /* Parse an x64 instruction */
 static Inst* asm_inst(LexState* ls)
 {
-    Str* s = lex_name(ls);
+    Str* s = asm_consume(ls);
     SrcLoc loc = lex_srcloc(ls);
     RawOpCode op = asm_opcode(s);
     if(VP_LIKELY(op != R_NONE))

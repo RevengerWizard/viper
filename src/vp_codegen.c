@@ -990,7 +990,11 @@ static void gen_while_stmt(Stmt* st)
 static void gen_asm(Stmt* st)
 {
     vp_assertX(st->kind == ST_ASM, "not asm statement");
-    UNUSED(st);
+    for(uint32_t i = 0; i < vec_len(st->asm_.insts); i++)
+    {
+        Inst* inst = st->asm_.insts[i];
+        vp_ir_asm(inst);
+    }
 }
 
 typedef void (*GenStmtFn)(Stmt*);

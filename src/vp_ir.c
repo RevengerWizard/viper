@@ -173,6 +173,13 @@ IR* vp_ir_keep(VReg* dst, VReg* src1, VReg* src2)
     return ir;
 }
 
+IR* vp_ir_asm(Inst* inst)
+{
+    IR* ir = ir_new(IR_ASM);
+    ir->asm_.inst = inst;
+    return ir;
+}
+
 static VReg* ir_binop_fold(IrKind kind, VReg* src1, VReg* src2, VRSize vsize, uint8_t irflag)
 {
     if((src2->flag & (VRF_FLO | VRF_CONST)) == VRF_CONST && src2->i64 == 0 &&

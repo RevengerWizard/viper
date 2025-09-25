@@ -89,6 +89,7 @@ typedef struct VReg
     _(CALL, d12) \
     _(CAST, d12) \
     _(KEEP, d12) \
+    _(ASM, d12) \
     /* Binary operators */ \
     _(ADD, d12) _(SUB, d12) \
     _(MUL, d12) _(DIV, d12) _(MOD, d12) \
@@ -191,6 +192,10 @@ typedef struct IR
         {
             bool srcunsigned;
         } cast;
+        struct
+        {
+            struct Inst* inst;
+        } asm_;
     };
 } IR;
 
@@ -233,6 +238,7 @@ IR* vp_ir_pusharg(VReg* src, uint32_t idx);
 IR* vp_ir_call(IRCallInfo* ci, VReg* dst, VReg* freg);
 IR* vp_ir_cast(VReg* src, bool srcunsigned, VRSize dstsize, uint8_t vflag);
 IR* vp_ir_keep(VReg* dst, VReg* src1, VReg* src2);
+IR* vp_ir_asm(struct Inst* inst);
 VReg* vp_ir_binop(IrKind kind, VReg* src1, VReg* src2, VRSize vsize, uint8_t irflag);
 VReg* vp_ir_unary(IrKind kind, VReg* src, VRSize vsize, uint8_t irflag);
 

@@ -3,7 +3,8 @@
 ** Instruction selection (IR -> x64)
 */
 
-#include "vp_emit_x64.c"
+#include "vp_asm.h"
+#include "vp_emit_x64.h"
 
 #include "vp_sel.h"
 #include "vp_ir.h"
@@ -31,418 +32,6 @@ RegSet sel_extra(RegAlloc* ra, IR* ir)
         ioccupy |= 1ULL << RBP;
     ioccupy |= 1ULL << RSP;
     return ioccupy;
-}
-
-static void emit_mov_rr(VRSize p, uint32_t r1, uint32_t r2)
-{
-    switch(p)
-    {
-    case VRSize1: emit_mov8_rr(V, r1, r2); break;
-    case VRSize2: emit_mov16_rr(V, r1, r2); break;
-    case VRSize4: emit_mov32_rr(V, r1, r2); break;
-    case VRSize8: emit_mov64_rr(V, r1, r2); break;
-    }
-}
-
-static void emit_mov_ri(VRSize p, uint32_t r, int64_t i)
-{
-    switch(p)
-    {
-    case VRSize1: emit_mov8_ri(V, r, i); break;
-    case VRSize2: emit_mov16_ri(V, r, i); break;
-    case VRSize4: emit_mov32_ri(V, r, i); break;
-    case VRSize8: emit_mov64_ri(V, r, i); break;
-    }
-}
-
-static void emit_add_rr(VRSize p, uint32_t r1, uint32_t r2)
-{
-    switch(p)
-    {
-    case VRSize1: emit_add8_rr(V, r1, r2); break;
-    case VRSize2: emit_add16_rr(V, r1, r2); break;
-    case VRSize4: emit_add32_rr(V, r1, r2); break;
-    case VRSize8: emit_add64_rr(V, r1, r2); break;
-    }
-}
-
-static void emit_add_ri(VRSize p, uint32_t r, int64_t i)
-{
-    switch(p)
-    {
-    case VRSize1: emit_add8_ri(V, r, i); break;
-    case VRSize2: emit_add16_ri(V, r, i); break;
-    case VRSize4: emit_add32_ri(V, r, i); break;
-    case VRSize8: emit_add64_ri(V, r, i); break;
-    }
-}
-
-static void emit_sub_rr(VRSize p, uint32_t r1, uint32_t r2)
-{
-    switch(p)
-    {
-    case VRSize1: emit_sub8_rr(V, r1, r2); break;
-    case VRSize2: emit_sub16_rr(V, r1, r2); break;
-    case VRSize4: emit_sub32_rr(V, r1, r2); break;
-    case VRSize8: emit_sub64_rr(V, r1, r2); break;
-    }
-}
-
-static void emit_sub_ri(VRSize p, uint32_t r, int64_t i)
-{
-    switch(p)
-    {
-    case VRSize1: emit_sub8_ri(V, r, i); break;
-    case VRSize2: emit_sub16_ri(V, r, i); break;
-    case VRSize4: emit_sub32_ri(V, r, i); break;
-    case VRSize8: vp_assertX(0, "?"); break;
-    }
-}
-
-static void emit_mul_r(VRSize p, uint32_t r)
-{
-    switch(p)
-    {
-    case VRSize1: emit_mul8_r(V, r); break;
-    case VRSize2: emit_mul16_r(V, r); break;
-    case VRSize4: emit_mul32_r(V, r); break;
-    case VRSize8: emit_mul64_r(V, r); break;
-    }
-}
-
-static void emit_div_r(VRSize p, uint32_t r)
-{
-    switch(p)
-    {
-    case VRSize1: emit_div8_r(V, r); break;
-    case VRSize2: emit_div16_r(V, r); break;
-    case VRSize4: emit_div32_r(V, r); break;
-    case VRSize8: emit_div64_r(V, r); break;
-    }
-}
-
-static void emit_idiv_r(VRSize p, uint32_t r)
-{
-    switch(p)
-    {
-    case VRSize1: emit_idiv8_r(V, r); break;
-    case VRSize2: emit_idiv16_r(V, r); break;
-    case VRSize4: emit_idiv32_r(V, r); break;
-    case VRSize8: emit_idiv64_r(V, r); break;
-    }
-}
-
-static void emit_and_rr(VRSize p, uint32_t r1, uint32_t r2)
-{
-    switch(p)
-    {
-    case VRSize1: emit_and8_rr(V, r1, r2); break;
-    case VRSize2: emit_and16_rr(V, r1, r2); break;
-    case VRSize4: emit_and32_rr(V, r1, r2); break;
-    case VRSize8: emit_and64_rr(V, r1, r2); break;
-    }
-}
-
-static void emit_and_ri(VRSize p, uint32_t r, int64_t i)
-{
-    switch(p)
-    {
-    case VRSize1: emit_and8_ri(V, r, i); break;
-    case VRSize2: emit_and16_ri(V, r, i); break;
-    case VRSize4: emit_and32_ri(V, r, i); break;
-    case VRSize8: vp_assertX(0, "?"); break;
-    }
-}
-
-static void emit_or_rr(VRSize p, uint32_t r1, uint32_t r2)
-{
-    switch(p)
-    {
-    case VRSize1: emit_or8_rr(V, r1, r2); break;
-    case VRSize2: emit_or16_rr(V, r1, r2); break;
-    case VRSize4: emit_or32_rr(V, r1, r2); break;
-    case VRSize8: emit_or64_rr(V, r1, r2); break;
-    }
-}
-
-static void emit_or_ri(VRSize p, uint32_t r, int64_t i)
-{
-    switch(p)
-    {
-    case VRSize1: emit_or8_ri(V, r, i); break;
-    case VRSize2: emit_or16_ri(V, r, i); break;
-    case VRSize4: emit_or32_ri(V, r, i); break;
-    case VRSize8: vp_assertX(0, "?"); break;
-    }
-}
-
-static void emit_xor_rr(VRSize p, uint32_t r1, uint32_t r2)
-{
-    switch(p)
-    {
-    case VRSize1: emit_xor8_rr(V, r1, r2); break;
-    case VRSize2: emit_xor16_rr(V, r1, r2); break;
-    case VRSize4: emit_xor32_rr(V, r1, r2); break;
-    case VRSize8: emit_xor64_rr(V, r1, r2); break;
-    }
-}
-
-static void emit_xor_ri(VRSize p, uint32_t r, int64_t i)
-{
-    switch(p)
-    {
-    case VRSize1: emit_xor8_ri(V, r, i); break;
-    case VRSize2: emit_xor16_ri(V, r, i); break;
-    case VRSize4: emit_xor32_ri(V, r, i); break;
-    case VRSize8: vp_assertX(0, "?"); break;
-    }
-}
-
-static void emit_shl_ri(VRSize p, uint32_t r, uint8_t i)
-{
-    switch(p)
-    {
-    case VRSize1: emit_shl_r8i8(V, r, i); break;
-    case VRSize2: emit_shl_r16i8(V, r, i); break;
-    case VRSize4: emit_shl_r32i8(V, r, i); break;
-    case VRSize8: emit_shl_r64i8(V, r, i); break;
-    }
-}
-
-static void emit_shl_rcl(VRSize p, uint32_t r)
-{
-    switch(p)
-    {
-    case VRSize1: emit_shl_r8cl(V, r); break;
-    case VRSize2: emit_shl_r16cl(V, r); break;
-    case VRSize4: emit_shl_r32cl(V, r); break;
-    case VRSize8: emit_shl_r64cl(V, r); break;
-    }
-}
-
-static void emit_shr_ri(VRSize p, uint32_t r, uint8_t i)
-{
-    switch(p)
-    {
-    case VRSize1: emit_shr8_ri(V, r, i); break;
-    case VRSize2: emit_shr_r16i8(V, r, i); break;
-    case VRSize4: emit_shr_r32i8(V, r, i); break;
-    case VRSize8: emit_shr_r64i8(V, r, i); break;
-    }
-}
-
-static void emit_shr_rcl(VRSize p, uint32_t r)
-{
-    switch(p)
-    {
-    case VRSize1: emit_shr_r8cl(V, r); break;
-    case VRSize2: emit_shr_r16cl(V, r); break;
-    case VRSize4: emit_shr_r32cl(V, r); break;
-    case VRSize8: emit_shr_r64cl(V, r); break;
-    }
-}
-
-static void emit_sar_ri(VRSize p, uint32_t r, uint8_t i)
-{
-    switch(p)
-    {
-    case VRSize1: emit_sar_r8i8(V, r, i); break;
-    case VRSize2: emit_sar_r16i8(V, r, i); break;
-    case VRSize4: emit_sar_r32i8(V, r, i); break;
-    case VRSize8: emit_sar_r64i8(V, r, i); break;
-    }
-}
-
-static void emit_sar_rcl(VRSize p, uint32_t r)
-{
-    switch(p)
-    {
-    case VRSize1: emit_sar_r8cl(V, r); break;
-    case VRSize2: emit_sar_r16cl(V, r); break;
-    case VRSize4: emit_sar_r32cl(V, r); break;
-    case VRSize8: emit_sar_r64cl(V, r); break;
-    }
-}
-
-static void emit_inc_r(VRSize p, uint32_t r)
-{
-    switch(p)
-    {
-    case VRSize1: emit_inc8_r(V, r); break;
-    case VRSize2: emit_inc16_r(V, r); break;
-    case VRSize4: emit_inc32_r(V, r); break;
-    case VRSize8: emit_inc64_r(V, r); break;
-    }
-}
-
-static void emit_dec_r(VRSize p, uint32_t r)
-{
-    switch(p)
-    {
-    case VRSize1: emit_dec8_r(V, r); break;
-    case VRSize2: emit_dec16_r(V, r); break;
-    case VRSize4: emit_dec32_r(V, r); break;
-    case VRSize8: emit_dec64_r(V, r); break;
-    }
-}
-
-static void emit_neg_r(VRSize p, uint32_t r)
-{
-    switch(p)
-    {
-    case VRSize1: emit_neg8_r(V, r); break;
-    case VRSize2: emit_neg16_r(V, r); break;
-    case VRSize4: emit_neg32_r(V, r); break;
-    case VRSize8: emit_neg64_r(V, r); break;
-    }
-}
-
-static void emit_not_r(VRSize p, uint32_t r)
-{
-    switch(p)
-    {
-    case VRSize1: emit_not8_r(V, r); break;
-    case VRSize2: emit_not16_r(V, r); break;
-    case VRSize4: emit_not32_r(V, r); break;
-    case VRSize8: emit_not64_r(V, r); break;
-    }
-}
-
-static void emit_test_r(VRSize p, uint32_t r1, uint32_t r2)
-{
-    switch(p)
-    {
-    case VRSize1: emit_test8_rr(V, r1, r2); break;
-    case VRSize2: emit_test16_rr(V, r1, r2); break;
-    case VRSize4: emit_test32_rr(V, r1, r2); break;
-    case VRSize8: emit_test64_rr(V, r1, r2); break;
-    }
-}
-
-static void emit_cmp_ri(VRSize p, uint32_t r, int64_t i)
-{
-    switch(p)
-    {
-    case VRSize1: emit_cmp8_ri(V, r, i); break;
-    case VRSize2: emit_cmp16_ri(V, r, i); break;
-    case VRSize4: emit_cmp32_ri(V, r, i); break;
-    case VRSize8: vp_assertX(0, "?"); break;
-    }
-}
-
-static void emit_cmp_rr(VRSize p, uint32_t r1, uint32_t r2)
-{
-    switch(p)
-    {
-    case VRSize1: emit_cmp8_rr(V, r1, r2); break;
-    case VRSize2: emit_cmp16_rr(V, r1, r2); break;
-    case VRSize4: emit_cmp32_rr(V, r1, r2); break;
-    case VRSize8: emit_cmp64_rr(V, r1, r2); break;
-    }
-}
-
-static void emit_movsx_rr(VRSize pd, VRSize ps, X64Reg dst, X64Reg src)
-{
-    switch(pd)
-    {
-        case VRSize8:
-            switch(ps)
-            {
-                case VRSize4: emit_movsx_r64r32(V, dst, src); break;
-                case VRSize2: emit_movsx_r64r16(V, dst, src); break;
-                case VRSize1: emit_movsx_r64r8(V, dst, src); break;
-                default: vp_assertX(0, "?"); break;
-            }
-            break;
-        case VRSize4:
-            switch(ps)
-            {
-                case VRSize2: emit_movsx_r32r16(V, dst, src); break;
-                case VRSize1: emit_movsx_r32r8(V, dst, src); break;
-                default: vp_assertX(0, "?"); break;
-            }
-            break;
-        case VRSize2:
-            switch(ps)
-            {
-                case VRSize1: emit_movsx_r16r8(V, dst, src); break;
-                default: vp_assertX(0, "?"); break;
-            }
-            break;
-        default:
-            vp_assertX(0, "?");
-            break;
-    }
-}
-
-static void emit_movzx_rr(VRSize pd, VRSize ps, uint32_t r1, uint32_t r2)
-{
-    switch(pd)
-    {
-    case VRSize2:
-        vp_assertX(ps == VRSize1, "invalid size combination");
-        emit_movzx_r16r8(V, r1, r2);
-        break;
-    case VRSize4:
-        switch(ps)
-        {
-        case VRSize1: emit_movzx_r32r8(V, r1, r2); break;
-        case VRSize2: emit_movzx_r32r16(V, r1, r2); break;
-        default: vp_assertX(0, "?"); break;
-        }
-        break;
-    case VRSize8:
-        switch(ps)
-        {
-        case VRSize1: emit_movzx_r64r8(V, r1, r2); break;
-        case VRSize2: emit_movzx_r64r16(V, r1, r2); break;
-        default: vp_assertX(0, "?"); break;
-        }
-        break;
-    default:
-        vp_assertX(0, "?");
-        break;
-    }
-}
-
-static void emit_cvttss2si_rx(VRSize p, uint32_t r1, uint32_t r2)
-{
-    switch(p)
-    {
-    case VRSize4: emit_cvttss2si_r32x(V, r1, r2); break;
-    case VRSize8: emit_cvttss2si_r64x(V, r1, r2); break;
-    default: vp_assertX(0, "?"); break;
-    }
-}
-
-static void emit_cvttsd2si_rx(VRSize p, uint32_t r1, uint32_t r2)
-{
-    switch(p)
-    {
-    case VRSize4: emit_cvttsd2si_r32x(V, r1, r2); break;
-    case VRSize8: emit_cvttsd2si_r64x(V, r1, r2); break;
-    default: vp_assertX(0, "?"); break;
-    }
-}
-
-static void emit_cvtsi2ss_xr(VRSize p, uint32_t r1, uint32_t r2)
-{
-    switch(p)
-    {
-        case VRSize4: emit_cvtsi2ss_xr64(V, r1, r2);
-        case VRSize8: emit_cvtsi2ss_xr32(V, r1, r2);
-        default: vp_assertX(0, "?"); break;
-    }
-}
-
-static void emit_cvtsi2sd_xr(VRSize p, uint32_t r1, uint32_t r2)
-{
-    switch(p)
-    {
-        case VRSize4: emit_cvtsi2sd_xr64(V, r1, r2);
-        case VRSize8: emit_cvtsi2sd_xr32(V, r1, r2);
-        default: vp_assertX(0, "?"); break;
-    }
 }
 
 static void emit_mov(VReg* dst, VReg* src)
@@ -816,6 +405,121 @@ static void sel_cast(IR* ir)
 static void sel_keep(IR* ir)
 {
     UNUSED(ir);
+}
+
+X64Reg regtype_to_x64reg(RegType reg)
+{
+    if(reg <= R15B)
+    {
+        return (X64Reg)((reg > BL) ? (reg - R8B + 8) : reg);
+    }
+    else if(reg >= SPL && reg <= DIL)
+    {
+        switch(reg)
+        {
+            case SPL: return RSP;
+            case BPL: return RBP;
+            case SIL: return RSI;
+            case DIL: return RDI;
+            default: vp_assertX(0, "?");
+        }
+    }
+    else if(reg >= AX && reg <= R15W)
+    {
+        return (X64Reg)(reg - AX);
+    }
+    else if(reg >= EAX && reg <= R15D)
+    {
+        return (X64Reg)(reg - EAX);
+    }
+    else if(reg >= xRAX && reg <= xR15)
+    {
+        return (X64Reg)(reg - xRAX);
+    }
+    else if(reg == xRIP)
+    {
+        return RIP;
+    }
+    vp_assertX(0, "invalid RegType value");
+    return -1;
+}
+
+static VRSize regtype_to_vrsize(RegType reg)
+{
+    if((reg >= AL && reg <= BH) || (reg >= R8B && reg <= DIL)) return VRSize1;
+    if((reg >= AX && reg <= DI) || (reg >= R8W && reg <= R15W)) return VRSize2;
+    if((reg >= EAX && reg <= EDI) || (reg >= R8D && reg <= R15D)) return VRSize4;
+    if((reg >= xRAX && reg <= xR15) || reg == xRIP) return VRSize8;
+    vp_assertX(0, "unknown register size for %d", reg);
+    return VRSize8;
+}
+
+static void emit_asm_mov_rr(Inst* inst)
+{
+    RegType dst = inst->oprs[0].reg;
+    RegType src = inst->oprs[1].reg;
+    VRSize size = regtype_to_vrsize(dst);
+    vp_assertX(size == regtype_to_vrsize(src), "register size mismatch");
+    
+    X64Reg x64_dst = regtype_to_x64reg(dst);
+    X64Reg x64_src = regtype_to_x64reg(src);
+    emit_mov_rr(size, x64_dst, x64_src);
+}
+
+static void emit_asm_or_rr(Inst* inst)
+{
+    RegType dst = inst->oprs[0].reg;
+    RegType src = inst->oprs[1].reg;
+    VRSize size = regtype_to_vrsize(dst);
+    vp_assertX(size == regtype_to_vrsize(src), "register size mismatch");
+    X64Reg x64_dst = regtype_to_x64reg(dst);
+    X64Reg x64_src = regtype_to_x64reg(src);
+    emit_or_rr(size, x64_dst, x64_src);
+}
+
+static void emit_asm_shl_ri(Inst* inst)
+{
+    RegType reg = inst->oprs[0].reg;
+    int64_t imm = inst->oprs[1].imm;
+    VRSize size = regtype_to_vrsize(reg);
+    X64Reg x64_reg = regtype_to_x64reg(reg);
+    emit_shl_ri(size, x64_reg, imm);
+}
+
+static void emit_asm_rdtsc(Inst* inst)
+{
+    UNUSED(inst);
+    emit_rdtsc(V);
+}
+
+static void emit_asm_cpuid(Inst* inst)
+{
+    UNUSED(inst);
+    emit_cpuid(V);
+}
+
+static void emit_asm_ret(Inst* inst)
+{
+    UNUSED(inst);
+    emit_ret(V);
+}
+
+typedef void (*EmitAsmFn)(Inst* inst);
+static const EmitAsmFn emitinsttab[] = {
+    [MOV_RR] = emit_asm_mov_rr,
+    [OR_RR] = emit_asm_or_rr,
+    [SHL_RI] = emit_asm_shl_ri,
+    [RDTSC] = emit_asm_rdtsc,
+    [CPUID] = emit_asm_cpuid,
+    [RET] = emit_asm_ret,
+};
+
+static void sel_asm(IR* ir)
+{
+    Inst* inst = ir->asm_.inst;
+    vp_assertX(inst->op < (int)ARRSIZE(emitinsttab), "out of bounds opcode");
+    vp_assertX(emitinsttab[inst->op], "empty entry %d", inst->op);
+    (*emitinsttab[inst->op])(inst);
 }
 
 static void cmp_vregs(VReg* src1, VReg* src2, CondKind cond)
@@ -1332,6 +1036,7 @@ static const SelIRFn seltab[] = {
     [IR_CALL] = sel_call,
     [IR_CAST] = sel_cast,
     [IR_KEEP] = sel_keep,
+    [IR_ASM] = sel_asm,
     [IR_ADD] = sel_add, [IR_SUB] = sel_sub,
     [IR_MUL] = sel_mul, [IR_DIV] = sel_div, [IR_MOD] = sel_mod,
     [IR_BAND] = sel_band, [IR_BOR] = sel_bor, [IR_BXOR] = sel_bxor,
