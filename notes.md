@@ -2,6 +2,8 @@
 
 `1u8` `1i8` `1u16` `1i16` `1u32` `1i32` `1u64` `1i64` | `1u128` `1i128`
 
+`1f32` `1f64`
+
 `1uz` (usize)
 
 `1iz` (isize)
@@ -13,6 +15,8 @@
 `uint8` `int8` `uint16` `int16` `uint32` `int32` `uint64` `int64` | `uint128` `int128`
 
 `isize` `usize`
+
+`float16` `float32` `float64` `float80` ?
 
 `float` `double`
 
@@ -42,9 +46,26 @@ custom-width integer types
 
 ---
 
+### cmd
+
+`nostd`
+
 ### asm blocks
 
 intel syntax!
+
+`asm` functions?
+
+`inline` `asm` functions?
+
+```
+fn asm rdtsc() : int64
+{
+    rdtsc;
+    shl rdx, 32;
+    or rax, rdx;
+}
+```
 
 ```
 asm
