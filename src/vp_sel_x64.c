@@ -460,7 +460,7 @@ static void emit_asm_mov_rr(Inst* inst)
     RegType src = inst->oprs[1].reg;
     VRSize size = regtype_to_vrsize(dst);
     vp_assertX(size == regtype_to_vrsize(src), "register size mismatch");
-    
+
     X64Reg x64_dst = regtype_to_x64reg(dst);
     X64Reg x64_src = regtype_to_x64reg(src);
     emit_mov_rr(size, x64_dst, x64_src);
@@ -603,7 +603,7 @@ static void sel_cond(IR* ir)
     {
         vp_assertX(0, "not implemented");
     }
-    
+
     cmp_vregs(src1, src2, cond);
 
     X64CC cc = cond2cc(cond);
@@ -638,7 +638,7 @@ static void sel_jmp(IR* ir)
             src1 = src2;
             src2 = tmp;
             cond = vp_cond_swap(cond);
-            break;   
+            break;
         }
         default: break;
         }
@@ -787,7 +787,7 @@ static void sel_div(IR* ir)
         default: vp_assertX(0, "?"); break;
         }
     }
-    else 
+    else
     {
         vp_assertX(ir->dst->phys == ir->src1->phys, "dst == src1");
         vp_assertX(ir->src2->phys != RAX, "src2 == RAX");
@@ -1258,9 +1258,9 @@ static void patch_infos(PatchInfo* patch, bool iscall)
         {
             ofs = p->target->ofs;
         }
-        
+
         int32_t rel = ofs - (from + 4);
-        
+
         uint8_t* code = (uint8_t*)(V->code.b + p->ofs);
         *(uint32_t*)code = (uint32_t)rel;
     }
@@ -1327,7 +1327,7 @@ void vp_sel(vec_t(Code*) codes)
     {
         emit_body(codes[i]);
     }
-    
+
     patch_infos(jmps, false);
     patch_infos(calls, true);
 }

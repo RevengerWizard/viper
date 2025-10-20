@@ -310,7 +310,7 @@ static VReg* gen_ref(Expr* e)
             uint32_t offset = vp_type_offset(basety, e->field.name);
             if(offset == 0)
                 return base;
-            
+
             /* base + offset */
             VReg* ofsreg = vp_vreg_ki(offset, VRSize8);
             return vp_ir_binop(IR_ADD, base, ofsreg, VRSize8, IRF_UNSIGNED);
@@ -370,7 +370,7 @@ static VReg* gen_idx(Expr* e)
 static VReg* gen_call(Expr* e)
 {
     vp_assertX(e->kind == EX_CALL, "not a call expression");
-    
+
     typedef struct
     {
         uint32_t regidx;
@@ -416,7 +416,7 @@ static VReg* gen_call(Expr* e)
             vec_push(arginfos, p);
         }
     }
-    
+
     /* Generate arguments */
     {
         for(uint32_t i = argnum; i-- > 0;)
@@ -525,15 +525,15 @@ typedef struct FlatField
 static void flatten_complit(Expr* e, uint32_t base_offset, vec_t(FlatField*) flat_fields)
 {
     vp_assertX(e->kind == EX_COMPLIT, "not a compound literal");
-    
+
     Type* compty = e->ty;
     Field* fields = e->comp.fields;
-    
+
     for(uint32_t i = 0; i < vec_len(fields); i++)
     {
         Field* field = &e->comp.fields[i];
         uint32_t field_offset = 0;
-        
+
         /* Calculate field offset */
         switch(field->kind)
         {
@@ -563,7 +563,7 @@ static void flatten_complit(Expr* e, uint32_t base_offset, vec_t(FlatField*) fla
                 vp_assertX(0, "unknown field kind");
                 break;
         }
-        
+
         /* Check if the field initializer is another compound literal */
         if(field->init->kind == EX_COMPLIT)
         {
@@ -586,13 +586,13 @@ static VReg* gen_complit(Expr* e)
 {
     vp_assertX(e->kind == EX_COMPLIT, "compound literal");
     vp_assertX(e->ty, "missing compound type");
-    
+
     FrameInfo* fi = vp_frameinfo_new();
     VReg* base = vp_ir_bofs(fi)->dst;
 
     Slot sl = {.type = e->ty, .fi = fi};
     vec_push(V->fncode->slots, sl);
-    
+
     gen_memzero(e->ty, base);
 
     FlatField* flat_fields = NULL;
@@ -602,7 +602,7 @@ static VReg* gen_complit(Expr* e)
     for(uint32_t i = 0; i < vec_len(flat_fields); i++)
     {
         FlatField* ff = &flat_fields[i];
-        
+
         /* Calculate field address */
         VReg* field_addr;
         if(ff->offset == 0)
@@ -614,13 +614,13 @@ static VReg* gen_complit(Expr* e)
             VReg* offset_reg = vp_vreg_ki(ff->offset, VRSize8);
             field_addr = vp_ir_binop(IR_ADD, base, offset_reg, VRSize8, IRF_UNSIGNED);
         }
-        
+
         VReg* value = gen_expr(ff->init);
         gen_store(field_addr, value, ff->type);
     }
-    
+
     vec_free(flat_fields);
-    
+
     return base;
 }
 
@@ -740,6 +740,7 @@ typedef VReg* (*GenExprFn)(Expr*);
 static const GenExprFn genexprtab[] = {
     [EX_NIL] = gen_nil,
     [EX_TRUE] = gen_true, [EX_FALSE] = gen_false,
+    [EX_CHAR] = gen_int,
     [EX_INT] = gen_int, [EX_UINT] = gen_uint,
     [EX_NUM] = gen_num, [EX_FLO] = gen_flo,
     [EX_NAME] = gen_name,
@@ -833,11 +834,11 @@ static void gen_var(Stmt* st)
     Decl* d = st->decl;
     if(d->kind == DECL_NOTE) return;
     vp_assertX(d->kind == DECL_VAR, "?");
-    
+
     VarInfo* vi = d->var.vi;
     vp_assertX(vi, "empty variable info");
     gen_varinfo(vi);
-    
+
     /* Generate initialization if provided */
     if(d->var.expr)
     {
@@ -1002,10 +1003,10 @@ static const GenStmtFn gensttab[] = {
     [ST_DECL] = gen_var,
     [ST_BLOCK] = gen_block,
     [ST_ASSIGN] = gen_assign,
-    [ST_ADD_ASSIGN] = gen_comp_assign, [ST_SUB_ASSIGN] = gen_comp_assign, 
-    [ST_MUL_ASSIGN] = gen_comp_assign, [ST_DIV_ASSIGN] = gen_comp_assign, 
+    [ST_ADD_ASSIGN] = gen_comp_assign, [ST_SUB_ASSIGN] = gen_comp_assign,
+    [ST_MUL_ASSIGN] = gen_comp_assign, [ST_DIV_ASSIGN] = gen_comp_assign,
     [ST_MOD_ASSIGN] = gen_comp_assign,
-    [ST_BAND_ASSIGN] = gen_comp_assign, [ST_BOR_ASSIGN] = gen_comp_assign,  
+    [ST_BAND_ASSIGN] = gen_comp_assign, [ST_BOR_ASSIGN] = gen_comp_assign,
     [ST_BXOR_ASSIGN] = gen_comp_assign,
     [ST_LSHIFT_ASSIGN] = gen_comp_assign, [ST_RSHIFT_ASSIGN] = gen_comp_assign,
     [ST_EXPR] = gen_expr_stmt,

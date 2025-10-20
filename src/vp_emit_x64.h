@@ -216,14 +216,18 @@ static void emit_mov_mem(VpState* V, X64Reg src, X64Mem mem, int size, bool is_l
     }
 
     uint8_t rex = rex_mem(src, base, idx, size == 64);
+    if(size == 8 && (src & 7) >= 4)
+    {
+        if(rex == 0) rex = 0x40;
+    }
     if(rex) emit_u8(V, rex);
 
     if(size == 16) emit_u8(V, 0x66);
 
     uint8_t op = is_load ? 0x8B : 0x89; /* MOV reg, r/m vs MOV r/m, reg */
     if(size == 8) op = is_load ? 0x8A : 0x88; /* MOV reg8, r/m8 vs MOV r/m8, reg8 */
-    emit_u8(V, op);
 
+    emit_u8(V, op);
     emit_modrm_sib_disp(V, src, base, idx, scale, disp);
 }
 

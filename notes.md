@@ -1,3 +1,15 @@
+### todo
+
+- `import`
+
+- `asm` blocks
+
+- fix casts, conversions
+
+- fix `const` types
+
+- function prototypes from dynamic (Win32) libraries
+
 ### integer literals
 
 `1u8` `1i8` `1u16` `1i16` `1u32` `1i32` `1u64` `1i64` | `1u128` `1i128`
@@ -117,7 +129,7 @@ asm
 
 `#doc`
 
-`[[attribute]]` `[attribute]` ?
+`[[attribute]]` ?
 
 ---
 
@@ -127,12 +139,34 @@ asm
 
 `@ctz(x)` count trailing zeroes
 
-| Role                   | Syntax    | Reason                        |
-| ---------------------- | --------- | ----------------------------- |
-| compile-time only      | `#name`   | directives, no runtime effect |
-| semantic modifier      | keyword   | changes how code behaves      |
-| builtin/intrinsic func | `@name()` | low-level compiler function   |
-| ABI / linkage modifier | `extern`  | needs parser support          |
+---
+
+### attributes
+
+`[[lib("kernel32")]]`
+
+`[[export]]`
+
+`[[used]]`
+
+`[[alias("other")]]`
+
+`[[naked]]`
+
+`[[syscall]]`
+
+`[[interrupt]]`
+
+`[[entry]]`
+
+---
+
+| Syntax     | Role                |
+| ---------- | ------------------- |
+| `#name`    | compile-time only   |
+| `keyword`  | semantic modifier   |
+| `@name()`  | builtin/intrinsic   |
+| `[[name]]` | function attributes |
 
 ---
 

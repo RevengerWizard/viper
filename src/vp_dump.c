@@ -37,7 +37,7 @@ void dump_regbits(uint64_t regbits, char rt)
         printf("none");
         return;
     }
-    
+
     bool first = true;
     for(uint32_t i = 0; i < 64; i++)
     {
@@ -215,7 +215,7 @@ static void dump_ir(IR* ir)
             }
             else
             {
-                printf("goto %.*s", 
+                printf("goto %.*s",
                     ir->jmp.bb->label->len, str_data(ir->jmp.bb->label));
             }
             break;
@@ -629,6 +629,33 @@ static void dump_ast_aggr(Aggregate* agr)
 
 static const char* const exprcast[] = {"cast", "intcast", "floatcast", "ptrcast", "bitcast"};
 
+static void dump_char(int c)
+{
+    switch(c)
+    {
+        case '\n': printf("\\n"); break;
+        case '\t': printf("\\t"); break;
+        case '\r': printf("\\r"); break;
+        case '\v': printf("\\v"); break;
+        case '\f': printf("\\f"); break;
+        case '\a': printf("\\a"); break;
+        case '\b': printf("\\b"); break;
+        case '\\': printf("\\\\"); break;
+        case '\'': printf("\\'"); break;
+        case '\0': printf("\\0"); break;
+        default:
+            if(c >= 32 && c <= 126)
+            {
+                printf("%c", c);
+            }
+            else
+            {
+                printf("\\x%02X", c & 0xff);
+            }
+            break;
+    }
+}
+
 static void dump_ast_expr(Expr* e)
 {
     switch(e->kind)
@@ -644,8 +671,10 @@ static void dump_ast_expr(Expr* e)
             break;
         case EX_CHAR:
         {
-            int i = e->i;
-            printf("%c", i);
+            int c = e->i;
+            printf("'");
+            dump_char(c);
+            printf("'");
             break;
         }
         case EX_UINTT:
@@ -992,6 +1021,11 @@ void vp_dump_ast(Decl* d)
                 }
             }
             printf(")");
+            if(d->fn.ret)
+            {
+                printf(" : ");
+                dump_typespec(d->fn.ret);
+            }
             if(d->fn.body)
             {
                 printf("\n{\n");

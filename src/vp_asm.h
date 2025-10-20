@@ -23,7 +23,7 @@ typedef enum
 {
     /* 8-bit (low) */
     AL, CL, DL, BL,
-    
+
     /* 8-bit (high) */
     AH, CH, DH, BH,
 
@@ -46,7 +46,7 @@ typedef enum
     /* 64-bit */
     xRAX, xRCX, xRDX, xRBX, xRSP, xRBP, xRSI, xRDI,
     xR8, xR9, xR10, xR11, xR12, xR13, xR14, xR15,
-    
+
     xRIP
 } RegType;
 

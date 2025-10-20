@@ -1,30 +1,31 @@
 src/
-├── vp_def.h          ← common defininitions
-├── vp_char.c/h       ← ctype replacements
-├── vp_buf.c/h        ← buffer handling
-├── vp_lex.c/h        ← lexer
-├── vp_strscan.c/h    ← number scanning
-├── vp_parse.c/h      ← parser (produces AST)
-├── vp_sema.c/h       ← semantic checker
-├── vp_codegen.c/h    ← code generation (AST → IR)
-├── vp_ir.c/h         ← intermediate representation
-├── vp_regalloc.c/h   ← register allocation
-├── vp_ast.c/h        ← AST node allocation
-├── vp_mem.c/h        ← memory management
-├── vp_type.c/h       ← type information
-├── vp_str.c/h        ← string interning
-├── vp_tab.c/h        ← hash table handling
-├── vp_map.c/h        ← map handling
-├── vp_vec.c/h        ← dynamic array handling
-├── vp_state.c/h      ← global state
-├── vp_load.c         ← frontend driver: parse + compile
-├── vp_dump.c/h       ← data structure print
-├── vp_target.h       ← target machine configurations
-├── vp_asm.h          ← inline assembler definitions
-├── vp_asm_x64.c      ← x64 inline assembler
-├── vp_emit_x64.c/h   ← x64 instruction encoding
-├── vp_sel_x64.c      ← x64 instruction selection (IR -> x64)
-├── vp_sel.h          ← instruction selection
-├── vp_pe.c           ← Windows PE emitter
-├── vp_elf.c          ← ELF emitter
-├── viper.c           ← CLI main
+├── vp_def.h            ← common defininitions
+├── vp_char.c/h         ← ctype replacements
+├── vp_buf.c/h          ← buffer handling
+├── vp_lex.c/h          ← lexer
+├── vp_strscan.c/h      ← number scanning
+├── vp_parse.c/h        ← parser (produces AST)
+├── vp_sema.c/h         ← semantic checker
+├── vp_codegen.c/h      ← code generation (AST → IR)
+├── vp_ir.c/h           ← intermediate representation
+├── vp_regalloc.c/h     ← register allocation
+├── vp_ast.c/h          ← AST node allocation
+├── vp_mem.c/h          ← memory management
+├── vp_type.c/h         ← type information
+├── vp_str.c/h          ← string interning
+├── vp_tab.c/h          ← hash table handling
+├── vp_map.c/h          ← map handling
+├── vp_vec.c/h          ← dynamic array handling
+├── vp_state.c/h        ← global state
+├── vp_load.c           ← frontend driver: parse + compile
+├── vp_dump.c/h         ← data structure print
+├── vp_target.h         ← target machine configurations
+├── vp_target_x64.h     ← x64 target configurations
+├── vp_asm.h            ← inline assembler definitions
+├── vp_asm_x64.c        ← x64 inline assembler
+├── vp_emit_x64.c/h     ← x64 instruction encoding
+├── vp_sel_x64.c        ← x64 instruction selection (IR -> x64)
+├── vp_sel.h            ← instruction selection
+├── vp_pe.c             ← Windows PE emitter
+├── vp_elf.c            ← ELF emitter
+├── viper.c             ← CLI main
