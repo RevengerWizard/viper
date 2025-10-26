@@ -10,6 +10,10 @@
 
 - function prototypes from dynamic (Win32) libraries
 
+- globals and strings emission
+
+- macros?
+
 ### integer literals
 
 `1u8` `1i8` `1u16` `1i16` `1u32` `1i32` `1u64` `1i64` | `1u128` `1i128`
@@ -135,9 +139,11 @@ asm
 
 ### intrinsics
 
-`@clz(x)` count leading zeros
+`@clz(x)` --- count leading zeros
 
-`@ctz(x)` count trailing zeroes
+`@ctz(x)` --- count trailing zeroes
+
+`@memcpy`
 
 ---
 
@@ -256,7 +262,7 @@ rbx, rbp, r12, r13, r14, r15
 # win32 API
 
 ```c
-HANDLE h = GetStdHandle(STD_OUTPUT_HANDLE);
-DWORD written;
-WriteConsoleA(h, "Hello\n", 6, &written, NULL);
+var h : HANDLE = GetStdHandle(STD_OUTPUT_HANDLE);
+var written : DWORD;
+WriteConsoleA(h, "Hello\n", 6, &written, nil);
 ```
