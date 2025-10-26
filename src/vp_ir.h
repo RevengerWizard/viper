@@ -134,6 +134,7 @@ typedef enum CondKind
 
 typedef struct IRCallInfo
 {
+    bool export;
     uint32_t argnum;    /* Number of arguments */
     uint32_t regargs;   /* Number of register arguments */
     uint32_t stacksize; /* Stack space for arguments */
@@ -164,6 +165,7 @@ typedef struct IR
         {
             int64_t ofs;
             Str* label;
+            bool isfn;
         } iofs;
         struct
         {
@@ -177,7 +179,7 @@ typedef struct IR
         struct
         {
             struct BB* bb;
-            CondKind cond; 
+            CondKind cond;
         } jmp;
         struct
         {
@@ -206,24 +208,37 @@ typedef struct BB
     vec_t(struct BB*) frombbs;
     Str* label;
     vec_t(IR*) irs;
-    int32_t ofs;
+    int32_t ofs;    /* Basic block code offset */
     vec_t(VReg*) inregs;    /* Input vregs */
     vec_t(VReg*) outregs;   /* Output vregs */
     vec_t(VReg*) assignregs;    /* Assigned vregs */
 } BB;
 
+typedef enum PatchKind
+{
+    PATCH_LEA_REL,
+    PATCH_JMP_REL,
+    PATCH_CALL_REL,
+    PATCH_CALL_ABS,
+} PatchKind;
+
 typedef struct PatchInfo
 {
-    struct Code* c;
-    BB* target;
-    int32_t ofs;   /* Offset to path */
+    PatchKind kind; /* The type of patch */
+    int32_t ofs;   /* Offset to patch */
+    union
+    {
+        Str* label;
+        struct Code* c;
+        BB* target;
+    };
 } PatchInfo;
 
 extern const char* const vp_ir_name[];
 
 /* IR instructions */
 IR* vp_ir_bofs(FrameInfo* fi);
-IR* vp_ir_iofs(Str* label);
+IR* vp_ir_iofs(Str* label, bool isfn);
 IR* vp_ir_sofs(uint32_t ofs);
 IR* vp_ir_mov(VReg* dst, VReg* src, uint8_t irflag);
 IR* vp_ir_store(VReg* dst, VReg* src, uint8_t irflag);

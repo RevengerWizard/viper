@@ -772,9 +772,7 @@ static void emit_sub8_rr(VpState* V, X64Reg dst, X64Reg src)
 /* CALL reg64 */
 static void emit_call64_r(VpState* V, X64Reg reg)
 {
-    uint8_t rex = REX_W;
-    if(regext(reg)) rex |= REX_B;
-    emit_u8(V, rex);
+    if(regext(reg)) emit_u8(V, REX_B);
     emit_u8(V, 0xFF);
     emit_u8(V, MODRM(3, 2, reg & 7));
 }
@@ -783,6 +781,14 @@ static void emit_call64_r(VpState* V, X64Reg reg)
 static void emit_call_rel32(VpState* V, int32_t rel)
 {
     emit_u8(V, 0xE8);
+    emit_im32(V, rel);
+}
+
+/* CALL [rip + rel32] */
+static void emit_call_rip_rel32(VpState* V, int32_t rel)
+{
+    emit_u8(V, 0xFF);
+    emit_u8(V, MODRM(0, 2, 5));
     emit_im32(V, rel);
 }
 

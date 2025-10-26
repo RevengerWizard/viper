@@ -150,11 +150,11 @@ static void sym_complete(Type* ty)
     }
     else if(ty->kind != TY_none)
         return;
-    
+
     Decl* d = ty->sym->decl;
     ty->kind = TY_name;
     vp_assertX(d->kind == DECL_STRUCT || d->kind == DECL_UNION, "struct/union");
-    
+
     vec_t(TypeField) fields = NULL;
     for(uint32_t i = 0; i < vec_len(d->agr->items); i++)
     {
@@ -474,7 +474,7 @@ static Val val_fromtype(SrcLoc loc, Type* ret, uint64_t u64)
             vp_err_error(loc, "literal out of range for '%s'", type_name(ret));
         }
         if(ty_isunsigned(ret))
-        { 
+        {
             val = (Val){.u64 = u64};
         }
         else
@@ -1337,6 +1337,21 @@ static Operand sema_expr_num(Expr* e, Type* ret)
     return res;
 }
 
+/* Resolve string literal */
+static Operand sema_expr_str(Expr* e, Type* ret)
+{
+    Operand res;
+    if(ret && ret->kind == TY_array)
+    {
+        res = opr_rval(vp_type_arr(tyuint8, e->str->len + 1));
+    }
+    else
+    {
+        res = opr_rval(vp_type_ptr(tyuint8));
+    }
+    return res;
+}
+
 /* Resolve expression */
 static Operand sema_expr(Expr* e, Type* ret)
 {
@@ -1363,7 +1378,7 @@ static Operand sema_expr(Expr* e, Type* ret)
             res = sema_expr_num(e, ret);
             break;
         case EX_STR:
-            res = opr_rval(vp_type_arr(tyuint8, e->str->len + 1));
+            res = sema_expr_str(e, ret);
             break;
         case EX_NAME:
             res = sema_expr_name(e);
@@ -1413,7 +1428,7 @@ static Operand sema_expr(Expr* e, Type* ret)
             res = sema_expr_binary(e, ret);
             break;
         case EX_COMPLIT:
-            res = sema_expr_complit(e, ret); 
+            res = sema_expr_complit(e, ret);
             break;
         case EX_FIELD:
             res = sema_expr_field(e);
@@ -1607,7 +1622,7 @@ static Type* sema_typedef(Decl* d)
 static Type* sema_fn(Decl* d)
 {
     vp_assertX(d->kind == DECL_FN, "fn declaration");
-    
+
     vec_push(S.sorted, d);
     vec_t(Type*) params = NULL;
     for(uint32_t i = 0; i < vec_len(d->fn.params); i++)
@@ -1768,12 +1783,13 @@ static void sema_fn_body(Sym* sym)
     Decl* d = sym->decl;
     vp_assertX(d->kind == DECL_FN, "fn declaration");
     vp_assertX(sym->state == SYM_DONE, "unresolved symbol");
-    
-    if(!d->fn.body)
-        return;
 
     /* Add function name to global scope */
-    vp_scope_add(V->globscope, d->name, sym->type);
+    VarInfo* vi = vp_scope_add(V->globscope, d->name, sym->type);
+    vi->storage |= VS_FN;
+
+    if(!d->fn.body)
+        return;
 
     Scope* scope = vp_scope_begin();
     vec_push(d->fn.scopes, scope);

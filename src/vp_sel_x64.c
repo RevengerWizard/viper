@@ -13,6 +13,32 @@
 #include "vp_target.h"
 #include "vp_vec.h"
 
+static vec_t(PatchInfo) patches = NULL;
+
+static VP_AINLINE void patchinfo_learel(Code* fn, uint32_t ofs)
+{
+    PatchInfo pi = {.kind = PATCH_LEA_REL, .ofs = ofs, .c = fn};
+    vec_push(patches, pi);
+}
+
+static VP_AINLINE void patchinfo_jmprel(BB* bb, uint32_t ofs)
+{
+    PatchInfo pi = {.kind = PATCH_JMP_REL, .ofs = ofs, .target = bb};
+    vec_push(patches, pi);
+}
+
+static VP_AINLINE void patchinfo_callrel(Code* fn, uint32_t ofs)
+{
+    PatchInfo pi = {.kind = PATCH_CALL_REL, .ofs = ofs, .c = fn};
+    vec_push(patches, pi);
+}
+
+static VP_AINLINE void patchinfo_callabs(Str* label, uint32_t ofs)
+{
+    PatchInfo pi = {.kind = PATCH_CALL_ABS, .ofs = ofs, .label = label};
+    vec_push(patches, pi);
+}
+
 RegSet sel_extra(RegAlloc* ra, IR* ir)
 {
     RegSet ioccupy = 0;
@@ -88,6 +114,13 @@ static void sel_iofs(IR* ir)
 {
     int64_t ofs = ir->iofs.ofs;
     emit_lea64_rm(V, ir->dst->phys, MEM(RIP, NOREG, 1, ofs));
+    uint32_t patch = sbuf_len(&V->code) - 4;
+    if(ir->iofs.isfn)
+    {
+        Code* c = vp_tab_get(&V->funcs, ir->iofs.label);
+        vp_assertX(c, "?");
+        patchinfo_learel(c, patch);
+    }
 }
 
 static void sel_sofs(IR* ir)
@@ -237,25 +270,24 @@ static void sel_pusharg(IR* ir)
     }
 }
 
-static vec_t(PatchInfo) jmps = NULL;
-static vec_t(PatchInfo) calls = NULL;
-
-static void patchinfo_add(BB* target, uint32_t ofs)
-{
-    PatchInfo pi = {NULL, target, ofs};
-    vec_push(jmps, pi);
-}
-
 static void sel_call(IR* ir)
 {
     /* Save caller registers */
 
     if(ir->call->label)
     {
-        uint32_t ofs = sbuf_len(&V->code) + 1;
-        emit_call_rel32(V, 0);
-        PatchInfo pi = {ir->call->fn, NULL, ofs};
-        vec_push(calls, pi);
+        if(ir->call->export)
+        {
+            uint32_t ofs = sbuf_len(&V->code) + 2;
+            emit_call_rip_rel32(V, 0);
+            patchinfo_callabs(ir->call->label, ofs);
+        }
+        else
+        {
+            uint32_t ofs = sbuf_len(&V->code) + 1;
+            emit_call_rel32(V, 0);
+            patchinfo_callrel(ir->call->fn, ofs);
+        }
     }
     else
     {
@@ -649,7 +681,7 @@ static void sel_jmp(IR* ir)
     {
         uint32_t patch = sbuf_len(&V->code) + 1;
         emit_jmp_rel32(V, 0);
-        patchinfo_add(ir->jmp.bb, patch);
+        patchinfo_jmprel(ir->jmp.bb, patch);
         return;
     }
 
@@ -658,7 +690,7 @@ static void sel_jmp(IR* ir)
     uint32_t patch = sbuf_len(&V->code) + 2;
     X64CC cc = cond2cc(cond);
     emit_jcc_rel32(V, cc, 0);
-    patchinfo_add(ir->jmp.bb, patch);
+    patchinfo_jmprel(ir->jmp.bb, patch);
 }
 
 static void sel_add(IR* ir)
@@ -1110,8 +1142,9 @@ static void sel_conv3to2(vec_t(BB*) bbs)
 
                         IR* keep = vp_ir_keep(NULL, ir->src1, NULL);
                         j++; vec_insert(bb->irs, j, keep);
+                        break;
                     }
-                    break;
+                    /* Fallthrough */
                 }
                 case IR_ADD:
                 case IR_SUB:
@@ -1242,27 +1275,50 @@ static void assign_params(RegAlloc* ra, Code* c)
     }
 }
 
-static void patch_infos(PatchInfo* patch, bool iscall)
+static uint32_t resolve_iat_rva(Str* label)
 {
-    for(uint32_t i = 0; i < vec_len(patch); i++)
+    if(memcmp(str_data(label), "GetStdHandle", label->len) == 0) return 0x1040;
+    if(memcmp(str_data(label), "WriteConsoleA", label->len) == 0) return 0x1048;
+    vp_assertX(0, "external function not found");
+    return 0;
+}
+
+static void patch_infos(void)
+{
+    for(uint32_t i = 0; i < vec_len(patches); i++)
     {
-        PatchInfo* p = &patch[i];
-
+        PatchInfo* p = &patches[i];
         int32_t from = p->ofs;
-        int32_t ofs;
-        if(iscall)
-        {
-            ofs = p->c->ofs;
-        }
-        else
-        {
-            ofs = p->target->ofs;
-        }
+        int32_t rel = 0;
 
-        int32_t rel = ofs - (from + 4);
+        switch(p->kind)
+        {
+            case PATCH_LEA_REL:
+            case PATCH_JMP_REL:
+            case PATCH_CALL_REL:
+            {
+                int32_t ofs = p->kind == PATCH_JMP_REL ? p->target->ofs : p->c->ofs;
+                rel = ofs - (from + 4);
 
-        uint8_t* code = (uint8_t*)(V->code.b + p->ofs);
-        *(uint32_t*)code = (uint32_t)rel;
+                uint8_t* code = (uint8_t*)(V->code.b + p->ofs);
+                *(uint32_t*)code = (uint32_t)rel;
+                break;
+            }
+            case PATCH_CALL_ABS:
+            {
+                /* offset = RVA_IAT - next_instruction_offset */
+                uint32_t iat_rva = resolve_iat_rva(p->label);
+                uint32_t next_instr = from + 4;
+                rel = iat_rva - next_instr;
+
+                uint8_t* code = (uint8_t*)(V->code.b + p->ofs);
+                *(uint32_t*)code = (uint32_t)rel;
+                break;
+            }
+            default:
+                vp_assertX(0, "?");
+                break;
+        }
     }
 }
 
@@ -1325,9 +1381,11 @@ void vp_sel(vec_t(Code*) codes)
 {
     for(uint32_t i = 0; i < vec_len(codes); i++)
     {
-        emit_body(codes[i]);
+        if(codes[i]->bbs)
+        {
+            emit_body(codes[i]);
+        }
     }
 
-    patch_infos(jmps, false);
-    patch_infos(calls, true);
+    patch_infos();
 }

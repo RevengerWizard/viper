@@ -40,9 +40,10 @@ IR* vp_ir_bofs(FrameInfo* fi)
     return ir;
 }
 
-IR* vp_ir_iofs(Str* label)
+IR* vp_ir_iofs(Str* label, bool isfn)
 {
     IR* ir = ir_new(IR_IOFS);
+    ir->iofs.isfn = isfn;
     ir->iofs.ofs = 0;
     ir->iofs.label = label;
     ir->dst = vp_ra_spawn(VRSize8, 0);
@@ -328,7 +329,7 @@ VReg* vp_ir_binop(IrKind kind, VReg* src1, VReg* src2, VRSize vsize, uint8_t irf
 {
     VReg* dst = ir_binop_fold(kind, src1, src2, vsize, irflag);
     if(dst) return dst;
-    
+
     dst = vp_ra_spawn(vsize, src1->flag & VRF_MASK);
     IR* ir = ir_new(kind);
     ir->flag = irflag;
@@ -363,6 +364,7 @@ IRCallInfo* vp_ircallinfo_new(VReg** args, uint32_t argnum, Str* label)
     ci->argnum = argnum;
     ci->args = args;
     ci->label = label;
+    ci->export = false;
     return ci;
 }
 

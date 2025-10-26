@@ -304,6 +304,19 @@ typedef struct Note
     NoteArg* args;
 } Note;
 
+typedef struct AttrArg
+{
+    SrcLoc loc;
+    Expr* e;
+} AttrArg;
+
+typedef struct Attr
+{
+    SrcLoc loc;
+    Str* name;
+    AttrArg* args;
+} Attr;
+
 typedef enum DeclKind
 {
     DECL_VAR,
@@ -329,6 +342,7 @@ typedef struct Decl
         } ts;
         struct
         {
+            vec_t(Attr) attrs;
             Type* rett;
             TypeSpec* ret;
             Param* params;
@@ -393,7 +407,7 @@ Stmt* vp_stmt_while(SrcLoc loc, Expr* cond, Stmt* body);
 Stmt* vp_stmt_asm(SrcLoc loc, vec_t(Inst*) insts);
 
 /* Declarations */
-Decl* vp_decl_fn(SrcLoc loc, TypeSpec* ret, Str* name, Param* params, Stmt* body);
+Decl* vp_decl_fn(SrcLoc loc, vec_t(Attr) attrs, TypeSpec* ret, Str* name, vec_t(Param) params, Stmt* body);
 Decl* vp_decl_var(SrcLoc loc, Str* name, TypeSpec* spec, Expr* e);
 Decl* vp_decl_type(SrcLoc loc, Str* name, TypeSpec* spec);
 Decl* vp_decl_aggr(SrcLoc loc, DeclKind kind, Str* name, Aggregate* agr);

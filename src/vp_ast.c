@@ -293,9 +293,10 @@ Decl* vp_decl_var(SrcLoc loc, Str* name, TypeSpec* spec, Expr* e)
     return d;
 }
 
-Decl* vp_decl_fn(SrcLoc loc, TypeSpec* ret, Str* name, Param* params, Stmt* body)
+Decl* vp_decl_fn(SrcLoc loc, vec_t(Attr) attrs, TypeSpec* ret, Str* name, vec_t(Param) params, Stmt* body)
 {
-    Decl* d = decl_new(DECL_FN, loc, name);;
+    Decl* d = decl_new(DECL_FN, loc, name);
+    d->fn.attrs = attrs;
     d->fn.rett = NULL;
     d->fn.ret = ret;
     d->fn.params = params;

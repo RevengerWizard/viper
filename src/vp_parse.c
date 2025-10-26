@@ -567,7 +567,7 @@ static TypeSpec* parse_type(LexState* ls)
         if(type == NULL)
         {
             vp_err_error(loc, "unexpected token type");
-        } 
+        }
         vp_lex_next(ls);    /* Skip type */
         spec = vp_typespec_type(loc, type);
     }
@@ -611,7 +611,7 @@ static Decl* parse_note(LexState* ls)
     SrcLoc loc = lex_srcloc(ls);
     vp_lex_next(ls);    /* Skip #note */
     Str* name = ls->val.name;
-    NoteArg* args = NULL;
+    vec_t(NoteArg) args = NULL;
     if(lex_match(ls, '('))
     {
         while(!lex_check(ls, ')'))
@@ -664,7 +664,7 @@ static Stmt* parse_if(LexState* ls)
     {
         if(lex_check(ls, TK_if))
         {
-            fblock = parse_stmt(ls);            
+            fblock = parse_stmt(ls);
         }
         else
         {
@@ -725,9 +725,9 @@ static Stmt* parse_asm(LexState* ls)
 }
 
 /* Parse fn parameters */
-static Param* parse_params(LexState* ls)
+static vec_t(Param) parse_params(LexState* ls)
 {
-    Param* params = NULL;
+    vec_t(Param) params = NULL;
     vp_lex_consume(ls, '(');
     if(!lex_check(ls, ')'))
     {
@@ -851,13 +851,13 @@ static Decl* parse_enum(LexState* ls)
 }
 
 /* Parse 'fn' declaration */
-static Decl* parse_fn(LexState* ls)
+static Decl* parse_fn(LexState* ls, vec_t(Attr) attrs)
 {
     vp_lex_next(ls);    /* Skip 'fn' */
     SrcLoc loc = lex_srcloc(ls);
     Str* name = lex_name(ls);
 
-    Param* params = parse_params(ls);
+    vec_t(Param) params = parse_params(ls);
     vp_lex_consume(ls, ':');
     TypeSpec* ret = parse_type(ls);
 
@@ -870,7 +870,54 @@ static Decl* parse_fn(LexState* ls)
     {
         body = parse_block(ls);
     }
-    return vp_decl_fn(loc, ret, name, params, body);
+    return vp_decl_fn(loc, attrs, ret, name, params, body);
+}
+
+/* Parse attribute argument */
+static AttrArg parse_attr_arg(LexState* ls)
+{
+    SrcLoc loc = lex_srcloc(ls);
+    Expr* e = expr(ls);
+    return (AttrArg){.loc = loc, .e = e};
+}
+
+/* Parse attributes */
+static Decl* parse_attr(LexState* ls)
+{
+    vp_lex_next(ls);    /* Skip '[[' */
+
+    vec_t(Attr) attrs = NULL;
+    do
+    {
+        Attr at = {};
+        do
+        {
+            vec_t(AttrArg) args = NULL;
+            SrcLoc loc = lex_srcloc(ls);
+            Str* name = lex_name(ls);
+            if(lex_match(ls, '('))
+            {
+                while(!lex_check(ls, ')'))
+                {
+                    AttrArg arg = parse_attr_arg(ls);
+                    vec_push(args, arg);
+                    if(!lex_match(ls, ','))
+                        break;
+                }
+                vp_lex_consume(ls, ')');
+            }
+            at.name = name;
+            at.loc = loc;
+            at.args = args;
+            vec_push(attrs, at);
+        }
+        while(lex_match(ls, ','));
+        vp_lex_consume(ls, TK_dbright);
+    }
+    while(lex_match(ls, TK_dbleft));
+
+    vp_lex_test(ls, TK_fn);
+    return parse_fn(ls, attrs);
 }
 
 /* Parse 'var' */
@@ -966,8 +1013,11 @@ static Decl* parse_decl(LexState* ls)
         case TK_note:
             d = parse_note(ls);
             break;
+        case TK_dbleft:
+            d = parse_attr(ls);
+            break;
         case TK_fn:
-            d = parse_fn(ls);
+            d = parse_fn(ls, NULL);
             break;
         case TK_var:
             d = parse_var(ls);

@@ -39,12 +39,6 @@ static VReg* gen_varinfo(VarInfo* vi)
     {
         vi->fi = vp_frameinfo_new();
         vi->vreg = vr = NULL;
-        Slot sl = {.type = vi->type, .fi = vi->fi};
-        vec_push(V->fncode->slots, sl);
-        if(!(V->ra->flag & RAF_STACK_FRAME))
-        {
-            V->ra->flag = RAF_STACK_FRAME;
-        }
     }
     else
     {
@@ -214,6 +208,52 @@ static VReg* gen_flo(Expr* e)
     return vp_vreg_kf(e->f, vp_vsize(e->ty));
 }
 
+/* Generate string literal */
+static VReg* gen_str(Expr* e)
+{
+    vp_assertX(e->kind == EX_STR, "string literal");
+    vp_assertX(e->ty, "missing string type");
+
+    Str* str = e->str;
+
+    if(e->ty->kind == TY_array)
+    {
+        vp_assertX(e->ty->p == tyuint8, "bad str array type");
+
+        FrameInfo* fi = vp_frameinfo_new();
+        VReg* base = vp_ir_bofs(fi)->dst;
+
+        Slot sl = {.type = e->ty, .fi = fi};
+        vec_push(V->fncode->slots, sl);
+
+        gen_memzero(e->ty, base);
+
+        /* Generate stores for each char in the string */
+        for(uint32_t i = 0; i < str->len; i++)
+        {
+            /* Calculate index address */
+            VReg* idx;
+            if(i == 0)
+            {
+                idx = base;
+            }
+            else
+            {
+                VReg* offset_reg = vp_vreg_ki(i, VRSize8);
+                idx = vp_ir_binop(IR_ADD, base, offset_reg, VRSize8, IRF_UNSIGNED);
+            }
+
+            VReg* value = vp_vreg_ki(str_data(str)[i], VRSize1);
+            gen_store(idx, value, tyuint8);
+        }
+
+        return base;
+    }
+
+    vp_assertX(0, "unimplemented uint8* str");
+    return NULL;
+}
+
 /* Generate name reference */
 static VReg* gen_name(Expr* e)
 {
@@ -229,6 +269,10 @@ static VReg* gen_name(Expr* e)
             return vi->vreg;
         }
         VReg* src = gen_lval(e);
+        if(ty_isfunc(ty))
+        {
+            return src;
+        }
         VReg* dst = vp_ir_load(src, vp_vsize(ty), vp_vflag(ty), ir_flag(ty))->dst;
         return dst;
     }
@@ -284,7 +328,7 @@ static VReg* gen_ref(Expr* e)
             vp_assertX(vi, "name not found");
             if(vp_scope_isglob(scope))
             {
-                return vp_ir_iofs(name)->dst;
+                return vp_ir_iofs(name, vi->storage & VS_FN)->dst;
             }
             if(!vi->fi)
             {
@@ -429,7 +473,14 @@ static VReg* gen_call(Expr* e)
             {
                 Type* argty = e->call.args[i]->ty;
                 VReg* dst = vp_ir_sofs(p->offset)->dst;
-                gen_memcpy(argty, dst, src);
+                if(param_isstack(argty))
+                {
+                    gen_memcpy(argty, dst, src);
+                }
+                else
+                {
+                    vp_ir_store(dst, src, ty_isunsigned(argty) ? IRF_UNSIGNED : 0);
+                }
             }
             else
             {
@@ -444,7 +495,7 @@ static VReg* gen_call(Expr* e)
     {
         VarInfo* vi = vp_scope_find(e->call.expr->scope, e->call.expr->name, NULL);
         vp_assertX(vi, "name not found");
-        labelcall = vi->type->kind == TY_func;
+        labelcall = vi->type->kind == TY_func && (vi->storage & VS_FN);
     }
 
     Str* label = NULL;
@@ -463,8 +514,14 @@ static VReg* gen_call(Expr* e)
     IRCallInfo* ci = vp_ircallinfo_new(args, argnum, label);
     ci->regargs = regargs;
     ci->stacksize = offset;
-    ci->fn = vp_tab_get(&V->funcs, label);
-    vp_assertX(ci->fn, "?");
+    if(label)
+    {
+        ci->fn = vp_tab_get(&V->funcs, label);
+    }
+    if(ci->fn)
+    {
+        ci->export = ci->fn->export;
+    }
 
     IR* ir = vp_ir_call(ci, dst, freg);
     vec_push(V->fncode->calls, ir);
@@ -743,6 +800,7 @@ static const GenExprFn genexprtab[] = {
     [EX_CHAR] = gen_int,
     [EX_INT] = gen_int, [EX_UINT] = gen_uint,
     [EX_NUM] = gen_num, [EX_FLO] = gen_flo,
+    [EX_STR] = gen_str,
     [EX_NAME] = gen_name,
     [EX_ADD] = gen_binop, [EX_SUB] = gen_binop,
     [EX_MUL] = gen_binop, [EX_DIV] = gen_binop, [EX_MOD] = gen_binop,
@@ -779,6 +837,7 @@ static void gen_expr_stmt(Stmt* st)
     gen_expr(st->expr);
 }
 
+/* Generate compound assignment */
 static void gen_comp_assign(Stmt* st)
 {
     ExprKind op = st->kind - ST_ADD_ASSIGN + EX_ADD;
@@ -837,7 +896,15 @@ static void gen_var(Stmt* st)
 
     VarInfo* vi = d->var.vi;
     vp_assertX(vi, "empty variable info");
-    gen_varinfo(vi);
+    if(!gen_varinfo(vi))
+    {
+        Slot sl = {.type = vi->type, .fi = vi->fi};
+        vec_push(V->fncode->slots, sl);
+        if(!(V->ra->flag & RAF_STACK_FRAME))
+        {
+            V->ra->flag = RAF_STACK_FRAME;
+        }
+    }
 
     /* Generate initialization if provided */
     if(d->var.expr)
@@ -1030,7 +1097,7 @@ static void gen_stack(Code* cd)
 {
     uint32_t framesize = 0;
 
-    /* Allocate stack frame*/
+    /* Allocate stack frame */
     for(uint32_t i = 0; i < vec_len(cd->slots); i++)
     {
         Slot* slot = &cd->slots[i];
@@ -1038,9 +1105,8 @@ static void gen_stack(Code* cd)
         Type* type = slot->type;
 
         uint32_t size = vp_type_sizeof(type);
-        if(size < 1) size = 1;
         uint32_t align = vp_type_alignof(type);
-
+        if(size < 1) size = 1;
         framesize = ALIGN_UP(framesize + size, align);
         fi->ofs = -(int32_t)framesize;
     }
@@ -1072,6 +1138,7 @@ static void gen_params(Decl* d)
 {
     Type* ret = d->fn.rett;
     bool stack = param_isstack(ret);
+    uint32_t paramstack = 0;
     uint32_t start = stack ? 1 : 0;
 
     if(stack)
@@ -1095,8 +1162,22 @@ static void gen_params(Decl* d)
             }
             else
             {
+                if(!vi->fi)
+                {
+                    vi->fi = vp_frameinfo_new();
+                    vreg_spill(vr);
+                }
                 vr->flag |= VRF_STACK_PARAM;
+                vi->fi->ofs = paramstack = ALIGN_UP(paramstack, 8);
+                paramstack += 8;
             }
+        }
+        else
+        {
+            uint32_t size = vp_type_sizeof(vi->type);
+            uint32_t align = vp_type_alignof(vi->type);
+            vi->fi->ofs = paramstack = ALIGN_UP(paramstack, align);
+            paramstack += ALIGN_UP(size, 8);
         }
     }
 }
@@ -1106,13 +1187,24 @@ static Code* gen_fn(Decl* d)
 {
     vp_assertX(d->kind == DECL_FN, "not function declaration");
 
-    RegAlloc* ra = V->ra = vp_ra_new(&winx64_ra);
     Code* code = vp_mem_calloc(1, sizeof(*code));
     code->name = d->name;
     code->numparams = vec_len(d->fn.params);
     code->scopes = d->fn.scopes;
-    code->ra = ra;
     vp_tab_set(&V->funcs, code->name, code);
+
+    if(d->fn.attrs)
+    {
+        code->export = true;
+    }
+
+    if(!d->fn.body)
+    {
+        return code;
+    }
+
+    RegAlloc* ra = V->ra = vp_ra_new(&winx64_ra);
+    code->ra = ra;
     V->fncode = code;
 
     vp_bb_setcurr(vp_bb_new());
@@ -1151,12 +1243,11 @@ vec_t(Code*) vp_codegen(vec_t(Decl*) decls)
     vec_t(Code*) codes = NULL;
     for(uint32_t i = 0; i < vec_len(decls); i++)
     {
-        Code* cd;
         Decl* d = decls[i];
         if(!d) continue;
-        if(d->kind == DECL_FN && d->fn.body)
+        if(d->kind == DECL_FN)
         {
-            cd = gen_fn(d);
+            Code* cd = gen_fn(d);
             vec_push(codes, cd);
         }
     }

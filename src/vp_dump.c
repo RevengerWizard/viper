@@ -556,6 +556,27 @@ static void dump_ast_type(Type* ty)
 
 static void dump_ast_expr(Expr* e);
 
+static void dump_ast_attr(Attr* attr)
+{
+    printf("[[");
+    printf("%.*s", attr->name->len, str_data(attr->name));
+    uint32_t argsnum = vec_len(attr->args);
+    if(argsnum)
+    {
+        printf("(");
+        for(uint32_t i = 0; i < argsnum; i++)
+        {
+            dump_ast_expr(attr->args[i].e);
+            if(i != argsnum - 1)
+            {
+                printf(", ");
+            }
+        }
+        printf(")");
+    }
+    printf("]]\n");
+}
+
 static void dump_typespec(TypeSpec* spec)
 {
     switch(spec->kind)
@@ -1009,6 +1030,15 @@ void vp_dump_ast(Decl* d)
             break;
         }
         case DECL_FN:
+        {
+            uint32_t attrsnum = vec_len(d->fn.attrs);
+            if(attrsnum)
+            {
+                for (uint32_t i = 0; i < vec_len(d->fn.attrs); i++)
+                {
+                    dump_ast_attr(&d->fn.attrs[i]);
+                }
+            }
             printf("fn %s(", str_data(d->name));
             for(uint32_t i = 0; i < vec_len(d->fn.params); i++)
             {
@@ -1032,9 +1062,11 @@ void vp_dump_ast(Decl* d)
                 indent++;
                 dump_ast_stmt(d->fn.body);
                 indent--;
-                printf("}\n");
+                printf("}");
             }
+            printf("\n");
             break;
+        }
         case DECL_STRUCT:
             printf("struct %s\n{\n", str_data(d->name));
             indent++;

@@ -125,7 +125,7 @@ static LexChar lex_number(LexState* ls, LexValue* v)
     vp_assertX(vp_char_isdigit(ls->c), "bad usage");
     if((c = ls->c) == '0' && (lex_savenext(ls) | 0x20) == 'x')
         xp = 'p';
-    while((vp_char_isident(ls->c) && (ls->c != 'u' && ls->c != 'i')) 
+    while((vp_char_isident(ls->c) && (ls->c != 'u' && ls->c != 'i'))
             || ls->c == '.' ||
            ((ls->c == '-' || ls->c == '+') && (c | 0x20) == xp))
     {
@@ -155,7 +155,7 @@ static LexChar lex_number(LexState* ls, LexValue* v)
         vp_lex_error(ls, "malformed number literal");
     }
     lex_save(ls, '\0');
-    
+
     fmt = vp_strscan_scan((const uint8_t*)ls->sb.b, sbuf_len(&ls->sb) - 1, v);
     lex_nummod(ls);
     if(fmt == STRSCAN_NUM)
@@ -472,6 +472,18 @@ static LexToken lex_scan(LexState* ls, LexValue* val)
                 }
                 return '>';
             }
+            case '[':
+            {
+                lex_next(ls);
+                if(ls->c == '[') { lex_next(ls); return TK_dbleft; }
+                return '[';
+            }
+            case ']':
+            {
+                lex_next(ls);
+                if(ls->c == ']') { lex_next(ls); return TK_dbright; }
+                return ']';
+            }
             case '!':
             {
                 lex_next(ls);
@@ -660,6 +672,14 @@ void vp_lex_consume(LexState* ls, LexToken t)
         vp_lex_next(ls);
         return;
     }
+    const char* tokstr = vp_lex_tok2str(ls, t);
+    vp_lex_error(ls, "'%s' expected", tokstr);
+}
+
+/* Test for matching token or error */
+void vp_lex_test(LexState* ls, LexToken t)
+{
+    if(ls->curr == t) return;
     const char* tokstr = vp_lex_tok2str(ls, t);
     vp_lex_error(ls, "'%s' expected", tokstr);
 }

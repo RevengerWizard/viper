@@ -41,6 +41,7 @@
     __(muleq, *=) __(diveq, /=) __(modeq, %=) \
     __(bandeq, &=) __(boreq, |=) __(bxoreq, ^=) \
     __(lshifteq, <<=) __(rshifteq, >>=) \
+    __(dbleft, [[) __(dbright, ]]) \
     __(name, <name>) __(note, <note>) \
     __(string, <string>) __(char, <char>) \
     __(integer, <integer>) __(number, <number>) \
@@ -126,6 +127,7 @@ const char* vp_lex_tok2str(LexState* ls, LexToken t);
 void vp_lex_error(LexState* ls, const char* msg, ...);
 void vp_lex_next(LexState* ls);
 void vp_lex_consume(LexState* ls, LexToken t);
+void vp_lex_test(LexState* ls, LexToken t);
 void vp_lex_init();
 
 /* Check for matching token */
