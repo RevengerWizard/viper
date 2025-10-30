@@ -2,17 +2,33 @@
 
 - `import`
 
+- intrinsics
+
 - `asm` blocks
 
 - fix casts, conversions
 
 - fix `const` types
 
+- fix casts
+
+- object files
+
+- linker?
+
+- length from string literals/arrays
+
 - function prototypes from dynamic (Win32) libraries
 
-- globals and strings emission
+- globals emission
+
+- strings emission
 
 - macros?
+
+- stronger types
+
+- enums
 
 ### integer literals
 
@@ -56,7 +72,7 @@ custom-width integer types
 4. codegen          → AST → IR (3-address, infinite vregs)
 5. opt              → IR cleanup, constant folding
 6. regalloc         → assign physical regs or stack slots (linear scan)
-7. isel             → IR → x64 instructions (abstract x64 form)
+7. sel              → IR → x64 instructions (abstract x64 form)
 8. emit             → binary x64 emission (Rex, ModRM...)
 9. obj writer       → emit ELF/COFF
 
@@ -93,7 +109,25 @@ asm
 
 ---
 
+### std
+
+`io::write`
+
+`io::read`
+
+`io::fmt`
+
+`io::print`
+
+`io::println`
+
+`str::len`
+
+---
+
 ### keywords
+
+`len`
 
 `typeid`
 
@@ -188,13 +222,13 @@ asm
 
 `ptrcast`
 
-| Cast      | Purpose                       | Notes                  |
-| --------- | ----------------------------- | ---------------------- |
-| `cast`    | Safe, context-based conversions           | Default option         |
+| Cast        | Purpose                             | Notes                  |
+| ----------- | ----------------------------------- | ---------------------- |
+| `cast`      | Safe, context-based conversions     | Default option         |
 | `floatcast` | Float ↔ int, truncating/overflowing | Only for numeric types |
-| `intcast` | Numeric, lossy, signed ↔ unsigned | Only for numeric types |
-| `bitcast` | Raw bit reinterpretation          | Must match size        |
-| `ptrcast` | Pointer ↔ pointer or int            | Use with caution       |
+| `intcast`   | Numeric, lossy, signed ↔ unsigned   | Only for numeric types |
+| `bitcast`   | Raw bit reinterpretation            | Must match size        |
+| `ptrcast`   | Pointer ↔ pointer or int            | Use with caution       |
 
 float <- int16, uint16, int8, uint8, bool
 double <- int32, uint32, int16, uint16, int8, uint8, bool

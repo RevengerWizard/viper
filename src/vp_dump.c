@@ -1,6 +1,6 @@
 /*
 ** vp_dump.c
-** Data structure printing
+** Data structure print
 */
 
 #include <stdio.h>
@@ -22,6 +22,64 @@ static void dump_indent()
     printf("%.*s", 4*indent, "                                                                      ");
 }
 
+#define STR_DUMP_MAX 40
+
+/* Dump char (escaped) */
+static void dump_char(int c)
+{
+    switch(c)
+    {
+        case '\n': printf("\\n"); break;
+        case '\t': printf("\\t"); break;
+        case '\r': printf("\\r"); break;
+        case '\v': printf("\\v"); break;
+        case '\f': printf("\\f"); break;
+        case '\a': printf("\\a"); break;
+        case '\b': printf("\\b"); break;
+        case '\\': printf("\\\\"); break;
+        case '\'': printf("\\'"); break;
+        case '\0': printf("\\0"); break;
+        default:
+            if(c >= 32 && c <= 126)
+            {
+                printf("%c", c);
+            }
+            else
+            {
+                printf("\\x%02X", c & 0xff);
+            }
+            break;
+    }
+}
+
+/* Dump string (escaped) */
+static void dump_str(Str* s)
+{
+    printf("\"");
+    const char* data = str_data(s);
+    uint32_t len = s->len;
+
+    uint32_t limit = len;
+    bool trunc = false;
+
+    if(len > STR_DUMP_MAX)
+    {
+        limit = STR_DUMP_MAX;
+        trunc = true;
+    }
+
+    for(uint32_t i = 0; i < limit; i++)
+    {
+        dump_char(data[i]);
+    }
+
+    if(trunc)
+    {
+        printf(" ...");
+    }
+    printf("\"");
+}
+
 /* -- IR dump ------------------------------------------------------- */
 
 static const char* const vrf_flags[] = {
@@ -30,7 +88,8 @@ static const char* const vrf_flags[] = {
 #undef VRFNAME
 };
 
-void dump_regbits(uint64_t regbits, char rt)
+/* Dump a RegSet as a list of registers */
+static void dump_regbits(uint64_t regbits, char rt)
 {
     if(regbits == 0)
     {
@@ -49,6 +108,7 @@ void dump_regbits(uint64_t regbits, char rt)
     }
 }
 
+/* Dump vreg bit flags */
 static void dump_vreg_flags(uint8_t flag)
 {
     if(flag == 0)
@@ -156,13 +216,27 @@ static void dump_ir(IR* ir)
             break;
         }
         case IR_IOFS:
+        {
+            Str* label = ir->iofs.label;
             dump_vreg(ir->dst);
-            printf(" = &%s", str_data(ir->iofs.label));
+            printf(" = &");
+            if(ir->iofs.isstr)
+            {
+                dump_str(label);
+            }
+            else
+            {
+                printf("\"%.*s\"", label->len, str_data(label));
+            }
             break;
+        }
         case IR_SOFS:
+        {
+            int64_t ofs = ir->sofs.ofs;
             dump_vreg(ir->dst);
-            printf(" = &[rsp]");
+            printf(" = &[rsp] %c %lli]", ofs >= 0 ? '+' : '-', ofs > 0 ? ofs : -ofs);
             break;
+        }
         case IR_MOV:
             dump_vreg(ir->dst);
             printf(" = ");
@@ -261,11 +335,12 @@ static void dump_ir(IR* ir)
                 printf("*");
                 dump_vreg(ir->src1);
             }
+            uint32_t start = ir->call->argtotal != ir->call->argnum;
             printf("(");
-            for(uint32_t i = 0; i < ir->call->argnum; i++)
+            for(uint32_t i = start; i < ir->call->argtotal; i++)
             {
                 dump_vreg(ir->call->args[i]);
-                if(i != ir->call->argnum - 1)
+                if(i != ir->call->argtotal - 1)
                 {
                     printf(", ");
                 }
@@ -315,7 +390,8 @@ static void dump_ir(IR* ir)
 
 void vp_dump_bb(Code* cd)
 {
-    printf("\nparams and locals:\n");
+    printf("fn %s\n", str_data(cd->name));
+    printf("params and locals:\n");
     vec_t(VarInfo*) stackvars = NULL;
     for(uint32_t i = 0; i < vec_len(cd->scopes); i++)
     {
@@ -650,33 +726,6 @@ static void dump_ast_aggr(Aggregate* agr)
 
 static const char* const exprcast[] = {"cast", "intcast", "floatcast", "ptrcast", "bitcast"};
 
-static void dump_char(int c)
-{
-    switch(c)
-    {
-        case '\n': printf("\\n"); break;
-        case '\t': printf("\\t"); break;
-        case '\r': printf("\\r"); break;
-        case '\v': printf("\\v"); break;
-        case '\f': printf("\\f"); break;
-        case '\a': printf("\\a"); break;
-        case '\b': printf("\\b"); break;
-        case '\\': printf("\\\\"); break;
-        case '\'': printf("\\'"); break;
-        case '\0': printf("\\0"); break;
-        default:
-            if(c >= 32 && c <= 126)
-            {
-                printf("%c", c);
-            }
-            else
-            {
-                printf("\\x%02X", c & 0xff);
-            }
-            break;
-    }
-}
-
 static void dump_ast_expr(Expr* e)
 {
     switch(e->kind)
@@ -730,7 +779,7 @@ static void dump_ast_expr(Expr* e)
         }
         case EX_STR:
         {
-            printf("\"%.*s\"", e->name->len, str_data(e->name));
+            dump_str(e->name);
             break;
         }
         case EX_NAME:

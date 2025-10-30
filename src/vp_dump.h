@@ -1,6 +1,6 @@
 /*
 ** vp_dump.h
-** Data structure printing
+** Data structure print
 */
 
 #ifndef _VP_DUMP_H

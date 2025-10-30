@@ -31,17 +31,21 @@ typedef struct VpState
     Arena astarena;
     Arena typearena;
     Arena symarena;
+    Arena irarena;
     Tab globtab;
     struct Scope* globscope;
     struct Scope* currscope;
     BB* bb;
     struct Code* fncode;
     RegAlloc* ra;
-    Arena irarena;
     FILE* txtfile;
     SBuf tmpbuf;
     Tab funcs;
+    vec_t(Str*) strs;
+    vec_t(uint32_t) strofs;
 } VpState;
+
+#define TARGET_PTR_SIZE (8)
 
 extern VpState* V;
 

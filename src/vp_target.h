@@ -33,6 +33,12 @@ enum
 #undef FREGENUM
 };
 
+extern const uint32_t winx64_icaller[];
+extern const uint32_t winx64_fcaller[];
+
+#define ICALLER_SIZE (7)
+#define FCALLER_SIZE (4)
+
 extern const RASettings sysvx64_ra;
 extern const RASettings winx64_ra;
 

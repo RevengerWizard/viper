@@ -24,6 +24,7 @@ void vp_arena_free(Arena* arena);
 void* vp_mem_calloc(size_t num, size_t size);
 void* vp_mem_realloc(void* p, size_t size);
 void* vp_mem_alloc(size_t size);
+void vp_mem_free(void* p);
 void* vp_mem_dup(void* src, size_t size);
 
 #endif

@@ -3,6 +3,8 @@
 ** Register allocation
 */
 
+#include <stdlib.h>
+
 #include "vp_regalloc.h"
 #include "vp_ir.h"
 #include "vp_mem.h"
@@ -45,6 +47,21 @@ VReg* vp_vreg_kf(double n, VRSize vsize)
     VReg* vr = vp_ra_spawn(vsize, VRF_FLO | VRF_CONST);
     vr->n = n;
     return vr;
+}
+
+VRSize vp_vreg_elem(uint32_t size, uint32_t align)
+{
+    uint32_t s = MIN(align, size);
+    if(!IS_POW2(s) || s > TARGET_PTR_SIZE)
+    {
+        for(s = TARGET_PTR_SIZE; s > 1; s >>= 1)
+        {
+            if(s <= size && size % s == 0)
+                break;
+        }
+    }
+    vp_assertX(s > 0, "s == 0");
+    return vp_msb(s);
 }
 
 /* -- Liveness analysis --------------------------------------------- */
@@ -206,7 +223,7 @@ static void live_detect(RegAlloc* ra, BB** bbs, uint32_t vreglen, LiveInterval**
             for(uint32_t k = 0; k < vec_len(actives); k++)
             {
                 LiveInterval* li = actives[k];
-                if(li->end <= nip)
+                if(li->end != REG_NO && li->end <= nip)
                 {
                     vec_remove_at(actives, k); k--;
                 }
@@ -241,7 +258,7 @@ static void live_detect(RegAlloc* ra, BB** bbs, uint32_t vreglen, LiveInterval**
             while(vec_len(inactives) > 0)
             {
                 LiveInterval* li = inactives[0];
-                if(li->start > nip)
+                if(li->start != REG_NO && li->start > nip)
                     break;
                 vec_remove_at(inactives, 0);
                 vec_push(actives, li);
@@ -317,7 +334,7 @@ static void live_build(RegAlloc* ra, BB** bbs, uint32_t vreglen, LiveInterval* i
                 VReg* vr = vregs[k];
                 if(vr == NULL || vrf_const(vr))
                     continue;
-                
+
                 LiveInterval* li = &intervals[vr->virt];
                 if(li->start == REG_NO && !(vr->flag & VRF_PARAM))
                 {
@@ -358,10 +375,9 @@ static uint32_t ra_spill(RegAlloc* ra, BB** bbs)
     for(uint32_t i = 0; i < vec_len(bbs); i++)
     {
         BB* bb = bbs[i];
-        IR** irs = bb->irs;
-        for(uint32_t j = 0; j < vec_len(irs); j++)
+        for(uint32_t j = 0; j < vec_len(bb->irs); j++)
         {
-            IR* ir = irs[j];
+            IR* ir = bb->irs[j];
             uint32_t flag = ir_spilltab[ir->kind];
             if(flag == (uint32_t)___)
                 continue;
@@ -373,11 +389,11 @@ static uint32_t ra_spill(RegAlloc* ra, BB** bbs)
                 vp_assertX(!vrf_const(sp), "spill const vreg?");
                 VReg* tmp = vp_ra_spawn(sp->vsize, VRF_NO_SPILL | (sp->flag & VRF_MASK));
                 IR* is = vp_ir_load_s(tmp, sp, ir->flag);
-                vec_insert(irs, j, is); j++;
+                vec_insert(bb->irs, j, is); j++;
                 ir->src1 = tmp;
                 inserted++;
             }
-            
+
             /* Insert spill for src2 */
             if(ir->src2 && (flag & src2) && vrf_spill(ir->src2))
             {
@@ -385,7 +401,7 @@ static uint32_t ra_spill(RegAlloc* ra, BB** bbs)
                 vp_assertX(!vrf_const(sp), "spill const vreg?");
                 VReg* tmp = vp_ra_spawn(sp->vsize, VRF_NO_SPILL | (sp->flag & VRF_MASK));
                 IR* is = vp_ir_load_s(tmp, sp, ir->flag);
-                vec_insert(irs, j, is); j++;
+                vec_insert(bb->irs, j, is); j++;
                 ir->src2 = tmp;
                 inserted++;
             }
@@ -397,7 +413,7 @@ static uint32_t ra_spill(RegAlloc* ra, BB** bbs)
                 vp_assertX(!vrf_const(sp), "spill const vreg?");
                 VReg* tmp = vp_ra_spawn(sp->vsize, VRF_NO_SPILL | (sp->flag & VRF_MASK));
                 IR* is = vp_ir_store_s(ir->dst, tmp);
-                j++; vec_insert(irs, j, is);
+                j++; vec_insert(bb->irs, j, is);
                 ir->dst = tmp;
                 inserted++;
             }
@@ -444,7 +460,7 @@ static void ra_scan(RegAlloc* ra, LiveInterval** sorted, uint32_t vreglen)
         {
             prsp = &fregset;
         }
-        
+
         bool useall = true;
         RegSet mask = prsp->phystemp;  /* Callee registers mask */
         uint32_t regno = REG_NO;
@@ -486,7 +502,7 @@ static void ra_scan(RegAlloc* ra, LiveInterval** sorted, uint32_t vreglen)
                 }
                 else
                 {
-                    if(!(occupied & (1ULL << j)) && (mask & (1ULL << j)))
+                    if(mask & (1ULL << j))
                     {
                         regno = j;
                         break;
@@ -494,6 +510,9 @@ static void ra_scan(RegAlloc* ra, LiveInterval** sorted, uint32_t vreglen)
                 }
             }
         }
+        printf("I %d", i);
+        printf("VIRT %d", li->virt);
+        printf("REGNO %d\n", regno);
         if(regno != REG_NO)
         {
             li->phys = regno;
@@ -512,8 +531,8 @@ static void ra_scan(RegAlloc* ra, LiveInterval** sorted, uint32_t vreglen)
     ra->iregbits = iregset.bits;
     ra->fregbits = fregset.bits;
 
-    free(iregset.active);
-    free(fregset.active);
+    vp_mem_free(iregset.active);
+    vp_mem_free(fregset.active);
 }
 
 /* Allocate physical registers */
@@ -557,8 +576,8 @@ void vp_ra_alloc(RegAlloc *ra, BB** bbs)
         if(vreglen != vec_len(ra->vregs))
         {
             vreglen = vec_len(ra->vregs);
-            free(intervals);
-            free(sorted);
+            vp_mem_free(intervals);
+            vp_mem_free(sorted);
             intervals = vp_mem_alloc(sizeof(*intervals) * vreglen);
             sorted = vp_mem_alloc(sizeof(*sorted) * vreglen);
         }

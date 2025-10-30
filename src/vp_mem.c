@@ -36,6 +36,7 @@ void* vp_mem_realloc(void* p, size_t size)
 
 void* vp_mem_alloc(size_t size)
 {
+    vp_assertX(size, "0 size");
     void* p = malloc(size);
     if(VP_UNLIKELY(!p))
     {
@@ -43,6 +44,12 @@ void* vp_mem_alloc(size_t size)
         exit(EXIT_FAILURE);
     }
     return p;
+}
+
+void vp_mem_free(void *p)
+{
+    vp_assertX(p, "NULL p");
+    free(p);
 }
 
 void* vp_mem_dup(void* src, size_t size)
@@ -84,7 +91,7 @@ void vp_arena_free(Arena* arena)
 {
     for(char** b = arena->blocks; b != vec_end(arena->blocks); b++)
     {
-        free(*b);
+        vp_mem_free(*b);
     }
     vec_free(arena->blocks);
 }

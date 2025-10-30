@@ -43,13 +43,34 @@
     (IMAGE_SCN_CNT_CODE | IMAGE_SCN_MEM_EXECUTE | IMAGE_SCN_MEM_READ)
 #define IDATA_CHARACTERISTICS \
     (IMAGE_SCN_CNT_INITIALIZED_DATA | IMAGE_SCN_MEM_READ)
+#define DATA_CHARACTERISTICS \
+    (IMAGE_SCN_CNT_INITIALIZED_DATA | IMAGE_SCN_MEM_READ | IMAGE_SCN_MEM_WRITE)
 
-#define SECTIONS_NUM 2
+#define SECTIONS_NUM 3
 #define RVA_TEXT 0x1000
 #define RVA_IDATA 0x2000
+#define RVA_DATA 0x3000
 
 #define RVA_GetStdHandle (RVA_IDATA + 0x24)
 #define RVA_WriteConsoleA (RVA_IDATA + 0x2C)
+
+static void pe_sec_data(VpState* V, SBuf* sb)
+{
+    char* p = vp_buf_more(sb, 512);
+    memset(p, 0, 512);
+    char* w = p;
+
+    for(uint32_t i = 0; i < vec_len(V->strs); i++)
+    {
+        Str* s = V->strs[i];
+
+        memcpy(w, str_data(s), s->len);
+        /* \0 */
+        w += s->len + 1;
+    }
+
+    sb->w = p + 512;
+}
 
 static void pe_sec_idata(VpState* V, SBuf* sb)
 {
@@ -133,7 +154,7 @@ static void pe_build(VpState* V, SBuf* sb)
     *(uint32_t*)(&p[32]) = 4096;    /* SectionAlignment */
     *(uint32_t*)(&p[36]) = 512;    /* FileAlignment (standard) */
     *(uint16_t*)(&p[48]) = MAJOR_SUBSYSTEM_VERSION;    /* MajorSubsystemVersion */
-    *(uint32_t*)(&p[56]) = RVA_TEXT + RVA_IDATA;    /* SizeOfImage (total runtime memory size) */
+    *(uint32_t*)(&p[56]) = RVA_DATA + 0x200;    /* SizeOfImage (total runtime memory size) */
     *(uint32_t*)(&p[60]) = 512;    /* SizeOfHeaders */
     *(uint16_t*)(&p[68]) = SUBSYSTEM_CONSOLE;    /* Subsystem */
     *(uint32_t*)(&p[108]) = 16;    /* NumberOfRvaAndSizes */
@@ -156,7 +177,7 @@ static void pe_build(VpState* V, SBuf* sb)
     *(uint32_t*)(&p[8]) = (uint32_t)codesize;   /* VirtualSize */
     *(uint32_t*)(&p[12]) = RVA_TEXT;   /* VirtualAddress */
     *(uint32_t*)(&p[16]) = (uint32_t)codesize;   /* SizeOfRawData */
-    *(uint32_t*)(&p[20]) = 512;   /* PointerToRawData */
+    *(uint32_t*)(&p[20]) = 0x200;   /* PointerToRawData */
     *(uint32_t*)(&p[36]) = TEXT_CHARACTERISTICS;   /* Characteristics */
     sb->w = p + 40;
 
@@ -172,17 +193,33 @@ static void pe_build(VpState* V, SBuf* sb)
     *(uint32_t*)(&p[8]) = 512;   /* VirtualSize */
     *(uint32_t*)(&p[12]) = RVA_IDATA;   /* VirtualAddress */
     *(uint32_t*)(&p[16]) = 512;   /* SizeOfRawData */
-    *(uint32_t*)(&p[20]) = 1024;   /* PointerToRawData */
+    *(uint32_t*)(&p[20]) = 0x400;   /* PointerToRawData */
     *(uint32_t*)(&p[36]) = IDATA_CHARACTERISTICS;   /* Characteristics */
+    sb->w = p + 40;
+
+    /* .data */
+    p = vp_buf_more(sb, 40);
+    memset(p, 0, 40);
+    p[0] = '.';
+    p[1] = 'd';
+    p[2] = 'a';
+    p[3] = 't';
+    p[4] = 'a';
+    *(uint32_t*)(&p[8]) = 512;   /* VirtualSize */
+    *(uint32_t*)(&p[12]) = RVA_DATA;   /* VirtualAddress */
+    *(uint32_t*)(&p[16]) = 512;   /* SizeOfRawData */
+    *(uint32_t*)(&p[20]) = 0x600;   /* PointerToRawData */
+    *(uint32_t*)(&p[36]) = DATA_CHARACTERISTICS;   /* Characteristics */
     sb->w = p + 40;
 
     /* Ensure alignment */
     uint32_t off = sbuf_len(sb);
-    if(off < 512)
+    uint32_t end = 512;
+    if(off < end)
     {
-        char* pad = vp_buf_more(sb, 512 - off);
-        memset(pad, 0, 512 - off);
-        sb->w = pad + (512 - off);
+        char* pad = vp_buf_more(sb, end - off);
+        memset(pad, 0, end - off);
+        sb->w = pad + (end - off);
     }
 
     /* .text section */
@@ -192,7 +229,7 @@ static void pe_build(VpState* V, SBuf* sb)
 
     /* Ensure alignment */
     off = sbuf_len(sb);
-    uint32_t end = 512 + 512;
+    end = 512 + 512;
     if(off < end)
     {
         char* pad = vp_buf_more(sb, end - off);
@@ -202,6 +239,19 @@ static void pe_build(VpState* V, SBuf* sb)
 
     /* .idata section */
     pe_sec_idata(V, sb);
+
+    /* Ensure alignment */
+    off = sbuf_len(sb);
+    end = 512 + 512 + 512;
+    if(off < end)
+    {
+        char* pad = vp_buf_more(sb, end - off);
+        memset(pad, 0, end - off);
+        sb->w = pad + (end - off);
+    }
+
+    /* .data section */
+    pe_sec_data(V, sb);
 }
 
 void vp_emit_exe(VpState* V, SBuf* sb)

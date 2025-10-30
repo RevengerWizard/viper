@@ -44,7 +44,7 @@ static void bb_remove_unused(vec_t(BB*)* bbs)
     {
         vp_tab_init(&keep);
         vp_assertX(vec_len(*bbs) > 0, "len bbs == 0");
-        
+
         for(uint32_t i = 0; i < vec_len(*bbs); i++)
         {
             BB* bb = (*bbs)[i];
@@ -190,7 +190,7 @@ static void vreg_remove_unused(RegAlloc* ra, vec_t(BB*) bbs)
             break;
     }
 
-    free(vread);
+    vp_mem_free(vread);
 }
 
 /* Peephole optimizations */

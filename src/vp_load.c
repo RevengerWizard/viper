@@ -1,6 +1,6 @@
 /*
 ** vp_load.c
-** File loader
+** Frontend driver: parse + compile
 */
 
 /* I HATE YOU MSVC, I HATE YOU */

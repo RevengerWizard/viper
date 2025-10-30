@@ -25,5 +25,5 @@ VpState* vp_state_open()
 
 void vp_state_close(VpState* V)
 {
-    free(V);
+    vp_mem_free(V);
 }

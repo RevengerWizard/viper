@@ -6,8 +6,6 @@
 #ifndef _VP_VEC_H
 #define _VP_VEC_H
 
-#include <stdlib.h>
-
 #include "vp_def.h"
 
 typedef struct VecHeader
@@ -25,7 +23,7 @@ typedef struct VecHeader
 #define vec_end(v) ((v) + vec_len(v))
 #define vec_sizeof(v) ((v) ? vec_len(v)*sizeof(*(v)) : 0)
 
-#define vec_free(v) ((v) ? (free(vec_hdr(v)), (v) = NULL) : 0)
+#define vec_free(v) ((v) ? (vp_mem_free(vec_hdr(v)), (v) = NULL) : 0)
 #define vec_fit(v, n) \
     ((n) <= vec_size(v) ? 0 : ((v) = vp_vec_grow((v), (n), sizeof(*(v)))))
 #define vec_push(v, ...) \

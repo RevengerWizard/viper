@@ -1,6 +1,6 @@
 /*
 ** vp_target_x64.h
-** Definitions for x64 CPUs
+** x64 target configurations
 */
 
 #ifndef _VP_TARGET_X64_H

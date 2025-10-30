@@ -43,8 +43,14 @@ static void map_grow(Map* map, uint32_t newsize)
             vp_map_put_u64u64(&newmap, map->keys[i], map->vals[i]);
         }
     }
-    free(map->keys);
-    free(map->vals);
+    if(map->keys)
+    {
+        vp_mem_free(map->keys);
+    }
+    if(map->vals)
+    {
+        vp_mem_free(map->vals);
+    }
     *map = newmap;
 }
 

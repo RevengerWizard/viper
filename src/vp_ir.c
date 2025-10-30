@@ -40,10 +40,11 @@ IR* vp_ir_bofs(FrameInfo* fi)
     return ir;
 }
 
-IR* vp_ir_iofs(Str* label, bool isfn)
+IR* vp_ir_iofs(Str* label, bool isfn, bool isstr)
 {
     IR* ir = ir_new(IR_IOFS);
     ir->iofs.isfn = isfn;
+    ir->iofs.isstr = isstr;
     ir->iofs.ofs = 0;
     ir->iofs.label = label;
     ir->dst = vp_ra_spawn(VRSize8, 0);
@@ -364,7 +365,6 @@ IRCallInfo* vp_ircallinfo_new(VReg** args, uint32_t argnum, Str* label)
     ci->argnum = argnum;
     ci->args = args;
     ci->label = label;
-    ci->export = false;
     return ci;
 }
 

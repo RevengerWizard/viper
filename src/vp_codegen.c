@@ -19,17 +19,6 @@
 
 #include "vp_dump.h"
 
-/* Determine if type parameter needs to be allocated on the stack */
-static bool param_isstack(Type* ty)
-{
-    if(ty_isaggr(ty))
-    {
-        uint32_t size = vp_type_sizeof(ty);
-        return size > 8;
-    }
-    return false;
-}
-
 /* Generate storage location for variable */
 static VReg* gen_varinfo(VarInfo* vi)
 {
@@ -48,28 +37,13 @@ static VReg* gen_varinfo(VarInfo* vi)
     return vr;
 }
 
-static VRSize vreg_elem(uint32_t size, uint32_t align)
-{
-    uint32_t s = MIN(align, size);
-    if(!IS_POW2(s) || s > 8)
-    {
-        for(s = 8; s > 1; s >>= 1)
-        {
-            if(s <= size && size % s == 0)
-                break;
-        }
-    }
-    vp_assertX(s > 0, "s == 0");
-    return vp_msb(s);
-}
-
 /* Zero a memory vreg */
 static void gen_memzero(Type* ty, VReg* dst)
 {
     uint32_t size = vp_type_sizeof(ty);
     uint32_t align = vp_type_alignof(ty);
     vp_assertX(size, "size == 0");
-    VRSize velem = vreg_elem(size, align);
+    VRSize velem = vp_vreg_elem(size, align);
     uint32_t count = size >> velem;
     vp_assertX(count, "count == 0");
     VReg* vzero = vp_vreg_ki(0, velem);
@@ -106,7 +80,7 @@ static void gen_memcpy(Type* ty, VReg* dst, VReg* src)
     uint32_t size = vp_type_sizeof(ty);
     uint32_t align = vp_type_alignof(ty);
     vp_assertX(size, "size == 0");
-    VRSize velem = vreg_elem(size, align);
+    VRSize velem = vp_vreg_elem(size, align);
     uint32_t count = size >> velem;
     vp_assertX(count, "count == 0");
     if(count == 1)
@@ -249,8 +223,23 @@ static VReg* gen_str(Expr* e)
 
         return base;
     }
+    else if(ty_isptr(e->ty))
+    {
+        vp_assertX(e->ty->p == tyuint8, "bad str ptr type");
+        vp_assertX(vec_len(V->strs) == vec_len(V->strofs), "non-matching lens");
 
-    vp_assertX(0, "unimplemented uint8* str");
+        uint32_t ofs = 0;
+        if(V->strofs)
+        {
+            Str* last = V->strs[vec_len(V->strs) - 1];
+            ofs = V->strofs[vec_len(V->strofs) - 1] + (last->len + 1);
+        }
+        vec_push(V->strs, str);
+        vec_push(V->strofs, ofs);
+
+        return vp_ir_iofs(str, false, true)->dst;
+    }
+    vp_assertX(0, "bad str type");
     return NULL;
 }
 
@@ -328,7 +317,7 @@ static VReg* gen_ref(Expr* e)
             vp_assertX(vi, "name not found");
             if(vp_scope_isglob(scope))
             {
-                return vp_ir_iofs(name, vi->storage & VS_FN)->dst;
+                return vp_ir_iofs(name, vi->storage & VS_FN, false)->dst;
             }
             if(!vi->fi)
             {
@@ -414,6 +403,16 @@ static VReg* gen_idx(Expr* e)
 static VReg* gen_call(Expr* e)
 {
     vp_assertX(e->kind == EX_CALL, "not a call expression");
+    vp_assertX(e->ty, "call type");
+
+    Type* ret = e->ty;
+    FrameInfo* fi = NULL;
+    if(param_isstack(ret))
+    {
+        fi = vp_frameinfo_new();
+        Slot sl = {.type = ret, .fi = fi};
+        vec_push(V->fncode->slots, sl);
+    }
 
     typedef struct
     {
@@ -424,15 +423,15 @@ static VReg* gen_call(Expr* e)
         bool flo;   /* Is a float argument */
     } ArgInfo;
 
-    vec_t(VReg*) args = NULL;
     vec_t(ArgInfo) arginfos = NULL;
+    uint32_t argstart = (fi != NULL) ? 1 : 0;
     uint32_t offset = 0;
     uint32_t regargs = 0;
     uint32_t argnum = vec_len(e->call.args);
 
     /* Argument placements */
     {
-        for(uint32_t i = 0; i < argnum; i++)
+        for(uint32_t i = argstart; i < argnum; i++)
         {
             Expr* arg = e->call.args[i];
             Type* argty = arg->ty;
@@ -454,19 +453,21 @@ static VReg* gen_call(Expr* e)
                 p.stack = true;
                 offset = ALIGN_UP(offset, align);
                 p.offset = offset;
-                offset += ALIGN_UP(p.size, 8);
+                offset += ALIGN_UP(p.size, TARGET_PTR_SIZE);
             }
 
             vec_push(arginfos, p);
         }
     }
 
+    uint32_t argtotal = argnum + argstart;
+    VReg** args = argtotal == 0 ? NULL : vp_mem_calloc(argtotal, sizeof(*args));
+
     /* Generate arguments */
     {
         for(uint32_t i = argnum; i-- > 0;)
         {
             VReg* src = gen_expr(e->call.args[i]);
-            vec_push(args, src);
 
             ArgInfo* p = &arginfos[i];
             if(p->stack)
@@ -479,14 +480,24 @@ static VReg* gen_call(Expr* e)
                 }
                 else
                 {
-                    vp_ir_store(dst, src, ty_isunsigned(argty) ? IRF_UNSIGNED : 0);
+                    vp_ir_store(dst, src, ir_flag(argty));
                 }
             }
             else
             {
                 vp_ir_pusharg(src, p->regidx);
             }
+
+            args[i + argstart] = src;
         }
+    }
+    /* Handle stack return */
+    if(fi != NULL)
+    {
+        VReg* dst = vp_ir_bofs(fi)->dst;
+        vp_ir_pusharg(dst, 0);
+        args[0] = dst;
+        regargs++;
     }
 
     /* Determine if this is a direct or indirect call */
@@ -501,7 +512,6 @@ static VReg* gen_call(Expr* e)
     Str* label = NULL;
     VReg* freg = NULL;
     VReg* dst = NULL;
-    Type* ret = e->ty;
     if(ret->kind != TY_void)
     {
         dst = vp_vreg_new(ret);
@@ -514,6 +524,7 @@ static VReg* gen_call(Expr* e)
     IRCallInfo* ci = vp_ircallinfo_new(args, argnum, label);
     ci->regargs = regargs;
     ci->stacksize = offset;
+    ci->argtotal = argtotal;
     if(label)
     {
         ci->fn = vp_tab_get(&V->funcs, label);
@@ -676,7 +687,10 @@ static VReg* gen_complit(Expr* e)
         gen_store(field_addr, value, ff->type);
     }
 
-    vec_free(flat_fields);
+    if(flat_fields)
+    {
+        vec_free(flat_fields);
+    }
 
     return base;
 }
@@ -900,9 +914,9 @@ static void gen_var(Stmt* st)
     {
         Slot sl = {.type = vi->type, .fi = vi->fi};
         vec_push(V->fncode->slots, sl);
-        if(!(V->ra->flag & RAF_STACK_FRAME))
+        if(!raf_stackframe(V->ra))
         {
-            V->ra->flag = RAF_STACK_FRAME;
+            V->ra->flag |= RAF_STACK_FRAME;
         }
     }
 
@@ -936,11 +950,30 @@ static void gen_var(Stmt* st)
 static void gen_ret(Stmt* st)
 {
     vp_assertX(st->kind == ST_RETURN, "not return statement");
+    vp_assertX(st->expr->ty, "missing return type");
+    Type* ty = st->expr->ty;
     BB* bb = vp_bb_new();
     if(st->expr)
     {
         VReg* vreg = gen_expr(st->expr);
-        vp_ir_ret(vreg, ir_flag(st->expr->ty));
+
+        if(ty_isscalar(ty))
+        {
+            vp_ir_ret(vreg, ir_flag(ty));
+        }
+        else if(ty != tyvoid)
+        {
+            VReg* retvr = V->fncode->retvr;
+            if(retvr)
+            {
+                gen_memcpy(ty, retvr, vreg);
+                vp_ir_ret(vreg, IRF_UNSIGNED);  /* Pointer is unsigned */
+            }
+            else
+            {
+                vp_assertX(0, "?");
+            }
+        }
     }
     vp_ir_jmp(V->fncode->retbb);
     vp_bb_setcurr(bb);
@@ -1055,6 +1088,7 @@ static void gen_while_stmt(Stmt* st)
     bb_pop_continue(contbb1);
 }
 
+/* Generate asm block statement */
 static void gen_asm(Stmt* st)
 {
     vp_assertX(st->kind == ST_ASM, "not asm statement");
@@ -1093,8 +1127,108 @@ static void gen_stmt(Stmt* st)
     (*gensttab[st->kind])(st);
 }
 
+/* Detect living registers for each instruction */
+static void ra_living(RegAlloc* ra, vec_t(BB*) bbs)
+{
+    LiveInterval** ilivings = vp_mem_calloc(ra->set->iphysmax, sizeof(*ilivings));
+    LiveInterval** flivings = vp_mem_calloc(ra->set->fphysmax, sizeof(*flivings));
+
+    RegSet ipregs = 0;
+    RegSet fpregs = 0;
+
+#define VREGFOR(ra, li) ((VReg*)ra->vregs[li->virt])
+
+    /* Activate function parameters first */
+    for(uint32_t i = 0; i < vec_len(ra->vregs); i++)
+    {
+        LiveInterval* li = ra->sorted[i];
+        vp_assertX(li, "empty live interval");
+        if(li->start != REG_NO)
+            break;
+        if(li->state != LI_NORMAL || VREGFOR(ra, li) == NULL)
+            continue;
+        if(vrf_flo(VREGFOR(ra, li)))
+        {
+            fpregs |= 1ULL << li->phys;
+            flivings[li->phys] = li;
+        }
+        else
+        {
+            ipregs |= 1ULL << li->phys;
+            ilivings[li->phys] = li;
+        }
+    }
+
+    uint32_t nip = 0, head = 0;
+    for(uint32_t i = 0; i < vec_len(bbs); i++)
+    {
+        BB* bb = bbs[i];
+        for(uint32_t j = 0; j < vec_len(bb->irs); j++, nip++)
+        {
+            /* Eliminate deactivated registers (intervals ending at nip) */
+            /* Integer livings */
+            for(uint32_t k = 0; k < ra->set->iphysmax; k++)
+            {
+                LiveInterval* li = ilivings[k];
+                if(li && nip == li->end)
+                {
+                    ipregs &= ~(1ULL << k);
+                    ilivings[k] = NULL;
+                }
+            }
+
+            /* Float livings */
+            for(uint32_t k = 0; k < ra->set->fphysmax; k++)
+            {
+                LiveInterval* li = flivings[k];
+                if(li && nip == li->end)
+                {
+                    fpregs &= ~(1ULL << k);
+                    flivings[k] = NULL;
+                }
+            }
+
+            /* Store living vregs into IR_CALL */
+            IR* ir = bb->irs[j];
+            if(ir->kind == IR_CALL)
+            {
+                ir->call->ipregs = ipregs;
+                ir->call->fpregs = fpregs;
+            }
+
+            /* Add activated registers */
+            for(; head < vec_len(ra->vregs); head++)
+            {
+                LiveInterval* li = ra->sorted[head];
+                if(li->start != REG_NO && li->start > nip)
+                    break;
+                if(li->state != LI_NORMAL)
+                    continue;
+                if(li->start != REG_NO && nip == li->start)
+                {
+                    vp_assertX(VREGFOR(ra, li) != NULL, "?");
+                    if(vrf_flo(VREGFOR(ra, li)))
+                    {
+                        fpregs |= 1ULL << li->phys;
+                        flivings[li->phys] = li;
+                    }
+                    else
+                    {
+                        ipregs |= 1ULL << li->phys;
+                        ilivings[li->phys] = li;
+                    }
+                }
+            }
+        }
+    }
+
+#undef VREGFOR
+}
+
+/* Set stack offsets for spills/slots */
 static void gen_stack(Code* cd)
 {
+    vp_assertX(cd->framesize == 0, "?");
     uint32_t framesize = 0;
 
     /* Allocate stack frame */
@@ -1134,20 +1268,25 @@ static void gen_stack(Code* cd)
 }
 
 /* Generate function parameters */
-static void gen_params(Decl* d)
+static void gen_params(Decl* d, Code* code)
 {
     Type* ret = d->fn.rett;
     bool stack = param_isstack(ret);
-    uint32_t paramstack = 0;
+    uint32_t paramofs = 0;
     uint32_t start = stack ? 1 : 0;
 
     if(stack)
     {
         VReg* vr = vp_vreg_new(vp_type_ptr(ret));
-        vr->flag |= VRF_PARAM;
+        vr->flag |= VRF_STACK_PARAM;
         vr->param = REG_NO;
+        code->retvr = vr;
+        /* Stack parameter offset */
+        paramofs = ALIGN_UP(paramofs, TARGET_PTR_SIZE);
+        paramofs += TARGET_PTR_SIZE;
     }
 
+    /* Count register or stack params */
     for(uint32_t i = 0; i < vec_len(d->fn.params); i++)
     {
         VarInfo* vi = d->fn.scopes[0]->vars[i];
@@ -1162,22 +1301,24 @@ static void gen_params(Decl* d)
             }
             else
             {
+                vr->flag |= VRF_STACK_PARAM;
                 if(!vi->fi)
                 {
                     vi->fi = vp_frameinfo_new();
                     vreg_spill(vr);
                 }
-                vr->flag |= VRF_STACK_PARAM;
-                vi->fi->ofs = paramstack = ALIGN_UP(paramstack, 8);
-                paramstack += 8;
+                /* Stack parameter offset */
+                vi->fi->ofs = paramofs = ALIGN_UP(paramofs, TARGET_PTR_SIZE);
+                paramofs += TARGET_PTR_SIZE;
             }
         }
         else
         {
+            /* Stack parameter offset */
             uint32_t size = vp_type_sizeof(vi->type);
             uint32_t align = vp_type_alignof(vi->type);
-            vi->fi->ofs = paramstack = ALIGN_UP(paramstack, align);
-            paramstack += ALIGN_UP(size, 8);
+            vi->fi->ofs = paramofs = ALIGN_UP(paramofs, align);
+            paramofs += ALIGN_UP(size, TARGET_PTR_SIZE);
         }
     }
 }
@@ -1211,7 +1352,7 @@ static Code* gen_fn(Decl* d)
 
     if(d->fn.params)
     {
-        gen_params(d);
+        gen_params(d, code);
     }
 
     V->fncode->retbb = vp_bb_new();
@@ -1227,6 +1368,7 @@ static Code* gen_fn(Decl* d)
     vp_sel_tweak(code);
     vp_bb_analyze(code->bbs);
     vp_ra_alloc(ra, code->bbs);
+    ra_living(ra, code->bbs);
     gen_stack(code);
 
     vp_dump_bb(code);

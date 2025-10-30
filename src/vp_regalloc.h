@@ -44,6 +44,8 @@ typedef struct RASettings
 
 #define RAF_STACK_FRAME (1 << 0)    /* Require stack frame */
 
+#define raf_stackframe(ra) ((ra)->flag & RAF_STACK_FRAME)
+
 /* Register allocator state */
 typedef struct RegAlloc
 {
@@ -60,6 +62,8 @@ typedef struct RegAlloc
 /* Virtual registers */
 VReg* vp_vreg_ki(int64_t i64, VRSize vsize);
 VReg* vp_vreg_kf(double n, VRSize vsize);
+
+VRSize vp_vreg_elem(uint32_t size, uint32_t align);
 
 /* Register allocation */
 RegAlloc* vp_ra_new(const RASettings* set);

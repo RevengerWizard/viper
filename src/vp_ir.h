@@ -1,6 +1,6 @@
 /*
 ** vp_ir.h
-** Intermediate representation
+** Intermediate Representation
 */
 
 #ifndef _VP_IR_H
@@ -134,12 +134,19 @@ typedef enum CondKind
 
 typedef struct IRCallInfo
 {
-    bool export;
+    /* Precall */
     uint32_t argnum;    /* Number of arguments */
-    uint32_t regargs;   /* Number of register arguments */
     uint32_t stacksize; /* Stack space for arguments */
+    uint64_t ipregs; /* Living int pregs */
+    uint64_t fpregs; /* Living float pregs */
+    vec_t(struct RegSave) saves;  /* Caller saves registers */
+
+    /* Call */
     Str* label;
-    vec_t(VReg*) args;
+    VReg** args;    /* Arguments */
+    uint32_t argtotal;
+    uint32_t regargs;   /* Number of register arguments */
+    bool export;
     struct Code* fn;
 } IRCallInfo;
 
@@ -166,6 +173,7 @@ typedef struct IR
             int64_t ofs;
             Str* label;
             bool isfn;
+            bool isstr;
         } iofs;
         struct
         {
@@ -217,6 +225,7 @@ typedef struct BB
 typedef enum PatchKind
 {
     PATCH_LEA_REL,
+    PATCH_LEA_ABS,
     PATCH_JMP_REL,
     PATCH_CALL_REL,
     PATCH_CALL_ABS,
@@ -238,7 +247,7 @@ extern const char* const vp_ir_name[];
 
 /* IR instructions */
 IR* vp_ir_bofs(FrameInfo* fi);
-IR* vp_ir_iofs(Str* label, bool isfn);
+IR* vp_ir_iofs(Str* label, bool isfn, bool isstr);
 IR* vp_ir_sofs(uint32_t ofs);
 IR* vp_ir_mov(VReg* dst, VReg* src, uint8_t irflag);
 IR* vp_ir_store(VReg* dst, VReg* src, uint8_t irflag);

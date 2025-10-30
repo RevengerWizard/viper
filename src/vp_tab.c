@@ -57,7 +57,10 @@ static void tab_resize(Tab* tab, uint32_t size)
         }
     }
 
-    free(tab->entries);
+    if(tab->entries)
+    {
+        vp_mem_free(tab->entries);
+    }
     tab->entries = entries;
     tab->size = size;
     tab->count = count;
@@ -74,7 +77,7 @@ void vp_tab_free(Tab *tab)
 {
     if(tab->entries)
     {
-        free(tab->entries);
+        vp_mem_free(tab->entries);
         tab->entries = NULL;
     }
     tab->size = 0;

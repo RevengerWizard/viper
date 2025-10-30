@@ -1,6 +1,6 @@
 /*
 ** vp_sel_x64.c
-** Instruction selection (IR -> x64)
+** x64 instruction selection (IR -> x64)
 */
 
 #include "vp_asm.h"
@@ -18,6 +18,12 @@ static vec_t(PatchInfo) patches = NULL;
 static VP_AINLINE void patchinfo_learel(Code* fn, uint32_t ofs)
 {
     PatchInfo pi = {.kind = PATCH_LEA_REL, .ofs = ofs, .c = fn};
+    vec_push(patches, pi);
+}
+
+static VP_AINLINE void patchinfo_leaabs(Str* label, uint32_t ofs)
+{
+    PatchInfo pi = {.kind = PATCH_LEA_ABS, .ofs = ofs, .label = label};
     vec_push(patches, pi);
 }
 
@@ -112,14 +118,19 @@ static void sel_bofs(IR* ir)
 
 static void sel_iofs(IR* ir)
 {
+    Str* label = ir->iofs.label;
     int64_t ofs = ir->iofs.ofs;
     emit_lea64_rm(V, ir->dst->phys, MEM(RIP, NOREG, 1, ofs));
     uint32_t patch = sbuf_len(&V->code) - 4;
     if(ir->iofs.isfn)
     {
-        Code* c = vp_tab_get(&V->funcs, ir->iofs.label);
+        Code* c = vp_tab_get(&V->funcs, label);
         vp_assertX(c, "?");
         patchinfo_learel(c, patch);
+    }
+    else if(ir->iofs.isstr)
+    {
+        patchinfo_leaabs(label, patch);
     }
 }
 
@@ -270,9 +281,15 @@ static void sel_pusharg(IR* ir)
     }
 }
 
+/* Forward declarations */
+static void push_caller_save(vec_t(struct RegSave) saves, uint32_t total);
+static void pop_caller_save(vec_t(struct RegSave) saves, uint32_t ofs);
+
 static void sel_call(IR* ir)
 {
+    uint32_t total = ir->call->stacksize;
     /* Save caller registers */
+    push_caller_save(ir->call->saves, total);
 
     if(ir->call->label)
     {
@@ -296,6 +313,7 @@ static void sel_call(IR* ir)
     }
 
     /* Restore caller registers */
+    pop_caller_save(ir->call->saves, total);
 
     if(ir->dst)
     {
@@ -1232,6 +1250,206 @@ void vp_sel_tweak(Code* c)
     }
 }
 
+typedef struct RegParam
+{
+    Type* ty;
+    VReg* vr;
+    uint32_t idx;
+} RegParam;
+
+static void params_enum(Code* code, RegParam iargs[], RegParam fargs[], uint32_t imax, uint32_t fmax, uint32_t* icount, uint32_t* fcount)
+{
+    uint32_t inums = 0;
+    uint32_t fnums = 0;
+
+    VReg* retvr = code->retvr;
+    if(retvr)
+    {
+        RegParam* rp = &iargs[inums++];
+        rp->ty = vp_type_ptr(tyvoid);
+        rp->vr = retvr;
+        rp->idx = 0;
+    }
+
+    for(uint32_t i = 0; i < code->numparams; i++)
+    {
+        VarInfo* vi = code->scopes[0]->vars[i];
+        Type* ty = vi->type;
+        if(param_isstack(ty))
+            continue;
+        VReg* vr = vi->vreg;
+        vp_assertX(vr, "empty vreg");
+        RegParam* rp = NULL;
+        uint32_t idx = 0;
+        if(ty_isflo(ty))
+        {
+            if(fnums < fmax)
+                rp = &fargs[idx = fnums++];
+        }
+        else
+        {
+            if(inums < imax)
+                rp = &iargs[idx = inums++];
+        }
+        if(rp)
+        {
+            rp->ty = ty;
+            rp->vr = vr;
+            rp->idx = idx;
+        }
+    }
+
+    *icount = inums;
+    *fcount = fnums;
+}
+
+static void params_assign(RegAlloc* ra, Code* c)
+{
+    RegParam iparams[10] = {};
+    RegParam fparams[10] = {};
+    uint32_t inums = 0;
+    uint32_t fnums = 0;
+    params_enum(c, iparams, fparams, 4, 4, &inums, &fnums);
+
+    /* Int parameter stores */
+    for(uint32_t i = 0; i < inums; i++)
+    {
+        RegParam* rp = &iparams[i];
+        VReg* vr = rp->vr;
+        uint32_t size = vp_type_sizeof(rp->ty);
+        VRSize p = vp_msb(size);
+        uint32_t src = ra->set->imap[rp->idx];
+        if(vrf_spill(vr))
+        {
+            uint32_t ofs = vr->fi.ofs;
+            vp_assertX(ofs, "0 offset");
+            emit_mov64_mr(V, MEM(RBP, NOREG, 1, ofs), src);
+        }
+        else if(src != vr->phys)
+        {
+            emit_mov_rr(p, vr->phys, src);
+        }
+    }
+
+    /* Float parameter stores */
+    for(uint32_t i = 0; i < fnums; i++)
+    {
+        RegParam* rp = &fparams[i];
+        VReg* vr = rp->vr;
+        uint32_t src = ra->set->imap[rp->idx];
+        if(vrf_spill(vr))
+        {
+            uint32_t ofs = vr->fi.ofs;
+            vp_assertX(ofs, "0 offset");
+            switch(vr->vsize)
+            {
+                case VRSize4: emit_movss_mr(V, MEM(RBP, NOREG, 1, ofs), src); break;
+                case VRSize8: emit_movsd_mr(V, MEM(RBP, NOREG, 1, ofs), src); break;
+                default: vp_assertX(0, "?");
+            }
+        }
+        else if(src != vr->phys)
+        {
+            uint32_t dst = vr->phys;
+            switch(vr->vsize)
+            {
+                case VRSize4: emit_movss_rr(V, dst, src); break;
+                case VRSize8: emit_movsd_rr(V, dst, src); break;
+                default: vp_assertX(0, "?");
+            }
+        }
+    }
+}
+
+typedef struct RegSave
+{
+    uint32_t reg;
+    bool flo;
+} RegSave;
+
+static vec_t(RegSave) collect_caller_save(RegSet iliving, RegSet fliving)
+{
+    vec_t(RegSave) saves = NULL;
+
+    for(uint32_t i = 0; i < ICALLER_SIZE; i++)
+    {
+        uint32_t ireg = winx64_icaller[i];
+        if(iliving & (1ULL << ireg))
+        {
+            RegSave rs = {.reg = ireg};
+            vec_push(saves, rs);
+        }
+    }
+
+    for(uint32_t i = 0; i < FCALLER_SIZE; i++)
+    {
+        uint32_t freg = winx64_fcaller[i];
+        if(fliving & (1ULL << freg))
+        {
+            RegSave rs = {.reg = freg, .flo = true};
+            vec_push(saves, rs);
+        }
+    }
+
+    return saves;
+}
+
+static uint32_t detect_call_size(Code* code)
+{
+    uint32_t max = 0;
+    if(code->calls)
+    {
+        for(uint32_t i = 0; i < vec_len(code->calls); i++)
+        {
+            IR* ir = code->calls[i];
+
+            /* Caller save registers */
+            vec_t(RegSave) saves = collect_caller_save(ir->call->ipregs, ir->call->fpregs);
+            ir->call->saves = saves;
+
+            uint32_t total = ir->call->stacksize + vec_len(saves) * TARGET_PTR_SIZE;
+            max = MAX(max, total);
+        }
+    }
+    return max;
+}
+
+static void push_caller_save(vec_t(RegSave) saves, uint32_t total)
+{
+    uint32_t ofs = total;
+    ofs += vec_len(saves) * TARGET_PTR_SIZE;
+    for(uint32_t i = 0; i < vec_len(saves); i++)
+    {
+        RegSave* rs = &saves[i];
+        ofs -= TARGET_PTR_SIZE;
+        if(rs->flo)
+        {
+            emit_movsd_mr(V, MEM(RSP, NOREG, 1, ofs), rs->reg);
+        }
+        else
+        {
+            emit_mov64_mr(V, MEM(RSP, NOREG, 1, ofs), rs->reg);
+        }
+    }
+}
+
+static void pop_caller_save(vec_t(RegSave) saves, uint32_t ofs)
+{
+    for(uint32_t i = vec_len(saves); i-- > 0;)
+    {
+        RegSave* rs = &saves[i];
+        if(rs->flo)
+        {
+            emit_movsd_mr(V, rs->reg, MEM(RSP, NOREG, 1, ofs));
+        }
+        else
+        {
+            emit_mov64_rm(V, rs->reg, MEM(RSP, NOREG, 1, ofs));
+        }
+        ofs += TARGET_PTR_SIZE;
+    }
+}
+
 static uint32_t push_callee_save(RegAlloc* ra, RegSet used)
 {
     uint32_t count = 0;
@@ -1257,30 +1475,23 @@ static void pop_callee_save(RegAlloc* ra, RegSet used)
     }
 }
 
-static void assign_params(RegAlloc* ra, Code* c)
-{
-    for(uint32_t i = 0; i < c->numparams; i++)
-    {
-        VarInfo* vi = c->scopes[0]->vars[i];
-        VReg* vr = vi->vreg;
-        if(i < 4)
-        {
-            uint32_t preg = ra->set->imap[i];
-            VRSize p = vr->vsize;
-            if(preg != vr->phys)
-            {
-                emit_mov_rr(p, vr->phys, preg);
-            }
-        }
-    }
-}
-
 static uint32_t resolve_iat_rva(Str* label)
 {
-    if(memcmp(str_data(label), "GetStdHandle", label->len) == 0) return 0x1040;
-    if(memcmp(str_data(label), "WriteConsoleA", label->len) == 0) return 0x1048;
+    if(memcmp(str_data(label), "GetStdHandle", label->len) == 0) return 0x1000 + 0x40;
+    if(memcmp(str_data(label), "WriteConsoleA", label->len) == 0) return 0x1000 + 0x48;
     vp_assertX(0, "external function not found");
     return 0;
+}
+
+static uint32_t resolve_str_rva(Str* label)
+{
+    uint32_t i;
+    for(i = 0; i < vec_len(V->strs); i++)
+    {
+        if(V->strs[i] == label)
+            break;
+    }
+    return 0x2000 + V->strofs[i];
 }
 
 static void patch_infos(void)
@@ -1299,9 +1510,6 @@ static void patch_infos(void)
             {
                 int32_t ofs = p->kind == PATCH_JMP_REL ? p->target->ofs : p->c->ofs;
                 rel = ofs - (from + 4);
-
-                uint8_t* code = (uint8_t*)(V->code.b + p->ofs);
-                *(uint32_t*)code = (uint32_t)rel;
                 break;
             }
             case PATCH_CALL_ABS:
@@ -1310,15 +1518,23 @@ static void patch_infos(void)
                 uint32_t iat_rva = resolve_iat_rva(p->label);
                 uint32_t next_instr = from + 4;
                 rel = iat_rva - next_instr;
-
-                uint8_t* code = (uint8_t*)(V->code.b + p->ofs);
-                *(uint32_t*)code = (uint32_t)rel;
+                break;
+            }
+            case PATCH_LEA_ABS:
+            {
+                /* offset = RVA_IAT - next_instruction_offset */
+                uint32_t iat_rva = resolve_str_rva(p->label);
+                uint32_t next_instr = from + 4;
+                rel = iat_rva - next_instr;
                 break;
             }
             default:
                 vp_assertX(0, "?");
                 break;
         }
+
+        uint8_t* code = (uint8_t*)(V->code.b + p->ofs);
+        *(uint32_t*)code = (uint32_t)rel;
     }
 }
 
@@ -1341,40 +1557,59 @@ static void emit_body(Code* c)
     RegAlloc* ra = c->ra;
     c->ofs = sbuf_len(&V->code);
 
-    /* Prologue */
     bool saverbp = false;
     uint32_t framesize = 0;
     uint32_t numcallee = 0;
-    numcallee = push_callee_save(ra, ra->iregbits);
-    if(c->framesize > 0 || ra->flag & RAF_STACK_FRAME)
+    uint32_t frameofs = 8;
+
+    uint32_t stacksize = detect_call_size(c);
+    c->stacksize = stacksize;
+
+    /* Prologue */
     {
-        emit_push64_r(V, RBP);
-        emit_mov64_rr(V, RBP, RSP);
-        saverbp = true;
+        /* Callee save */
+        numcallee = push_callee_save(ra, ra->iregbits);
+        if(c->framesize > 0 || raf_stackframe(ra))
+        {
+            emit_push64_r(V, RBP);
+            emit_mov64_rr(V, RBP, RSP);
+            saverbp = true;
+            /* RBP pushed, 16 bytes align becomes 0 */
+            frameofs = 0;
+        }
+
+        framesize = c->framesize + stacksize;
+        if(c->calls || stacksize)
+        {
+            /* Align frame size to 16 */
+            size_t calleesize = numcallee * TARGET_PTR_SIZE;
+            framesize += -(framesize + calleesize + frameofs) & 15;
+        }
+
+        if(framesize > 0)
+        {
+            emit_sub_r64i32(V, RSP, framesize);
+        }
+        params_assign(ra, c);
     }
 
-    framesize = c->framesize;
-
-    if(framesize > 0)
-    {
-        emit_sub_r64i32(V, RSP, framesize);
-    }
-    assign_params(ra, c);
-
+    /* Emit basic blocks */
     emit_bbs(c->bbs);
 
     /* Epilogue */
-    if(framesize > 0)
     {
-        emit_add64_ri(V, RSP, framesize);
+        if(framesize > 0)
+        {
+            emit_add64_ri(V, RSP, framesize);
+        }
+        if(saverbp)
+        {
+            emit_mov64_rr(V, RSP, RBP);
+            emit_pop64_r(V, RBP);
+        }
+        pop_callee_save(ra, ra->iregbits);
+        emit_ret(V);
     }
-    if(saverbp)
-    {
-        emit_mov64_rr(V, RSP, RBP);
-        emit_pop64_r(V, RBP);
-    }
-    pop_callee_save(ra, ra->iregbits);
-    emit_ret(V);
 }
 
 void vp_sel(vec_t(Code*) codes)

@@ -22,6 +22,14 @@ static const uint32_t winx64_fmap[] = {
     [3] = REG_xmm3
 };
 
+const uint32_t winx64_icaller[] = {
+    REG_rax, REG_rcx, REG_rdx, REG_r8, REG_r9, REG_r10, REG_r11
+};
+
+const uint32_t winx64_fcaller[] = {
+    REG_xmm0, REG_xmm1, REG_xmm2, REG_xmm3
+};
+
 /* Windows x64 callee-saved int registers */
 #define WINX64_ITEMP \
     ((1ULL << REG_rbx) | (1ULL << REG_rsi) | (1ULL << REG_rdi) | \
