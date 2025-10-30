@@ -3,8 +3,6 @@
 ** Hash table handling
 */
 
-#include <stdlib.h>
-
 #include "vp_tab.h"
 #include "vp_mem.h"
 
