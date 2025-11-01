@@ -101,6 +101,7 @@ typedef enum ExprKind
     EX_CALL,
     EX_IDX,
     EX_FIELD,
+    EX_ACCESS,
     EX__MAX
 } ExprKind;
 
@@ -173,6 +174,12 @@ typedef struct Expr
             struct Expr* expr;
             Str* name;
         } field;
+        struct
+        {
+            uint64_t val;
+            struct Expr* expr;
+            Str* name;
+        } access;
         struct
         {
             TypeSpec* spec;
@@ -289,6 +296,8 @@ typedef struct EnumItem
     SrcLoc loc;
     Str* name;
     Expr* init;
+    Type* ty;
+    uint64_t val;
 } EnumItem;
 
 typedef struct NoteArg
@@ -390,6 +399,7 @@ Expr* vp_expr_comp(SrcLoc loc, TypeSpec* spec, Field* fields);
 Expr* vp_expr_call(SrcLoc loc, Expr* e, vec_t(Expr*) args);
 Expr* vp_expr_idx(SrcLoc loc, Expr* e, Expr* idx);
 Expr* vp_expr_field(SrcLoc loc, Expr* e, Str* name);
+Expr* vp_expr_access(SrcLoc loc, Expr* e, Str* name);
 Expr* vp_expr_cast(SrcLoc loc, ExprKind kind, TypeSpec* spec, Expr* e);
 Expr* vp_expr_sizeof(SrcLoc loc, TypeSpec* spec);
 Expr* vp_expr_alignof(SrcLoc loc, TypeSpec* spec);

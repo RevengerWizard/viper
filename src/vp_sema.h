@@ -10,31 +10,6 @@
 #include "vp_str.h"
 #include "vp_type.h"
 
-typedef enum SymKind
-{
-    SYM_NONE,
-    SYM_VAR,
-    SYM_FN,
-    SYM_TYPE,
-    SYM_ENUM_CONST
-} SymKind;
-
-typedef enum SymState
-{
-    SYM_PENDING,
-    SYM_PROGRESS,
-    SYM_DONE
-} SymState;
-
-typedef struct Sym
-{
-    SymKind kind;
-    SymState state;
-    Str* name;
-    Decl* decl;
-    Type* type;
-} Sym;
-
 typedef union Val
 {
     bool b;
@@ -59,6 +34,31 @@ typedef struct Operand
     bool islval;
     bool untyped;
 } Operand;
+
+typedef enum SymKind
+{
+    SYM_NONE,
+    SYM_VAR,
+    SYM_FN,
+    SYM_TYPE,
+    SYM_ENUM,
+} SymKind;
+
+typedef enum SymState
+{
+    SYM_PENDING,
+    SYM_PROGRESS,
+    SYM_DONE
+} SymState;
+
+typedef struct Sym
+{
+    SymKind kind;
+    SymState state;
+    Str* name;
+    Decl* decl;
+    Type* type;
+} Sym;
 
 vec_t(Decl*) vp_sema(vec_t(Decl*) decls);
 

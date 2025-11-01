@@ -42,6 +42,7 @@
     __(bandeq, &=) __(boreq, |=) __(bxoreq, ^=) \
     __(lshifteq, <<=) __(rshifteq, >>=) \
     __(dbleft, [[) __(dbright, ]]) \
+    __(dcolon, ::) \
     __(name, <name>) __(note, <note>) \
     __(string, <string>) __(char, <char>) \
     __(integer, <integer>) __(number, <number>) \

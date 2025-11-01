@@ -910,6 +910,12 @@ static void dump_ast_expr(Expr* e)
             printf(".%s", str_data(e->field.name));
             break;
         }
+        case EX_ACCESS:
+        {
+            dump_ast_expr(e->access.expr);
+            printf("::%s", str_data(e->access.name));
+            break;
+        }
         case EX_IDX:
         {
             dump_ast_expr(e->idx.expr);
@@ -1116,6 +1122,34 @@ void vp_dump_ast(Decl* d)
             printf("\n");
             break;
         }
+        case DECL_ENUM:
+            printf("enum %s", str_data(d->name));
+            if (d->enm.spec)
+            {
+                printf(" : ");
+                dump_typespec(d->enm.spec);
+            }
+            printf("\n{\n");
+            indent++;
+            for (uint32_t i = 0; i < vec_len(d->enm.items); i++)
+            {
+                dump_indent();
+                EnumItem* item = &d->enm.items[i];
+                printf("%s", str_data(item->name));
+                if (item->init)
+                {
+                    printf(" = ");
+                    dump_ast_expr(item->init);
+                }
+                if (i != vec_len(d->enm.items) - 1)
+                {
+                    printf(",");
+                }
+                printf("\n");
+            }
+            indent--;
+            printf("}\n");
+            break;
         case DECL_STRUCT:
             printf("struct %s\n{\n", str_data(d->name));
             indent++;

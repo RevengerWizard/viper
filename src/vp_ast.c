@@ -165,6 +165,15 @@ Expr* vp_expr_field(SrcLoc loc, Expr* e, Str* name)
     return expr;
 }
 
+Expr* vp_expr_access(SrcLoc loc, Expr* e, Str* name)
+{
+    Expr* expr = expr_new(EX_ACCESS, loc);
+    expr->access.val = 0;
+    expr->access.expr = e;
+    expr->access.name = name;
+    return expr;
+}
+
 Expr* vp_expr_cast(SrcLoc loc, ExprKind kind, TypeSpec* spec, Expr* e)
 {
     vp_assertX(kind <= EX_CAST || kind >= EX_BITCAST, "not a cast");
@@ -328,7 +337,7 @@ Decl* vp_decl_note(SrcLoc loc, Note note)
 
 Decl* vp_decl_enum(SrcLoc loc, Str* name, TypeSpec* spec, vec_t(EnumItem) items)
 {
-    Decl* d = decl_new(DECL_NOTE, loc, name);
+    Decl* d = decl_new(DECL_ENUM, loc, name);
     d->enm.items = items;
     d->enm.spec = spec;
     return d;

@@ -510,9 +510,6 @@ static void ra_scan(RegAlloc* ra, LiveInterval** sorted, uint32_t vreglen)
                 }
             }
         }
-        printf("I %d", i);
-        printf("VIRT %d", li->virt);
-        printf("REGNO %d\n", regno);
         if(regno != REG_NO)
         {
             li->phys = regno;

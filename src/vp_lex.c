@@ -484,6 +484,12 @@ static LexToken lex_scan(LexState* ls, LexValue* val)
                 if(ls->c == ']') { lex_next(ls); return TK_dbright; }
                 return ']';
             }
+            case ':':
+            {
+                lex_next(ls);
+                if(ls->c == ':') { lex_next(ls); return TK_dcolon; }
+                return ':';
+            }
             case '!':
             {
                 lex_next(ls);

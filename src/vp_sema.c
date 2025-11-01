@@ -88,6 +88,7 @@ static Sym* sym_find(Str* name)
 
 static void sema_resolve(Sym* sym);
 static Type* sema_typespec(TypeSpec* spec);
+static void sema_enum(Decl* d, Sym* sym);
 
 /* Find and resolve a local/global symbol */
 static Sym* sym_name(Str* name)
@@ -99,17 +100,6 @@ static Sym* sym_name(Str* name)
     return sym;
 }
 
-/* Create symbols for enum declarations */
-static void sym_enum(Decl* d)
-{
-    vp_assertX(0, "to be done");
-    /*for(uint32_t i = 0; i < vec_len(d->enm.items); i++)
-    {
-        Str* name = d->enm.items[i].name;
-        Sym* itemsym = sym_new(SYM_ENUM_CONST, name, d);
-    }*/
-}
-
 /* Create symbols for top-level declarations */
 static Sym* sym_decl(Decl* d)
 {
@@ -119,8 +109,10 @@ static Sym* sym_decl(Decl* d)
         case DECL_TYPE:
         case DECL_STRUCT:
         case DECL_UNION:
-        case DECL_ENUM:
             kind = SYM_TYPE;
+            break;
+        case DECL_ENUM:
+            kind = SYM_ENUM;
             break;
         case DECL_FN:
             kind = SYM_FN;
@@ -769,9 +761,9 @@ static Operand sema_expr_rval(Expr* e, Type* ret)
 }
 
 /* Resolve constant expression */
-static Operand sema_constexpr(Expr* e)
+static Operand sema_constexpr(Expr* e, Type* ret)
 {
-    Operand res = sema_expr(e, NULL);
+    Operand res = sema_expr(e, ret);
     if(!res.isconst)
     {
         vp_err_error(e->loc, "expected constant expression");
@@ -1096,7 +1088,7 @@ static Operand sema_expr_complit(Expr* e, Type* ret)
             }
             else if(field->kind == FIELD_IDX)
             {
-                Operand opr = sema_constexpr(field->idx);
+                Operand opr = sema_constexpr(field->idx, NULL);
                 if(!ty_isint(opr.ty))
                 {
                     vp_err_error(field->loc, "field init index expression must have type int");
@@ -1208,6 +1200,52 @@ static Operand sema_expr_field(Expr* e)
     }
     vp_err_error(e->loc, "no field named '%s'", str_data(e->field.name));
     return (Operand){};
+}
+
+/* Resolve access */
+static Operand sema_expr_access(Expr* e)
+{
+    vp_assertX(e->kind == EX_ACCESS, "access");
+
+    if(e->access.expr->kind != EX_NAME)
+    {
+        vp_err_error(e->loc, "left side of '::' must be an enum type name");
+    }
+
+    Str* name = e->access.name;
+    Decl* decl = sym_find(e->access.expr->name)->decl;
+    if (decl->kind != DECL_ENUM)
+    {
+        vp_err_error(e->loc, "'%s' is not an enum and does not support '::' access", str_data(name));
+    }
+
+    EnumItem* item = NULL;
+    for(uint32_t i = 0; i < vec_len(decl->enm.items); i++)
+    {
+        EnumItem* curr_item = &decl->enm.items[i];
+        if(curr_item->name == name)
+        {
+            item = curr_item;
+            break;
+        }
+    }
+
+    if(!item)
+    {
+        vp_err_error(e->loc, "enum '%s' has no constant '%s'", str_data(decl->name), str_data(name));
+    }
+
+    Operand opr;
+    if(ty_isunsigned(item->ty))
+    {
+        opr = opr_const(item->ty, (Val){.u64 = item->val});
+    }
+    else
+    {
+        opr = opr_const(item->ty, (Val){.i64 = item->val});
+    }
+    e->access.val = item->val;
+    return opr;
 }
 
 /* Resolve cast */
@@ -1433,6 +1471,9 @@ static Operand sema_expr(Expr* e, Type* ret)
         case EX_FIELD:
             res = sema_expr_field(e);
             break;
+        case EX_ACCESS:
+            res = sema_expr_access(e);
+            break;
         case EX_IDX:
             res = sema_expr_idx(e);
             break;
@@ -1512,7 +1553,7 @@ static void sema_staticassert(Note* note)
     {
         vp_err_error(note->loc, "#staticassert takes 1 argument");
     }
-    Operand res = sema_constexpr(note->args[0].e);
+    Operand res = sema_constexpr(note->args[0].e, NULL);
     if(!res.val.u64)
     {
         vp_err_error(note->loc, "#staticassert failed");
@@ -1549,11 +1590,16 @@ static Type* sema_typespec(TypeSpec* spec)
             {
                 vp_err_error(spec->loc, "unresolved type name '%s'", str_data(spec->name));
             }
-            if(sym->kind != SYM_TYPE)
+            switch(sym->kind)
             {
-                vp_err_error(spec->loc, "'%s' must denote a type", str_data(spec->name));
+                case SYM_ENUM:
+                case SYM_TYPE:
+                    ty = sym->type;
+                    break;
+                default:
+                    vp_err_error(spec->loc, "'%s' must denote a type", str_data(spec->name));
+                    break;
             }
-            ty = sym->type;
             break;
         }
         case SPEC_PTR:
@@ -1564,7 +1610,7 @@ static Type* sema_typespec(TypeSpec* spec)
             int32_t len = 0;
             if(spec->arr.expr)
             {
-                Operand opr = sema_constexpr(spec->arr.expr);
+                Operand opr = sema_constexpr(spec->arr.expr, NULL);
                 if(!ty_isint(opr.ty))
                 {
                     vp_err_error(spec->loc, "array size constant expression must have integer type");
@@ -1751,8 +1797,11 @@ static void sema_stmt(Stmt* st, Type* ret)
             sema_stmt(st->whst.body, ret);
             break;
         case ST_EXPR:
-            sema_expr(st->expr, NULL);
+        {
+            Operand res = sema_expr(st->expr, NULL);
+            opr_fold(st->loc, &st->expr, res);
             break;
+        }
         case ST_DECL:
         {
             Decl* d = st->decl;
@@ -1862,6 +1911,59 @@ static Type* sema_var(Decl* d)
     return ty;
 }
 
+/* Resolve enum declaration */
+static void sema_enum(Decl* d, Sym* sym)
+{
+    vp_assertX(d->kind == DECL_ENUM, "enum declaration");
+
+    Type* ty = sema_typespec(d->enm.spec);
+    if(!ty_isint(ty))
+    {
+        vp_err_error(d->loc, "enum base type must be an integer type");
+    }
+
+    uint64_t val = 0;
+    for(uint32_t i = 0; i < vec_len(d->enm.items); i++)
+    {
+        EnumItem* item = &d->enm.items[i];
+        item->ty = ty;
+
+        if(item->init)
+        {
+            Operand opr = sema_constexpr(item->init, ty);
+            if(!ty_isint(opr.ty))
+            {
+                vp_err_error(item->loc, "enum constant initializer must have an integer type");
+            }
+
+            opr_conv(item->loc, &opr, ty);
+            opr_fold(item->loc, &item->init, opr);
+
+            if(ty_isunsigned(ty))
+            {
+                val = opr.val.u64;
+            }
+            else
+            {
+                val = (uint64_t)opr.val.i64;
+            }
+        }
+        else
+        {
+            if(val_overflow(val, ty))
+            {
+                vp_err_error(item->loc, "literal out of range for '%s'", type_name(ty));
+            }
+        }
+
+        item->val = val;
+        val++;
+    }
+
+    sym->type = ty;
+    sym->state = SYM_DONE;
+}
+
 /* Resolve symbols */
 static void sema_resolve(Sym* sym)
 {
@@ -1907,7 +2009,7 @@ vec_t(Decl*) vp_sema(vec_t(Decl*) decls)
             sym_glob_put(sym);
             if(d->kind == DECL_ENUM)
             {
-                sym_enum(d);
+                sema_enum(d, sym);
             }
         }
     }
@@ -1916,13 +2018,16 @@ vec_t(Decl*) vp_sema(vec_t(Decl*) decls)
     {
         Sym* sym = *p;
         sema_resolve(sym);
-        if(sym->kind == SYM_TYPE)
+        switch(sym->kind)
         {
-            sym_complete(sym->type);
-        }
-        else if(sym->kind == SYM_FN)
-        {
-            sema_fn_body(sym);
+            case SYM_TYPE:
+                sym_complete(sym->type);
+                break;
+            case SYM_FN:
+                sema_fn_body(sym);
+                break;
+            default:
+                break;
         }
     }
 

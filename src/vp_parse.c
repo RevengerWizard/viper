@@ -191,6 +191,13 @@ static Expr* expr_dot(LexState* ls, Expr* lhs, SrcLoc loc)
     return vp_expr_field(loc, lhs, name);
 }
 
+/* Parse name access expression */
+static Expr* expr_access(LexState* ls, Expr* lhs, SrcLoc loc)
+{
+    Str* name = lex_name(ls);
+    return vp_expr_access(loc, lhs, name);
+}
+
 /* Parse unary expression */
 static Expr* expr_unary(LexState* ls, SrcLoc loc)
 {
@@ -339,6 +346,8 @@ static ParseRule expr_rule(LexToken t)
             return RULE(NULL, expr_idx, PREC_CALL);
         case '.':
             return RULE(NULL, expr_dot, PREC_CALL);
+        case TK_dcolon:
+            return RULE(NULL, expr_access, PREC_CALL);
         /* Unary */
         case TK_not:
         case '!':

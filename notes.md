@@ -133,6 +133,8 @@ asm
 
 `typeof` `sizeof` `alignof` `offsetof`
 
+`lenof`
+
 `unreachable`
 
 `inline` `noinline`

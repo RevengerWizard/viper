@@ -36,7 +36,6 @@ void* vp_mem_realloc(void* p, size_t size)
 
 void* vp_mem_alloc(size_t size)
 {
-    vp_assertX(size, "0 size");
     void* p = malloc(size);
     if(VP_UNLIKELY(!p))
     {
