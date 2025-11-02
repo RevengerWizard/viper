@@ -1066,6 +1066,21 @@ void vp_dump_ast(Decl* d)
             dump_typespec(d->ts.spec);
             printf("\n");
             break;
+        case DECL_DEF:
+        {
+            dump_indent();
+            printf("def %s", str_data(d->name));
+            if(d->def.spec)
+            {
+                printf(" : ");
+                dump_typespec(d->def.spec);
+            }
+            printf(" = ");
+            dump_ast_type(d->def.expr->ty);
+            dump_ast_expr(d->def.expr);
+            printf("\n");
+            break;
+        }
         case DECL_VAR:
         {
             dump_indent();

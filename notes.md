@@ -6,6 +6,10 @@
 
 - `asm` blocks
 
+- `def` declarations
+
+- `const` variable declarations
+
 - fix casts, conversions
 
 - fix `const` types
@@ -123,6 +127,12 @@ asm
 
 `str::len`
 
+`mem::copy`
+
+`mem::set`
+
+`mem::alloc`
+
 ---
 
 ### keywords
@@ -146,6 +156,8 @@ asm
 `extern "C"`
 
 `aligned(8)`
+
+`alias` ?
 
 ---
 
@@ -245,13 +257,13 @@ int16 <- int8 | uint8 | bool
 int32 <- int16 | uint16 | int8 | uint8 | bool
 int64 <- int32 | uint32 | int16 | uint16 | int8 | uint8 | bool
 
-| Cast Type | Source Types | Target Types | Safety Level |
-|-----------|-------------|--------------|--------------|
-| `cast` | Numeric, bool, void* | Numeric, bool, typed* | **Safe** - No data loss or well-defined behavior |
-| `intcast` | Numeric | Integer only | **Unsafe** - Potential data loss, wrap-around |
-| `floatcast` | Numeric | Float only | **Unsafe** - Truncation, precision loss |
-| `bitcast` | Any | Same-size type | **Unsafe** - Raw reinterpretation |
-| `ptrcast` | Pointer, integer | Pointer, integer | **Unsafe** - Memory safety concerns |
+| Cast Type   | Source Types           | Target Types          | Safety Level                                     |
+|-----------  | ---------------------- | --------------------- | ------------------------------------------------ |
+| `cast`      | Numeric, bool, void*   | Numeric, bool, typed* | **Safe** - No data loss or well-defined behavior |
+| `intcast`   | Numeric                | Integer only          | **Unsafe** - Potential data loss, wrap-around    |
+| `floatcast` | Numeric                | Float only            | **Unsafe** - Truncation, precision loss          |
+| `bitcast`   | Any                    | Same-size type        | **Unsafe** - Raw reinterpretation                |
+| `ptrcast`   | Pointer, integer       | Pointer, integer      | **Unsafe** - Memory safety concerns              |
 
 ### ir
 

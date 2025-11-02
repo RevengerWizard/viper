@@ -929,6 +929,24 @@ static Decl* parse_attr(LexState* ls)
     return parse_fn(ls, attrs);
 }
 
+/* Parse 'def' */
+static Decl* parse_def(LexState* ls)
+{
+    vp_lex_next(ls);    /* Skip 'def' */
+    SrcLoc loc = lex_srcloc(ls);
+    Str* name = lex_name(ls);
+
+    TypeSpec* spec = NULL;
+    if(lex_match(ls, ':'))
+        spec = parse_type(ls);
+
+    vp_lex_consume(ls, '=');
+    Expr* e = expr(ls);
+    vp_lex_consume(ls, ';');
+
+    return vp_decl_def(loc, name, spec, e);
+}
+
 /* Parse 'var' */
 static Decl* parse_var(LexState* ls)
 {
@@ -1030,6 +1048,9 @@ static Decl* parse_decl(LexState* ls)
             break;
         case TK_var:
             d = parse_var(ls);
+            break;
+        case TK_def:
+            d = parse_def(ls);
             break;
         case TK_type:
             d = parse_typedef(ls);

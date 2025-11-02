@@ -40,6 +40,7 @@ typedef enum SymKind
     SYM_NONE,
     SYM_VAR,
     SYM_FN,
+    SYM_DEF,
     SYM_TYPE,
     SYM_ENUM,
 } SymKind;
@@ -58,6 +59,7 @@ typedef struct Sym
     Str* name;
     Decl* decl;
     Type* type;
+    Val val;
 } Sym;
 
 vec_t(Decl*) vp_sema(vec_t(Decl*) decls);

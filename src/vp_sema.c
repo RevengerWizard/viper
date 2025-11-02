@@ -120,6 +120,9 @@ static Sym* sym_decl(Decl* d)
         case DECL_VAR:
             kind = SYM_VAR;
             break;
+        case DECL_DEF:
+            kind = SYM_DEF;
+            break;
         default:
             vp_assertX(0, "unknown symbol declaration");
             break;
@@ -993,14 +996,17 @@ static Operand sema_expr_name(Expr* e)
     Scope* scope;
     vp_scope_find(V->currscope, e->name, &scope);
     e->scope = scope;
-    if(sym->kind == SYM_VAR)
-        return opr_lval(sym->type);
-    else if(sym->kind == SYM_FN)
-        return opr_rval(sym->type);
-    else
+    switch(sym->kind)
     {
-        vp_err_error(e->loc, "%s must be a var", str_data(e->name));
-        return (Operand){};
+        case SYM_VAR:
+            return opr_lval(sym->type);
+        case SYM_DEF:
+            return opr_const(sym->type, sym->val);
+        case SYM_FN:
+            return opr_rval(sym->type);
+        default:
+            vp_err_error(e->loc, "%s must be a var", str_data(e->name));
+            return (Operand){};
     }
 }
 
@@ -1151,6 +1157,7 @@ static Operand sema_expr_call(Expr* e)
         Type* typaram = fn.ty->fn.params[i];
         Operand arg = sema_expr_rval(e->call.args[i], typaram);
         opr_conv(e->loc, &arg, typaram);
+        opr_fold(e->loc, &e->call.args[i], arg);
     }
     e->ty = fn.ty->fn.ret;
     return opr_rval(fn.ty->fn.ret);
@@ -1911,6 +1918,28 @@ static Type* sema_var(Decl* d)
     return ty;
 }
 
+/* Resolve def declaration */
+static Type* sema_def(Decl* d, Val* val)
+{
+    vp_assertX(d->kind == DECL_DEF, "def declaration");
+    Type* ty = NULL;
+    if(d->def.spec)
+    {
+        ty = sema_typespec(d->def.spec);
+    }
+    Operand res = sema_constexpr(d->def.expr, ty);
+    ty = res.ty;
+    if(!ty_isscalar(ty))
+    {
+        vp_err_error(d->loc, "def declaration must have scalar type");
+    }
+    opr_conv(d->loc, &res, ty);
+    opr_fold(d->loc, &d->def.expr, res);
+    d->var.expr->ty = ty;
+    *val = res.val;
+    return ty;
+}
+
 /* Resolve enum declaration */
 static void sema_enum(Decl* d, Sym* sym)
 {
@@ -1982,6 +2011,9 @@ static void sema_resolve(Sym* sym)
             break;
         case SYM_VAR:
             sym->type = sema_var(sym->decl);
+            break;
+        case SYM_DEF:
+            sym->type = sema_def(sym->decl, &sym->val);
             break;
         case SYM_FN:
             sym->type = sema_fn(sym->decl);

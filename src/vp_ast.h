@@ -329,6 +329,7 @@ typedef struct Attr
 typedef enum DeclKind
 {
     DECL_VAR,
+    DECL_DEF,
     DECL_FN,
     DECL_TYPE,
     DECL_STRUCT,
@@ -358,6 +359,11 @@ typedef struct Decl
             Stmt* body;
             vec_t(Scope)* scopes;
         } fn;
+        struct
+        {
+            TypeSpec* spec;
+            Expr* expr;
+        } def;
         struct
         {
             TypeSpec* spec;
@@ -419,6 +425,7 @@ Stmt* vp_stmt_asm(SrcLoc loc, vec_t(Inst*) insts);
 /* Declarations */
 Decl* vp_decl_fn(SrcLoc loc, vec_t(Attr) attrs, TypeSpec* ret, Str* name, vec_t(Param) params, Stmt* body);
 Decl* vp_decl_var(SrcLoc loc, Str* name, TypeSpec* spec, Expr* e);
+Decl* vp_decl_def(SrcLoc loc, Str* name, TypeSpec* spec, Expr* e);
 Decl* vp_decl_type(SrcLoc loc, Str* name, TypeSpec* spec);
 Decl* vp_decl_aggr(SrcLoc loc, DeclKind kind, Str* name, Aggregate* agr);
 Decl* vp_decl_note(SrcLoc loc, Note note);
