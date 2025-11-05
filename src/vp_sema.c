@@ -378,14 +378,20 @@ static Operand opr_decay(Operand opr)
         case TY_uint64: \
             opr->val.u64 = (uint64_t)opr->val.t; \
             break; \
+        case TY_isize: \
+            opr->val.u64 = (int64_t)opr->val.t; \
+            break; \
+        case TY_usize: \
+            opr->val.u64 = (uint64_t)opr->val.t; \
+            break; \
         case TY_int64: \
             opr->val.i64 = (int64_t)opr->val.t; \
             break; \
-        case TY_float: \
-            opr->val.f = (float)opr->val.t; \
+        case TY_float32: \
+            opr->val.f32 = (float)opr->val.t; \
             break; \
-        case TY_double: \
-            opr->val.d = (double)opr->val.t; \
+        case TY_float64: \
+            opr->val.f64 = (double)opr->val.t; \
             break; \
         default: \
             opr->isconst = false; \
@@ -415,8 +421,10 @@ static bool opr_cast(Operand* opr, Type* ty)
         CASE(TY_int32, i32)
         CASE(TY_uint64, u64)
         CASE(TY_int64, i64)
-        CASE(TY_float, f)
-        CASE(TY_double, d)
+        CASE(TY_usize, u64)
+        CASE(TY_isize, i64)
+        CASE(TY_float32, f32)
+        CASE(TY_float64, f64)
         default:
             opr->isconst = false;
             break;
@@ -449,11 +457,13 @@ static bool val_overflow(uint64_t v, Type* ty)
         case TY_uint16: return v > UINT16_MAX;
         case TY_uint32: return v > UINT32_MAX;
         case TY_uint64: return false;
+        case TY_usize: return false;
         /* Signed */
         case TY_int8: return ((int64_t)v) < INT8_MIN  || ((int64_t)v) > INT8_MAX;
         case TY_int16: return ((int64_t)v) < INT16_MIN || ((int64_t)v) > INT16_MAX;
         case TY_int32: return ((int64_t)v) < INT32_MIN || ((int64_t)v) > INT32_MAX;
         case TY_int64: return false;
+        case TY_isize: return false;
         default: vp_assertX(0, "not an int"); return false;
     }
 }
@@ -479,14 +489,14 @@ static Val val_fromtype(SrcLoc loc, Type* ret, uint64_t u64)
     }
     else
     {
-        if(ret->kind == TY_double)
+        if(ret->kind == TY_float64)
         {
-            val = (Val){.d = u64};
+            val = (Val){.f64 = u64};
         }
         else
         {
-            vp_assertX(ret->kind == TY_float, "float");
-            val = (Val){.f = u64};
+            vp_assertX(ret->kind == TY_float32, "float");
+            val = (Val){.f32 = u64};
         }
     }
     return val;
@@ -539,6 +549,12 @@ static void val_binop_overflow(SrcLoc loc, ExprKind op, Type* ty, Val lval, Val 
         case TY_int64:
             CHECKOVF(op, int64_t, i64)
             break;
+        case TY_usize:
+            CHECKOVF(op, uint64_t, u64)
+            break;
+        case TY_isize:
+            CHECKOVF(op, int64_t, i64)
+            break;
         default:
             vp_assertX(0, "not an int");
             break;
@@ -587,14 +603,14 @@ static Val val_unary(Expr* e, Type* ty, Val val)
     }
     else if(ty_isflo(ty))
     {
-        if(ty->kind == TY_double)
+        if(ty->kind == TY_float64)
         {
-            res.val.d = fold_unary_f(op, res.val.d);
+            res.val.f64 = fold_unary_f(op, res.val.f64);
         }
         else
         {
-            vp_assertX(ty->kind == TY_float, "float");
-            res.val.f = fold_unary_f(op, res.val.f);
+            vp_assertX(ty->kind == TY_float32, "float");
+            res.val.f32 = fold_unary_f(op, res.val.f32);
         }
     }
     else
@@ -627,16 +643,16 @@ static Val val_binop(SrcLoc loc, ExprKind op, Type* ty, Val lval, Val rval)
     }
     else if(ty_isflo(ty))
     {
-        if(ty->kind == TY_double)
+        if(ty->kind == TY_float64)
         {
-            double d = fold_binop_f(op, lop.val.d, rop.val.d);
-            res = opr_const(ty, (Val){.d = d});
+            double d = fold_binop_f(op, lop.val.f64, rop.val.f64);
+            res = opr_const(ty, (Val){.f64 = d});
         }
         else
         {
-            vp_assertX(ty->kind == TY_float, "float");
-            float f = fold_binop_f(op, lop.val.f, rop.val.f);
-            res = opr_const(ty, (Val){.f = f});
+            vp_assertX(ty->kind == TY_float32, "float");
+            float f = fold_binop_f(op, lop.val.f32, rop.val.f32);
+            res = opr_const(ty, (Val){.f32 = f});
         }
     }
     else
@@ -679,14 +695,14 @@ static void opr_fold(SrcLoc loc, Expr** e, Operand opr)
         }
         else if(ty_isflo(ty))
         {
-            if(ty->kind == TY_double)
+            if(ty->kind == TY_float64)
             {
-                *e = vp_expr_nlit(loc, opr.val.d);
+                *e = vp_expr_nlit(loc, opr.val.f64);
             }
             else
             {
-                vp_assertX(ty->kind == TY_float, "float");
-                *e = vp_expr_flit(loc, opr.val.f);
+                vp_assertX(ty->kind == TY_float32, "float");
+                *e = vp_expr_flit(loc, opr.val.f32);
             }
         }
         (*e)->ty = ty;
@@ -968,6 +984,7 @@ static Operand sema_expr_binop(SrcLoc loc, ExprKind op, Operand lop, Operand rop
             {
                 vp_err_error(loc, "operands of '%s' must have scalar types", opname);
             }
+            break;
         default:
             vp_assertX(0, "?");
             break;
@@ -1365,19 +1382,19 @@ static Operand sema_expr_num(Expr* e, Type* ret)
     if(ret && ty_isflo(ret))
     {
         Val val;
-        if(ret->kind == TY_double)
+        if(ret->kind == TY_float64)
         {
-            val = (Val){.d = e->n};
+            val = (Val){.f64 = e->n};
         }
         else
         {
-            val = (Val){.f = e->n};
+            val = (Val){.f32 = e->n};
         }
         res = opr_lit(ret, val, false);
     }
     else
     {
-        res = opr_lit(tyfloat, (Val){.f = e->n}, false);
+        res = opr_lit(tyfloat32, (Val){.f32 = e->n}, false);
     }
     return res;
 }

@@ -28,7 +28,7 @@
     _(int8) _(int16) _(int32) _(int64) \
     _(uint8) _(uint16) _(uint32) _(uint64) \
     _(usize) _(isize) \
-    _(float) _(double) \
+    _(float32) _(float64) \
     _(true) _(false) _(nil) \
     _(if) _(else) \
     _(while) \
@@ -95,10 +95,12 @@ typedef enum
     NUM_U16,
     NUM_U32,
     NUM_U64,
+    NUM_USZ,
     NUM_I8,
     NUM_I16,
     NUM_I32,
-    NUM_I64
+    NUM_I64,
+    NUM_ISZ
 } NumMod;
 
 /* Viper lexer state */

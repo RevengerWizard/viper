@@ -17,14 +17,16 @@ Type* tyuint8 = &(Type){.kind = TY_uint8};
 Type* tyuint16 = &(Type){.kind = TY_uint16};
 Type* tyuint32 = &(Type){.kind = TY_uint32};
 Type* tyuint64 = &(Type){.kind = TY_uint64};
+Type* tyusize = &(Type){.kind = TY_usize};
 /* Signed */
 Type* tyint8 = &(Type){.kind = TY_int8};
 Type* tyint16 = &(Type){.kind = TY_int16};
 Type* tyint32 = &(Type){.kind = TY_int32};
 Type* tyint64 = &(Type){.kind = TY_int64};
+Type* tyisize = &(Type){.kind = TY_isize};
 /* Floats */
-Type* tyfloat = &(Type){.kind = TY_float};
-Type* tydouble = &(Type){.kind = TY_double};
+Type* tyfloat32 = &(Type){.kind = TY_float32};
+Type* tyfloat64 = &(Type){.kind = TY_float64};
 
 Type* tyvoid = &(Type){.kind = TY_void};
 Type* tynil = &(Type){.kind = TY_nil};
@@ -52,14 +54,16 @@ static int vp_type_rank(Type* t)
         case TY_uint16: return 3;
         case TY_uint32: return 4;
         case TY_uint64: return 5;
+        case TY_usize: return 6;
         /* Signed integers */
-        case TY_int8: return 6;
-        case TY_int16: return 7;
-        case TY_int32: return 8;
-        case TY_int64: return 9;
+        case TY_int8: return 7;
+        case TY_int16: return 8;
+        case TY_int32: return 9;
+        case TY_int64: return 10;
+        case TY_isize: return 11;
         /* Floating */
-        case TY_float: return 10;
-        case TY_double: return 11;
+        case TY_float32: return 12;
+        case TY_float64: return 13;
         default: vp_assertX(0, "rank"); return 0;
     }
 }
@@ -80,11 +84,13 @@ uint32_t vp_type_sizeof(Type* t)
             return 2;
         case TY_uint32:
         case TY_int32:
-        case TY_float:
+        case TY_float32:
             return 4;
         case TY_uint64:
         case TY_int64:
-        case TY_double:
+        case TY_usize:
+        case TY_isize:
+        case TY_float64:
         case TY_ptr:
         case TY_func:
         case TY_nil:
@@ -115,11 +121,13 @@ uint32_t vp_type_alignof(Type* t)
             return 2;
         case TY_uint32:
         case TY_int32:
-        case TY_float:
+        case TY_float32:
             return 4;
         case TY_uint64:
         case TY_int64:
-        case TY_double:
+        case TY_usize:
+        case TY_isize:
+        case TY_float64:
         case TY_ptr:
         case TY_func:
         case TY_nil:
@@ -156,12 +164,12 @@ bool vp_type_isconv(Type* dst, Type* src)
     else if(ty_isint(src) && ty_isflo(dst))
     {
         /* Small enough integers to float */
-        if((vp_type_sizeof(src) <= 4) && dst->kind == TY_float)
+        if((vp_type_sizeof(src) <= 4) && dst->kind == TY_float32)
         {
             return true;
         }
         /* Any small/medium integers to double */
-        else if((vp_type_sizeof(src) <= 8) && dst->kind == TY_double)
+        else if((vp_type_sizeof(src) <= 8) && dst->kind == TY_float64)
         {
             return true;
         }
@@ -181,7 +189,7 @@ bool vp_type_isconv(Type* dst, Type* src)
     }
     else if(ty_isptr(dst) && ty_isptr(src))
     {
-        if(ty_isaggr(dst->p) && ty_isaggr(src->p) && 
+        if(ty_isaggr(dst->p) && ty_isaggr(src->p) &&
             dst->p == src->p->st.fields[0].ty)
         {
             return true;
@@ -273,10 +281,12 @@ Type* vp_type_builtin(int i)
         case TY_uint16: return tyuint16;
         case TY_uint32: return tyuint32;
         case TY_uint64: return tyuint64;
+        case TY_usize: return tyusize;
         case TY_int8: return tyint8;
         case TY_int16: return tyint16;
         case TY_int32: return tyint32;
         case TY_int64: return tyint64;
+        case TY_isize: return tyisize;
         default: vp_assertX(0, "? %d", i); return NULL;
     }
 }
@@ -286,10 +296,10 @@ Type* vp_type_common(Type* lty, Type* rty)
 {
     if(lty == rty)
         return lty;
-    
+
     bool left = vp_type_isconv(lty, rty);
     bool right = vp_type_isconv(rty, lty);
-    if(right && !left)   
+    if(right && !left)
         return rty;
     if(left && !right)
         return lty;
@@ -319,6 +329,9 @@ Type* vp_type_tounsigned(Type* t)
         case TY_uint64:
         case TY_int64:
             return tyuint64;
+        case TY_usize:
+        case TY_isize:
+            return tyusize;
         default:
             vp_assertX(0, "?");
             return NULL;

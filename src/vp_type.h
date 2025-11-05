@@ -16,11 +16,11 @@
     /* Integers */ \
     _(bool) \
     /* Unsigned */ \
-    _(uint8) _(uint16) _(uint32) _(uint64) \
+    _(uint8) _(uint16) _(uint32) _(uint64) _(usize) \
     /* Signed */ \
-    _(int8) _(int16) _(int32) _(int64) \
+    _(int8) _(int16) _(int32) _(int64) _(isize) \
     /* Floats */ \
-    _(float) _(double) \
+    _(float32) _(float64) \
     _(ptr) _(func) _(array) \
     _(struct) _(union) \
     _(void) _(nil) \
@@ -71,14 +71,16 @@ extern Type* tyuint8;
 extern Type* tyuint16;
 extern Type* tyuint32;
 extern Type* tyuint64;
+extern Type* tyusize;
 /* Signed */
 extern Type* tyint8;
 extern Type* tyint16;
 extern Type* tyint32;
 extern Type* tyint64;
+extern Type* tyisize;
 /* Floats */
-extern Type* tyfloat;
-extern Type* tydouble;
+extern Type* tyfloat32;
+extern Type* tyfloat64;
 
 extern Type* tyvoid;
 extern Type* tynil;
@@ -90,22 +92,22 @@ static VP_AINLINE bool ty_isbool(const Type* t)
 
 static VP_AINLINE bool ty_issigned(const Type* t)
 {
-    return t->kind >= TY_int8 && t->kind <= TY_int64;
+    return t->kind >= TY_int8 && t->kind <= TY_isize;
 }
 
 static VP_AINLINE bool ty_isunsigned(const Type* t)
 {
-    return t->kind >= TY_uint8 && t->kind <= TY_uint64;
+    return t->kind >= TY_uint8 && t->kind <= TY_usize;
 }
 
 static VP_AINLINE bool ty_isint(const Type* t)
 {
-    return t->kind >= TY_uint8 && t->kind <= TY_int64;
+    return t->kind >= TY_uint8 && t->kind <= TY_isize;
 }
 
 static VP_AINLINE bool ty_isflo(const Type* t)
 {
-    return t->kind == TY_float || t->kind == TY_double;
+    return t->kind == TY_float32 || t->kind == TY_float64;
 }
 
 static VP_AINLINE bool ty_isnum(const Type* t)

@@ -124,9 +124,9 @@ static void pe_build(VpState* V, SBuf* sb)
 {
     size_t codesize = sbuf_len(&V->code);
 
-    Code* c = vp_tab_get(&V->funcs, vp_str_newlen("main"));
-    vp_assertX(c, "?");
-    int32_t entryofs = c->ofs;
+    Code* code = vp_tab_get(&V->funcs, vp_str_newlen("main"));
+    vp_assertX(code, "?");
+    int32_t entryofs = code->ofs;
 
     /* DOS header */
     char* p = vp_buf_need(sb, 64);

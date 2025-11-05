@@ -4,93 +4,157 @@
 */
 
 #include "vp_target.h"
-#include "vp_sel.h"
 
-/* Windows x64 int parameters */
+#include "vp_def.h"
+#include "vp_regalloc.h"
+#include "vp_target_x64.h"
+#include "vp_low.h"
+
+/* -- Windows x64 ABI ----------------------------------------------- */
+
+/* Int parameters */
 static const uint32_t winx64_imap[] = {
-    [0] = REG_rcx,
-    [1] = REG_rdx,
-    [2] = REG_r8,
-    [3] = REG_r9
+    RCX, RDX, R8, R9
 };
 
-/* Windows x64 float parameters */
+/* Float parameters */
 static const uint32_t winx64_fmap[] = {
-    [0] = REG_xmm0,
-    [1] = REG_xmm1,
-    [2] = REG_xmm2,
-    [3] = REG_xmm3
+    XMM0, XMM1, XMM2, XMM3
 };
 
+/* Caller-save registers */
 const uint32_t winx64_icaller[] = {
-    REG_rax, REG_rcx, REG_rdx, REG_r8, REG_r9, REG_r10, REG_r11
+    RAX, RCX, RDX, R8, R9, R10, R11
 };
 
+/* Caller-save registers */
 const uint32_t winx64_fcaller[] = {
-    REG_xmm0, REG_xmm1, REG_xmm2, REG_xmm3
+    XMM0, XMM1, XMM2, XMM3
 };
 
-/* Windows x64 callee-saved int registers */
-#define WINX64_ITEMP \
-    ((1ULL << REG_rbx) | (1ULL << REG_rsi) | (1ULL << REG_rdi) | \
-    (1ULL << REG_r12) | (1ULL << REG_r13) | (1ULL << REG_r14) | (1ULL << REG_r15))
+/* Callee-save int registers */
+#define WINX64_ICALLEE \
+    ((1ULL << RBX) | (1ULL << RSI) | (1ULL << RDI) | \
+    (1ULL << R12) | (1ULL << R13) | (1ULL << R14) | (1ULL << R15))
 
-/* Windows x64 callee-saved float registers */
-#define WINX64_FTEMP \
-    ((1ULL << REG_xmm0) | (1ULL << REG_xmm1) | (1ULL << REG_xmm2) | \
-    (1ULL << REG_xmm3) | (1ULL << REG_xmm4) | (1ULL << REG_xmm5))
+/* Callee-save float registers */
+#define WINX64_FCALLEE \
+    ((1ULL << XMM0) | (1ULL << XMM1) | (1ULL << XMM2) | \
+    (1ULL << XMM3) | (1ULL << XMM4) | (1ULL << XMM5))
 
-/* Windows x64 regalloc settings */
-const RASettings winx64_ra = {
-    .extra = sel_extra,
-    .imap = winx64_imap,
-    .fmap = winx64_fmap,
-    .iphysmax = 16,
-    .fphysmax = 16,
-    .itemp = WINX64_ITEMP,
-    .ftemp = WINX64_FTEMP
+/* -- System V x64 ABI ---------------------------------------------- */
+
+/* Int parameters */
+static const uint32_t sysvx64_imap[] = {
+    RDI, RSI, RDX, RCX, R8, R9
 };
 
-/* System-V x64 int parameters */
-static const uint32_t sysv_x64_imap[] = {
-    [0] = REG_rdi,
-    [1] = REG_rsi,
-    [2] = REG_rdx,
-    [3] = REG_rcx,
-    [4] = REG_r8,
-    [5] = REG_r9
+/* Float parameters */
+static const uint32_t sysvx64_fmap[] = {
+    XMM0, XMM1, XMM2, XMM3, XMM4, XMM5, XMM6, XMM7
 };
 
-/* System-V x64 float parameters */
-static const uint32_t sysv_x64_fmap[] = {
-    [0] = REG_xmm0,
-    [1] = REG_xmm1,
-    [2] = REG_xmm2,
-    [3] = REG_xmm3,
-    [4] = REG_xmm4,
-    [5] = REG_xmm5,
-    [6] = REG_xmm6,
-    [7] = REG_xmm7
+/* Caller-save registers */
+static const uint32_t sysvx64_icaller[] = {
+    RAX, RCX, RDX, RSI,
+    RDI, R8, R9, R10, R11
 };
 
-/* System V x64 callee-saved int registers */
-#define SYSV_X64_ITEMP \
-    ((1ULL << REG_rbx) | (1ULL << REG_rbp) | (1ULL << REG_r12) | \
-    (1ULL << REG_r13) | (1ULL << REG_r14) | (1ULL << REG_r15))
-
-/* System V x64 callee-saved float registers */
-#define SYSV_X64_FTEMP \
-    ((1ULL << REG_xmm8) | (1ULL << REG_xmm9) | (1ULL << REG_xmm10) | \
-    (1ULL << REG_xmm11) | (1ULL << REG_xmm12) | (1ULL << REG_xmm13) | \
-    (1ULL << REG_xmm14) | (1ULL << REG_xmm15))
-
-/* System V x64 regalloc settings */
-const RASettings sysv_x64_ra = {
-    .extra = sel_extra,
-    .imap = sysv_x64_imap,
-    .fmap = sysv_x64_fmap,
-    .iphysmax = 16,
-    .fphysmax = 16,
-    .itemp = SYSV_X64_ITEMP,
-    .ftemp = SYSV_X64_FTEMP
+/* Caller-save registers */
+static const uint32_t sysvx64_fcaller[] = {
+    XMM0, XMM1, XMM2, XMM3,
+    XMM4, XMM5, XMM6, XMM7,
+    XMM8, XMM9, XMM10, XMM11,
+    XMM12, XMM13, XMM14, XMM15
 };
+
+/* Callee-save int registers */
+#define SYSV_X64_ICALLEE \
+    ((1ULL << RBX) | (1ULL << RBP) | (1ULL << R12) | \
+    (1ULL << R13) | (1ULL << R14) | (1ULL << R15))
+
+/* Callee-save float registers */
+#define SYSV_X64_FCALLEE \
+    ((1ULL << XMM8) | (1ULL << XMM9) | (1ULL << XMM10) | \
+    (1ULL << XMM11) | (1ULL << XMM12) | (1ULL << XMM13) | \
+    (1ULL << XMM14) | (1ULL << XMM15))
+
+/* Archs */
+static const ArchInfo archs[] = {
+    [ARCH_X64] = {
+        .ptrsize = 8,
+        .iregnum = X64_IREG,
+        .fregnum = X64_FREG,
+        .name = "x64"
+    }
+};
+
+/* ABIs */
+static const ABIInfo abis[] = {
+    [ABI_WIN_X64] = {
+        .imap = winx64_imap,
+        .fmap = winx64_fmap,
+        .icaller = winx64_icaller,
+        .fcaller = winx64_fcaller,
+        .icallersize = ARRSIZE(winx64_icaller),
+        .fcallersize = ARRSIZE(winx64_fcaller),
+        .icallee = WINX64_ICALLEE,
+        .fcallee = WINX64_FCALLEE
+    },
+    [ABI_SYSV_X64] = {
+        .imap = sysvx64_imap,
+        .fmap = sysvx64_fmap,
+        .icaller = sysvx64_icaller,
+        .fcaller = sysvx64_fcaller,
+        .icallersize = ARRSIZE(sysvx64_icaller),
+        .fcallersize = ARRSIZE(sysvx64_fcaller),
+        .icallee = SYSV_X64_ICALLEE,
+        .fcallee = SYSV_X64_FCALLEE
+    }
+};
+
+/* RegAlloc settings */
+static const RASettings ras[] = {
+    [ABI_WIN_X64] = {
+        .extra = vp_ir_x64_extra,
+        .imap = abis[ABI_WIN_X64].imap,
+        .fmap = abis[ABI_WIN_X64].fmap,
+        .iphysmax = archs[ARCH_X64].iregnum,
+        .fphysmax = archs[ARCH_X64].fregnum,
+        .itemp = abis[ABI_WIN_X64].icallee,
+        .ftemp = abis[ABI_WIN_X64].fcallee,
+    },
+    [ABI_SYSV_X64] = {
+        .extra = vp_ir_x64_extra,
+        .imap = abis[ABI_SYSV_X64].imap,
+        .fmap = abis[ABI_SYSV_X64].fmap,
+        .iphysmax = archs[ARCH_X64].iregnum,
+        .fphysmax = archs[ARCH_X64].fregnum,
+        .itemp = abis[ABI_SYSV_X64].icallee,
+        .ftemp = abis[ABI_SYSV_X64].fcallee,
+    }
+};
+
+/* Target configuration table */
+static const TargetInfo targets[] = {
+    {
+        TARGET_X64_WINDOWS,
+        OS_WINDOWS,
+        ARCH_X64,
+        ABI_WIN_X64,
+        "x64-windows",
+        &abis[ABI_WIN_X64],
+        &archs[ARCH_X64],
+        &ras[ABI_WIN_X64]
+    }
+};
+
+#define TARGET_NUM (ARRSIZE(targets))
+
+/* Initialize target configuration */
+const TargetInfo* vp_target_init(TargetID id)
+{
+    if(id >= TARGET_NUM)
+        return NULL;
+    return &targets[id];
+}

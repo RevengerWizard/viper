@@ -16,7 +16,7 @@
 
 - boolean types: `bool`
 - integer types: `int8`, `uint8`, `int16`, `uint16`, `int32`, `uint32`, `int64`, `uint64`
-- floating types: `float`, `double`
+- floating types: `float32`, `float64`
 - numeric types: integer and floating types
 - pointer types: any type of the form `T*`
 - array types: any type of the form `T[N]` or `T[]`
@@ -91,12 +91,12 @@ Rule E2 (comparison operators): for operations `==` `!=` `<` `>` `<=` `>=`
     * both operands must be pointers of the same type
 
 - the result has type `bool`
-  
+
 Rule E3 (logical operators): for operations `and` `or`
 - both operands must be scalar types
 - if operands are not `bool`, they are first converted to `bool` (non-zero is true, zero is false)
 - the result has type `bool`
-  
+
 Rule E4 (unary operators): for operations `-` `~`
 - for `-`
     * the operand must be a numeric type
@@ -105,7 +105,7 @@ Rule E4 (unary operators): for operations `-` `~`
     * the operand must be an integer type
 
 - the result has the same type as the operand
-  
+
 Rule E5 (unary operator): for operations `!` `not`
 - the operand must be a scalar type
 - if the operand is not `bool`, it is first converted to `bool` (non-zero is true, zero is false)
@@ -133,8 +133,8 @@ Rule C4: no implicit conversions from floating-point to integer types
 
 Rule C5: integer to floating-point conversions are allowed only when:
 - the integer type is small enough that all values can be exactly represented in the float type
-- `int8`, `int16`, `uint8`, `uint16` -> `float` or `double`
-- `int32`, `uint32` -> `double` only
+- `int8`, `int16`, `uint8`, `uint16` -> `float32` or `float64`
+- `int32`, `uint32` -> `float64` only
 
 Rule C6: no implicit conversion between floating-point types (`float` <-> `double`)
 

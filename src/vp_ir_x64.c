@@ -1,70 +1,18 @@
 /*
-** vp_sel_x64.c
-** x64 instruction selection (IR -> x64)
+** vp_ir_x64.c
+** IR instruction emitting (IR -> x64)
 */
 
 #include "vp_asm.h"
 #include "vp_emit_x64.h"
 
-#include "vp_sel.h"
+#include "vp_link.h"
 #include "vp_ir.h"
 #include "vp_regalloc.h"
 #include "vp_state.h"
 #include "vp_target.h"
 #include "vp_vec.h"
-
-static vec_t(PatchInfo) patches = NULL;
-
-static VP_AINLINE void patchinfo_learel(Code* fn, uint32_t ofs)
-{
-    PatchInfo pi = {.kind = PATCH_LEA_REL, .ofs = ofs, .c = fn};
-    vec_push(patches, pi);
-}
-
-static VP_AINLINE void patchinfo_leaabs(Str* label, uint32_t ofs)
-{
-    PatchInfo pi = {.kind = PATCH_LEA_ABS, .ofs = ofs, .label = label};
-    vec_push(patches, pi);
-}
-
-static VP_AINLINE void patchinfo_jmprel(BB* bb, uint32_t ofs)
-{
-    PatchInfo pi = {.kind = PATCH_JMP_REL, .ofs = ofs, .target = bb};
-    vec_push(patches, pi);
-}
-
-static VP_AINLINE void patchinfo_callrel(Code* fn, uint32_t ofs)
-{
-    PatchInfo pi = {.kind = PATCH_CALL_REL, .ofs = ofs, .c = fn};
-    vec_push(patches, pi);
-}
-
-static VP_AINLINE void patchinfo_callabs(Str* label, uint32_t ofs)
-{
-    PatchInfo pi = {.kind = PATCH_CALL_ABS, .ofs = ofs, .label = label};
-    vec_push(patches, pi);
-}
-
-RegSet sel_extra(RegAlloc* ra, IR* ir)
-{
-    RegSet ioccupy = 0;
-    switch(ir->kind)
-    {
-        case IR_MUL: case IR_DIV: case IR_MOD:
-            if(!vrf_flo(ir->dst))
-                ioccupy = (1ULL << RDX) | (1ULL << RAX);
-            break;
-        case IR_LSHIFT: case IR_RSHIFT:
-            if(!vrf_flo(ir->src2))
-                ioccupy = 1ULL << RCX;
-            break;
-        default: break;
-    }
-    if(ra->flag & RAF_STACK_FRAME)
-        ioccupy |= 1ULL << RBP;
-    ioccupy |= 1ULL << RSP;
-    return ioccupy;
-}
+#include "vp_low.h"
 
 static void emit_mov(VReg* dst, VReg* src)
 {
@@ -110,13 +58,13 @@ static void emit_mov(VReg* dst, VReg* src)
     }
 }
 
-static void sel_bofs(IR* ir)
+static void ir_x64_bofs(IR* ir)
 {
     int64_t ofs = ir->bofs.fi->ofs + ir->bofs.ofs;
     emit_lea64_rm(V, ir->dst->phys, MEM(RBP, NOREG, 1, ofs));
 }
 
-static void sel_iofs(IR* ir)
+static void ir_x64_iofs(IR* ir)
 {
     Str* label = ir->iofs.label;
     int64_t ofs = ir->iofs.ofs;
@@ -124,9 +72,9 @@ static void sel_iofs(IR* ir)
     uint32_t patch = sbuf_len(&V->code) - 4;
     if(ir->iofs.isfn)
     {
-        Code* c = vp_tab_get(&V->funcs, label);
-        vp_assertX(c, "?");
-        patchinfo_learel(c, patch);
+        Code* code = vp_tab_get(&V->funcs, label);
+        vp_assertX(code, "?");
+        patchinfo_learel(code, patch);
     }
     else if(ir->iofs.isstr)
     {
@@ -134,18 +82,18 @@ static void sel_iofs(IR* ir)
     }
 }
 
-static void sel_sofs(IR* ir)
+static void ir_x64_sofs(IR* ir)
 {
     int64_t ofs = ir->sofs.ofs;
     emit_lea64_rm(V, ir->dst->phys, MEM(RSP, NOREG, 1, ofs));
 }
 
-static void sel_mov(IR* ir)
+static void ir_x64_mov(IR* ir)
 {
     emit_mov(ir->dst, ir->src1);
 }
 
-static void sel_store(IR* ir)
+static void ir_x64_store(IR* ir)
 {
     int32_t disp = 0;
     uint32_t base = ir->src2->phys;
@@ -195,7 +143,7 @@ static void sel_store(IR* ir)
     }
 }
 
-static void sel_load(IR* ir)
+static void ir_x64_load(IR* ir)
 {
     int32_t disp = 0;
     uint32_t base = ir->src1->phys;
@@ -243,18 +191,18 @@ static void sel_load(IR* ir)
     }
 }
 
-static void sel_ret(IR* ir)
+static void ir_x64_ret(IR* ir)
 {
     VReg dst = {.phys = vrf_flo(ir->src1) ? XMM0 : RAX, .vsize = VRSize8, .flag = ir->src1->flag};
     emit_mov(&dst, ir->src1);
 }
 
-static void sel_pusharg(IR* ir)
+static void ir_x64_pusharg(IR* ir)
 {
     if(vrf_flo(ir->src1))
     {
         vp_assertX(!vrf_const(ir->src1), "const src1");
-        uint32_t dst = winx64_ra.fmap[ir->arg.idx];
+        uint32_t dst = V->target->raset->fmap[ir->arg.idx];
         VRSize p = ir->src1->vsize;
         if(dst != ir->src1->phys)
         {
@@ -268,7 +216,7 @@ static void sel_pusharg(IR* ir)
     }
     else
     {
-        uint32_t dst = winx64_ra.imap[ir->arg.idx];
+        uint32_t dst = V->target->raset->imap[ir->arg.idx];
         VRSize p = ir->src1->vsize;
         if(vrf_const(ir->src1))
         {
@@ -281,11 +229,7 @@ static void sel_pusharg(IR* ir)
     }
 }
 
-/* Forward declarations */
-static void push_caller_save(vec_t(struct RegSave) saves, uint32_t total);
-static void pop_caller_save(vec_t(struct RegSave) saves, uint32_t ofs);
-
-static void sel_call(IR* ir)
+static void ir_x64_call(IR* ir)
 {
     uint32_t total = ir->call->stacksize;
     /* Save caller registers */
@@ -341,7 +285,7 @@ static void sel_call(IR* ir)
     }
 }
 
-static void sel_cast(IR* ir)
+static void ir_x64_cast(IR* ir)
 {
     vp_assertX(!vrf_const(ir->src1), "const src1");
     if(vrf_flo(ir->dst))
@@ -353,8 +297,8 @@ static void sel_cast(IR* ir)
             vp_assertX(ir->dst->vsize != ir->src1->vsize, "dst == src1");
             switch(ir->dst->vsize)
             {
-                case VRSize4: emit_cvtsd2ss_rr(V, ir->dst->phys, ir->src1->phys);
-                case VRSize8: emit_cvtss2sd_rr(V, ir->dst->phys, ir->src1->phys);
+                case VRSize4: emit_cvtsd2ss_rr(V, ir->dst->phys, ir->src1->phys); break;
+                case VRSize8: emit_cvtss2sd_rr(V, ir->dst->phys, ir->src1->phys); break;
                 default: vp_assertX(0, "?"); break;
             }
         }
@@ -378,8 +322,8 @@ static void sel_cast(IR* ir)
             {
                 switch(ir->dst->vsize)
                 {
-                    case VRSize4: emit_cvtsi2ss_xr(ir->dst->vsize, ir->dst->phys, ir->src1->phys);
-                    case VRSize8: emit_cvtsi2sd_xr(ir->dst->vsize, ir->dst->phys, ir->src1->phys);
+                    case VRSize4: emit_cvtsi2ss_xr(ir->dst->vsize, ir->dst->phys, ir->src1->phys); break;
+                    case VRSize8: emit_cvtsi2sd_xr(ir->dst->vsize, ir->dst->phys, ir->src1->phys); break;
                     default: vp_assertX(0, "?"); break;
                 }
             }
@@ -387,8 +331,8 @@ static void sel_cast(IR* ir)
             {
                 switch(ir->dst->vsize)
                 {
-                    case VRSize4: emit_cvtsi2ss_xr64(V, ir->dst->phys, ir->src1->phys);
-                    case VRSize8: emit_cvtsi2sd_xr64(V, ir->dst->phys, ir->src1->phys);
+                    case VRSize4: emit_cvtsi2ss_xr64(V, ir->dst->phys, ir->src1->phys); break;
+                    case VRSize8: emit_cvtsi2sd_xr64(V, ir->dst->phys, ir->src1->phys); break;
                     default: vp_assertX(0, "?"); break;
                 }
             }
@@ -409,8 +353,8 @@ static void sel_cast(IR* ir)
         }
         switch(ir->src1->vsize)
         {
-            case VRSize4: emit_cvttss2si_rx(pd, ir->dst->phys, ir->src1->phys);
-            case VRSize8: emit_cvttsd2si_rx(pd, ir->dst->phys, ir->src1->phys);
+            case VRSize4: emit_cvttss2si_rx(pd, ir->dst->phys, ir->src1->phys); break;
+            case VRSize8: emit_cvttsd2si_rx(pd, ir->dst->phys, ir->src1->phys); break;
             default: vp_assertX(0, "?"); break;
         }
     }
@@ -452,124 +396,15 @@ static void sel_cast(IR* ir)
     }
 }
 
-static void sel_keep(IR* ir)
+static void ir_x64_keep(IR* ir)
 {
     UNUSED(ir);
 }
 
-X64Reg regtype_to_x64reg(RegType reg)
-{
-    if(reg <= R15B)
-    {
-        return (X64Reg)((reg > BL) ? (reg - R8B + 8) : reg);
-    }
-    else if(reg >= SPL && reg <= DIL)
-    {
-        switch(reg)
-        {
-            case SPL: return RSP;
-            case BPL: return RBP;
-            case SIL: return RSI;
-            case DIL: return RDI;
-            default: vp_assertX(0, "?");
-        }
-    }
-    else if(reg >= AX && reg <= R15W)
-    {
-        return (X64Reg)(reg - AX);
-    }
-    else if(reg >= EAX && reg <= R15D)
-    {
-        return (X64Reg)(reg - EAX);
-    }
-    else if(reg >= xRAX && reg <= xR15)
-    {
-        return (X64Reg)(reg - xRAX);
-    }
-    else if(reg == xRIP)
-    {
-        return RIP;
-    }
-    vp_assertX(0, "invalid RegType value");
-    return -1;
-}
-
-static VRSize regtype_to_vrsize(RegType reg)
-{
-    if((reg >= AL && reg <= BH) || (reg >= R8B && reg <= DIL)) return VRSize1;
-    if((reg >= AX && reg <= DI) || (reg >= R8W && reg <= R15W)) return VRSize2;
-    if((reg >= EAX && reg <= EDI) || (reg >= R8D && reg <= R15D)) return VRSize4;
-    if((reg >= xRAX && reg <= xR15) || reg == xRIP) return VRSize8;
-    vp_assertX(0, "unknown register size for %d", reg);
-    return VRSize8;
-}
-
-static void emit_asm_mov_rr(Inst* inst)
-{
-    RegType dst = inst->oprs[0].reg;
-    RegType src = inst->oprs[1].reg;
-    VRSize size = regtype_to_vrsize(dst);
-    vp_assertX(size == regtype_to_vrsize(src), "register size mismatch");
-
-    X64Reg x64_dst = regtype_to_x64reg(dst);
-    X64Reg x64_src = regtype_to_x64reg(src);
-    emit_mov_rr(size, x64_dst, x64_src);
-}
-
-static void emit_asm_or_rr(Inst* inst)
-{
-    RegType dst = inst->oprs[0].reg;
-    RegType src = inst->oprs[1].reg;
-    VRSize size = regtype_to_vrsize(dst);
-    vp_assertX(size == regtype_to_vrsize(src), "register size mismatch");
-    X64Reg x64_dst = regtype_to_x64reg(dst);
-    X64Reg x64_src = regtype_to_x64reg(src);
-    emit_or_rr(size, x64_dst, x64_src);
-}
-
-static void emit_asm_shl_ri(Inst* inst)
-{
-    RegType reg = inst->oprs[0].reg;
-    int64_t imm = inst->oprs[1].imm;
-    VRSize size = regtype_to_vrsize(reg);
-    X64Reg x64_reg = regtype_to_x64reg(reg);
-    emit_shl_ri(size, x64_reg, imm);
-}
-
-static void emit_asm_rdtsc(Inst* inst)
-{
-    UNUSED(inst);
-    emit_rdtsc(V);
-}
-
-static void emit_asm_cpuid(Inst* inst)
-{
-    UNUSED(inst);
-    emit_cpuid(V);
-}
-
-static void emit_asm_ret(Inst* inst)
-{
-    UNUSED(inst);
-    emit_ret(V);
-}
-
-typedef void (*EmitAsmFn)(Inst* inst);
-static const EmitAsmFn emitinsttab[] = {
-    [MOV_RR] = emit_asm_mov_rr,
-    [OR_RR] = emit_asm_or_rr,
-    [SHL_RI] = emit_asm_shl_ri,
-    [RDTSC] = emit_asm_rdtsc,
-    [CPUID] = emit_asm_cpuid,
-    [RET] = emit_asm_ret,
-};
-
-static void sel_asm(IR* ir)
+static void ir_x64_asm(IR* ir)
 {
     Inst* inst = ir->asm_.inst;
-    vp_assertX(inst->op < (int)ARRSIZE(emitinsttab), "out of bounds opcode");
-    vp_assertX(emitinsttab[inst->op], "empty entry %d", inst->op);
-    (*emitinsttab[inst->op])(inst);
+    vp_inst_x64(inst);
 }
 
 static void cmp_vregs(VReg* src1, VReg* src2, CondKind cond)
@@ -643,7 +478,7 @@ static X64CC cond2cc(CondKind cond)
     return 0;
 }
 
-static void sel_cond(IR* ir)
+static void ir_x64_cond(IR* ir)
 {
     VReg* src1 = ir->src1, *src2 = ir->src2;
     vp_assertX(!vrf_const(ir->dst), "const dst");
@@ -661,7 +496,7 @@ static void sel_cond(IR* ir)
     emit_movsx_r32r8(V, dst, dst);
 }
 
-static void sel_jmp(IR* ir)
+static void ir_x64_jmp(IR* ir)
 {
     CondKind cond = ir->jmp.cond;
     vp_assertX(cond != COND_NONE, "unconditional jump");
@@ -711,7 +546,7 @@ static void sel_jmp(IR* ir)
     patchinfo_jmprel(ir->jmp.bb, patch);
 }
 
-static void sel_add(IR* ir)
+static void ir_x64_add(IR* ir)
 {
     vp_assertX(ir->dst->phys == ir->src1->phys, "dst != src");
     if(vrf_flo(ir->dst))
@@ -738,9 +573,7 @@ static void sel_add(IR* ir)
             case 0: break;
             case 1: emit_inc_r(p, dst); break;
             case -1: emit_dec_r(p, dst); break;
-            default:
-                emit_add_ri(p, dst, ir->src2->i64);
-                break;
+            default: emit_add_ri(p, dst, ir->src2->i64); break;
             }
         }
         else
@@ -750,7 +583,7 @@ static void sel_add(IR* ir)
     }
 }
 
-static void sel_sub(IR* ir)
+static void ir_x64_sub(IR* ir)
 {
     vp_assertX(ir->dst->phys == ir->src1->phys, "dst != src1");
     if(vrf_flo(ir->dst))
@@ -777,9 +610,7 @@ static void sel_sub(IR* ir)
             case 0: break;
             case 1: emit_dec_r(p, dst); break;
             case -1: emit_inc_r(p, dst); break;
-            default:
-                emit_sub_ri(p, dst, ir->src2->i64);
-                break;
+            default: emit_sub_ri(p, dst, ir->src2->i64); break;
             }
         }
         else
@@ -789,7 +620,7 @@ static void sel_sub(IR* ir)
     }
 }
 
-static void sel_mul(IR* ir)
+static void ir_x64_mul(IR* ir)
 {
     vp_assertX(!vrf_const(ir->src1) &&
             !vrf_const(ir->src2), "const src1 and src2");
@@ -822,7 +653,7 @@ static void sel_mul(IR* ir)
     }
 }
 
-static void sel_div(IR* ir)
+static void ir_x64_div(IR* ir)
 {
     vp_assertX(!vrf_const(ir->src1) &&
             !vrf_const(ir->src2), "const src1 and src2");
@@ -877,7 +708,7 @@ static void sel_div(IR* ir)
     }
 }
 
-static void sel_mod(IR* ir)
+static void ir_x64_mod(IR* ir)
 {
     vp_assertX(!vrf_const(ir->src1) &&
             !vrf_const(ir->src2), "const src1 and src2");
@@ -918,7 +749,7 @@ static void sel_mod(IR* ir)
     }
 }
 
-static void sel_band(IR* ir)
+static void ir_x64_band(IR* ir)
 {
     vp_assertX(ir->dst->phys == ir->src1->phys, "dst != src1");
     vp_assertX(!vrf_const(ir->src1), "const src1");
@@ -934,7 +765,7 @@ static void sel_band(IR* ir)
     }
 }
 
-static void sel_bor(IR* ir)
+static void ir_x64_bor(IR* ir)
 {
     vp_assertX(ir->dst->phys == ir->src1->phys, "dst != src1");
     vp_assertX(!vrf_const(ir->src1), "const src1");
@@ -950,7 +781,7 @@ static void sel_bor(IR* ir)
     }
 }
 
-static void sel_bxor(IR* ir)
+static void ir_x64_bxor(IR* ir)
 {
     vp_assertX(ir->dst->phys == ir->src1->phys, "dst != src1");
     vp_assertX(!vrf_const(ir->src1), "const src1");
@@ -965,7 +796,7 @@ static void sel_bxor(IR* ir)
     }
 }
 
-static void sel_lshift(IR* ir)
+static void ir_x64_lshift(IR* ir)
 {
     vp_assertX(ir->dst->phys == ir->src1->phys, "dst != src1");
     vp_assertX(!vrf_const(ir->src1), "const src1");
@@ -983,7 +814,7 @@ static void sel_lshift(IR* ir)
     }
 }
 
-static void sel_rshift(IR* ir)
+static void ir_x64_rshift(IR* ir)
 {
     vp_assertX(ir->dst->phys == ir->src1->phys, "dst != src1");
     vp_assertX(!vrf_const(ir->src1), "const src1");
@@ -1015,7 +846,7 @@ static void sel_rshift(IR* ir)
     }
 }
 
-static void sel_neg(IR* ir)
+static void ir_x64_neg(IR* ir)
 {
     vp_assertX(!vrf_const(ir->dst), "const dst");
     if(vrf_flo(ir->src1))
@@ -1062,7 +893,7 @@ static void sel_neg(IR* ir)
     }
 }
 
-static void sel_bnot(IR* ir)
+static void ir_x64_bnot(IR* ir)
 {
     vp_assertX(ir->dst->phys == ir->src1->phys, "dst != src1");
     vp_assertX(!vrf_const(ir->dst), "const dst");
@@ -1071,77 +902,60 @@ static void sel_bnot(IR* ir)
     emit_not_r(p, ir->dst->phys);
 }
 
-typedef void (*SelIRFn)(IR* ir);
-static const SelIRFn seltab[] = {
-    [IR_BOFS] = sel_bofs,
-    [IR_IOFS] = sel_iofs,
-    [IR_SOFS] = sel_sofs,
-    [IR_MOV] = sel_mov,
-    [IR_STORE] = sel_store, [IR_LOAD] = sel_load,
-    [IR_STORE_S] = sel_store, [IR_LOAD_S] = sel_load,
-    [IR_RET] = sel_ret,
-    [IR_COND] = sel_cond,
-    [IR_JMP] = sel_jmp,
-    [IR_PUSHARG] = sel_pusharg,
-    [IR_CALL] = sel_call,
-    [IR_CAST] = sel_cast,
-    [IR_KEEP] = sel_keep,
-    [IR_ASM] = sel_asm,
-    [IR_ADD] = sel_add, [IR_SUB] = sel_sub,
-    [IR_MUL] = sel_mul, [IR_DIV] = sel_div, [IR_MOD] = sel_mod,
-    [IR_BAND] = sel_band, [IR_BOR] = sel_bor, [IR_BXOR] = sel_bxor,
-    [IR_LSHIFT] = sel_lshift, [IR_RSHIFT] = sel_rshift,
-    [IR_NEG] = sel_neg, [IR_BNOT] = sel_bnot,
+typedef void (*IRFn)(IR* ir);
+static const IRFn irx64tab[] = {
+    [IR_BOFS] = ir_x64_bofs,
+    [IR_IOFS] = ir_x64_iofs,
+    [IR_SOFS] = ir_x64_sofs,
+    [IR_MOV] = ir_x64_mov,
+    [IR_STORE] = ir_x64_store, [IR_LOAD] = ir_x64_load,
+    [IR_STORE_S] = ir_x64_store, [IR_LOAD_S] = ir_x64_load,
+    [IR_RET] = ir_x64_ret,
+    [IR_COND] = ir_x64_cond,
+    [IR_JMP] = ir_x64_jmp,
+    [IR_PUSHARG] = ir_x64_pusharg,
+    [IR_CALL] = ir_x64_call,
+    [IR_CAST] = ir_x64_cast,
+    [IR_KEEP] = ir_x64_keep,
+    [IR_ASM] = ir_x64_asm,
+    [IR_ADD] = ir_x64_add, [IR_SUB] = ir_x64_sub,
+    [IR_MUL] = ir_x64_mul, [IR_DIV] = ir_x64_div, [IR_MOD] = ir_x64_mod,
+    [IR_BAND] = ir_x64_band, [IR_BOR] = ir_x64_bor, [IR_BXOR] = ir_x64_bxor,
+    [IR_LSHIFT] = ir_x64_lshift, [IR_RSHIFT] = ir_x64_rshift,
+    [IR_NEG] = ir_x64_neg, [IR_BNOT] = ir_x64_bnot,
 };
 
-static void sel_ir(IR* ir)
+void vp_ir_x64(IR* ir)
 {
-    vp_assertX(ir->kind < (int)ARRSIZE(seltab), "out of bounds ir kind");
-    vp_assertX(seltab[ir->kind], "empty entry %d", ir->kind);
-    return (*seltab[ir->kind])(ir);
+    vp_assertX(ir->kind < (int)ARRSIZE(irx64tab), "out of bounds ir kind");
+    vp_assertX(irx64tab[ir->kind], "empty entry %d", ir->kind);
+    return (*irx64tab[ir->kind])(ir);
 }
 
-static uint32_t tmp_fmov(VReg** vp, vec_t(IR*)* irs, uint32_t pos)
+/* x64 register allocator constraints */
+RegSet vp_ir_x64_extra(RegAlloc* ra, IR* ir)
 {
-    VReg* v = *vp;
-    vp_assertX(vrf_const(v) && (v->flag & VRF_FLO), "not const float");
-
-    uint64_t bits = 0;
-    if(v->vsize == VRSize4)
+    RegSet ioccupy = 0;
+    switch(ir->kind)
     {
-        float f = (float)v->n;
-        memcpy(&bits, &f, sizeof(float));
+        case IR_MUL: case IR_DIV: case IR_MOD:
+            if(!vrf_flo(ir->dst))
+                ioccupy = (1ULL << RDX) | (1ULL << RAX);
+            break;
+        case IR_LSHIFT: case IR_RSHIFT:
+            if(!vrf_flo(ir->src2))
+                ioccupy = 1ULL << RCX;
+            break;
+        default: break;
     }
-    else
-    {
-        double d = v->n;
-        memcpy(&bits, &d, sizeof(double));
-    }
-    v = vp_vreg_ki(bits, v->vsize);
-    VReg* tmp1 = vp_ra_spawn(v->vsize, 0);
-    IR* mov1 = vp_ir_mov(tmp1, v, 0);
-    vec_insert(*irs, pos, mov1); pos++;
-
-    VReg* tmp2 = vp_ra_spawn(v->vsize, VRF_FLO);
-    IR* mov2 = vp_ir_mov(tmp2, tmp1, 0);
-    vec_insert(*irs, pos, mov2); pos++;
-
-    *vp = tmp2;
-
-    return pos;
-}
-
-static void tmp_mov(VReg** vp, vec_t(IR*)* irs, uint32_t pos, uint8_t flag)
-{
-    VReg* v = *vp;
-    VReg* tmp = vp_ra_spawn(v->vsize, v->flag & VRF_MASK);
-    IR* mov = vp_ir_mov(tmp, v, flag);
-    vec_insert(*irs, pos, mov);
-    *vp = tmp;
+    if(ra->flag & RAF_STACK_FRAME)
+        ioccupy |= 1ULL << RBP;
+    ioccupy |= 1ULL << RSP;
+    return ioccupy;
 }
 
 /* Convert `A = B op C` to `A = B; A = A op C` */
-static void sel_conv3to2(vec_t(BB*) bbs)
+static void ir_x64_conv3to2(vec_t(BB*) bbs)
 {
     for(uint32_t i = 0; i < vec_len(bbs); i++)
     {
@@ -1156,14 +970,14 @@ static void sel_conv3to2(vec_t(BB*) bbs)
                     if(vrf_flo(ir->dst))
                     {
                         vp_assertX(ir->dst->virt != ir->src1->virt, "dst == src1");
-                        tmp_mov(&ir->src1, &bb->irs, j++, ir->flag);
+                        ir_tmp_mov(&ir->src1, &bb->irs, j++, ir->flag);
 
                         IR* keep = vp_ir_keep(NULL, ir->src1, NULL);
                         j++; vec_insert(bb->irs, j, keep);
                         break;
                     }
-                    /* Fallthrough */
                 }
+                /* Fallthrough */
                 case IR_ADD:
                 case IR_SUB:
                 case IR_MUL:
@@ -1190,10 +1004,10 @@ static void sel_conv3to2(vec_t(BB*) bbs)
 }
 
 /* Tweak the IR for x64 */
-void vp_sel_tweak(Code* c)
+void vp_ir_x64_tweak(Code* code)
 {
-    vec_t(BB*) bbs = c->bbs;
-    sel_conv3to2(bbs);
+    vec_t(BB*) bbs = code->bbs;
+    ir_x64_conv3to2(bbs);
     for(uint32_t i = 0; i < vec_len(bbs); i++)
     {
         BB* bb = bbs[i];
@@ -1208,7 +1022,7 @@ void vp_sel_tweak(Code* c)
                     VReg** vp = vregs[k], *vr = *vp;
                     if(vr && vrf_const(vr) && ((vr->flag & (VRF_FLO | VRF_CONST)) == (VRF_FLO | VRF_CONST)))
                     {
-                        j = tmp_fmov(vp, &bb->irs, j);
+                        j = ir_tmp_fmov(vp, &bb->irs, j);
                     }
                 }
             }
@@ -1222,7 +1036,7 @@ void vp_sel_tweak(Code* c)
                     VReg** vp = vregs[k], *vr = *vp;
                     if(vr && vrf_const(vr) && !vp_isimm32(vr->i64))
                     {
-                        tmp_mov(vp, &bb->irs, j++, ir->flag);
+                        ir_tmp_mov(vp, &bb->irs, j++, ir->flag);
                     }
                 }
             }
@@ -1235,392 +1049,17 @@ void vp_sel_tweak(Code* c)
                 vp_assertX(!vrf_const(ir->src1), "const src1");
                 if(vrf_const(ir->src2))
                 {
-                    tmp_mov(&ir->src2, &bb->irs, j++, ir->flag);
+                    ir_tmp_mov(&ir->src2, &bb->irs, j++, ir->flag);
                 }
                 break;
             case IR_CALL:
                 if(ir->src1 && vrf_const(ir->src1))
                 {
-                    tmp_mov(&ir->src1, &bb->irs, j++, ir->flag);
+                    ir_tmp_mov(&ir->src1, &bb->irs, j++, ir->flag);
                 }
                 break;
             default: break;
             }
         }
     }
-}
-
-typedef struct RegParam
-{
-    Type* ty;
-    VReg* vr;
-    uint32_t idx;
-} RegParam;
-
-static void params_enum(Code* code, RegParam iargs[], RegParam fargs[], uint32_t imax, uint32_t fmax, uint32_t* icount, uint32_t* fcount)
-{
-    uint32_t inums = 0;
-    uint32_t fnums = 0;
-
-    VReg* retvr = code->retvr;
-    if(retvr)
-    {
-        RegParam* rp = &iargs[inums++];
-        rp->ty = vp_type_ptr(tyvoid);
-        rp->vr = retvr;
-        rp->idx = 0;
-    }
-
-    for(uint32_t i = 0; i < code->numparams; i++)
-    {
-        VarInfo* vi = code->scopes[0]->vars[i];
-        Type* ty = vi->type;
-        if(param_isstack(ty))
-            continue;
-        VReg* vr = vi->vreg;
-        vp_assertX(vr, "empty vreg");
-        RegParam* rp = NULL;
-        uint32_t idx = 0;
-        if(ty_isflo(ty))
-        {
-            if(fnums < fmax)
-                rp = &fargs[idx = fnums++];
-        }
-        else
-        {
-            if(inums < imax)
-                rp = &iargs[idx = inums++];
-        }
-        if(rp)
-        {
-            rp->ty = ty;
-            rp->vr = vr;
-            rp->idx = idx;
-        }
-    }
-
-    *icount = inums;
-    *fcount = fnums;
-}
-
-static void params_assign(RegAlloc* ra, Code* c)
-{
-    RegParam iparams[10] = {};
-    RegParam fparams[10] = {};
-    uint32_t inums = 0;
-    uint32_t fnums = 0;
-    params_enum(c, iparams, fparams, 4, 4, &inums, &fnums);
-
-    /* Int parameter stores */
-    for(uint32_t i = 0; i < inums; i++)
-    {
-        RegParam* rp = &iparams[i];
-        VReg* vr = rp->vr;
-        uint32_t size = vp_type_sizeof(rp->ty);
-        VRSize p = vp_msb(size);
-        uint32_t src = ra->set->imap[rp->idx];
-        if(vrf_spill(vr))
-        {
-            uint32_t ofs = vr->fi.ofs;
-            vp_assertX(ofs, "0 offset");
-            emit_mov64_mr(V, MEM(RBP, NOREG, 1, ofs), src);
-        }
-        else if(src != vr->phys)
-        {
-            emit_mov_rr(p, vr->phys, src);
-        }
-    }
-
-    /* Float parameter stores */
-    for(uint32_t i = 0; i < fnums; i++)
-    {
-        RegParam* rp = &fparams[i];
-        VReg* vr = rp->vr;
-        uint32_t src = ra->set->imap[rp->idx];
-        if(vrf_spill(vr))
-        {
-            uint32_t ofs = vr->fi.ofs;
-            vp_assertX(ofs, "0 offset");
-            switch(vr->vsize)
-            {
-                case VRSize4: emit_movss_mr(V, MEM(RBP, NOREG, 1, ofs), src); break;
-                case VRSize8: emit_movsd_mr(V, MEM(RBP, NOREG, 1, ofs), src); break;
-                default: vp_assertX(0, "?");
-            }
-        }
-        else if(src != vr->phys)
-        {
-            uint32_t dst = vr->phys;
-            switch(vr->vsize)
-            {
-                case VRSize4: emit_movss_rr(V, dst, src); break;
-                case VRSize8: emit_movsd_rr(V, dst, src); break;
-                default: vp_assertX(0, "?");
-            }
-        }
-    }
-}
-
-typedef struct RegSave
-{
-    uint32_t reg;
-    bool flo;
-} RegSave;
-
-static vec_t(RegSave) collect_caller_save(RegSet iliving, RegSet fliving)
-{
-    vec_t(RegSave) saves = NULL;
-
-    for(uint32_t i = 0; i < ICALLER_SIZE; i++)
-    {
-        uint32_t ireg = winx64_icaller[i];
-        if(iliving & (1ULL << ireg))
-        {
-            RegSave rs = {.reg = ireg};
-            vec_push(saves, rs);
-        }
-    }
-
-    for(uint32_t i = 0; i < FCALLER_SIZE; i++)
-    {
-        uint32_t freg = winx64_fcaller[i];
-        if(fliving & (1ULL << freg))
-        {
-            RegSave rs = {.reg = freg, .flo = true};
-            vec_push(saves, rs);
-        }
-    }
-
-    return saves;
-}
-
-static uint32_t detect_call_size(Code* code)
-{
-    uint32_t max = 0;
-    if(code->calls)
-    {
-        for(uint32_t i = 0; i < vec_len(code->calls); i++)
-        {
-            IR* ir = code->calls[i];
-
-            /* Caller save registers */
-            vec_t(RegSave) saves = collect_caller_save(ir->call->ipregs, ir->call->fpregs);
-            ir->call->saves = saves;
-
-            uint32_t total = ir->call->stacksize + vec_len(saves) * TARGET_PTR_SIZE;
-            max = MAX(max, total);
-        }
-    }
-    return max;
-}
-
-static void push_caller_save(vec_t(RegSave) saves, uint32_t total)
-{
-    uint32_t ofs = total;
-    ofs += vec_len(saves) * TARGET_PTR_SIZE;
-    for(uint32_t i = 0; i < vec_len(saves); i++)
-    {
-        RegSave* rs = &saves[i];
-        ofs -= TARGET_PTR_SIZE;
-        if(rs->flo)
-        {
-            emit_movsd_mr(V, MEM(RSP, NOREG, 1, ofs), rs->reg);
-        }
-        else
-        {
-            emit_mov64_mr(V, MEM(RSP, NOREG, 1, ofs), rs->reg);
-        }
-    }
-}
-
-static void pop_caller_save(vec_t(RegSave) saves, uint32_t ofs)
-{
-    for(uint32_t i = vec_len(saves); i-- > 0;)
-    {
-        RegSave* rs = &saves[i];
-        if(rs->flo)
-        {
-            emit_movsd_mr(V, rs->reg, MEM(RSP, NOREG, 1, ofs));
-        }
-        else
-        {
-            emit_mov64_rm(V, rs->reg, MEM(RSP, NOREG, 1, ofs));
-        }
-        ofs += TARGET_PTR_SIZE;
-    }
-}
-
-static uint32_t push_callee_save(RegAlloc* ra, RegSet used)
-{
-    uint32_t count = 0;
-    for(uint32_t i = 0; i < ra->set->iphysmax; i++)
-    {
-        if((ra->set->itemp & (1ULL << i)) && (used & (1ULL << i)))
-        {
-            emit_push64_r(V, i);
-            count++;
-        }
-    }
-    return count;
-}
-
-static void pop_callee_save(RegAlloc* ra, RegSet used)
-{
-    for(uint32_t i = ra->set->iphysmax; i-- > 0;)
-    {
-        if((ra->set->itemp & (1ULL << i)) && (used & (1ULL << i)))
-        {
-            emit_pop64_r(V, i);
-        }
-    }
-}
-
-static uint32_t resolve_iat_rva(Str* label)
-{
-    if(memcmp(str_data(label), "GetStdHandle", label->len) == 0) return 0x1000 + 0x40;
-    if(memcmp(str_data(label), "WriteConsoleA", label->len) == 0) return 0x1000 + 0x48;
-    vp_assertX(0, "external function not found");
-    return 0;
-}
-
-static uint32_t resolve_str_rva(Str* label)
-{
-    uint32_t i;
-    for(i = 0; i < vec_len(V->strs); i++)
-    {
-        if(V->strs[i] == label)
-            break;
-    }
-    return 0x2000 + V->strofs[i];
-}
-
-static void patch_infos(void)
-{
-    for(uint32_t i = 0; i < vec_len(patches); i++)
-    {
-        PatchInfo* p = &patches[i];
-        int32_t from = p->ofs;
-        int32_t rel = 0;
-
-        switch(p->kind)
-        {
-            case PATCH_LEA_REL:
-            case PATCH_JMP_REL:
-            case PATCH_CALL_REL:
-            {
-                int32_t ofs = p->kind == PATCH_JMP_REL ? p->target->ofs : p->c->ofs;
-                rel = ofs - (from + 4);
-                break;
-            }
-            case PATCH_CALL_ABS:
-            {
-                /* offset = RVA_IAT - next_instruction_offset */
-                uint32_t iat_rva = resolve_iat_rva(p->label);
-                uint32_t next_instr = from + 4;
-                rel = iat_rva - next_instr;
-                break;
-            }
-            case PATCH_LEA_ABS:
-            {
-                /* offset = RVA_IAT - next_instruction_offset */
-                uint32_t iat_rva = resolve_str_rva(p->label);
-                uint32_t next_instr = from + 4;
-                rel = iat_rva - next_instr;
-                break;
-            }
-            default:
-                vp_assertX(0, "?");
-                break;
-        }
-
-        uint8_t* code = (uint8_t*)(V->code.b + p->ofs);
-        *(uint32_t*)code = (uint32_t)rel;
-    }
-}
-
-static void emit_bbs(BB** bbs)
-{
-    for(uint32_t i = 0; i < vec_len(bbs); i++)
-    {
-        BB* bb = bbs[i];
-        bb->ofs = sbuf_len(&V->code);
-        for(uint32_t j = 0; j < vec_len(bb->irs); j++)
-        {
-            IR* ir = bb->irs[j];
-            sel_ir(ir);
-        }
-    }
-}
-
-static void emit_body(Code* c)
-{
-    RegAlloc* ra = c->ra;
-    c->ofs = sbuf_len(&V->code);
-
-    bool saverbp = false;
-    uint32_t framesize = 0;
-    uint32_t numcallee = 0;
-    uint32_t frameofs = 8;
-
-    uint32_t stacksize = detect_call_size(c);
-    c->stacksize = stacksize;
-
-    /* Prologue */
-    {
-        /* Callee save */
-        numcallee = push_callee_save(ra, ra->iregbits);
-        if(c->framesize > 0 || raf_stackframe(ra))
-        {
-            emit_push64_r(V, RBP);
-            emit_mov64_rr(V, RBP, RSP);
-            saverbp = true;
-            /* RBP pushed, 16 bytes align becomes 0 */
-            frameofs = 0;
-        }
-
-        framesize = c->framesize + stacksize;
-        if(c->calls || stacksize)
-        {
-            /* Align frame size to 16 */
-            size_t calleesize = numcallee * TARGET_PTR_SIZE;
-            framesize += -(framesize + calleesize + frameofs) & 15;
-        }
-
-        if(framesize > 0)
-        {
-            emit_sub_r64i32(V, RSP, framesize);
-        }
-        params_assign(ra, c);
-    }
-
-    /* Emit basic blocks */
-    emit_bbs(c->bbs);
-
-    /* Epilogue */
-    {
-        if(framesize > 0)
-        {
-            emit_add64_ri(V, RSP, framesize);
-        }
-        if(saverbp)
-        {
-            emit_mov64_rr(V, RSP, RBP);
-            emit_pop64_r(V, RBP);
-        }
-        pop_callee_save(ra, ra->iregbits);
-        emit_ret(V);
-    }
-}
-
-void vp_sel(vec_t(Code*) codes)
-{
-    for(uint32_t i = 0; i < vec_len(codes); i++)
-    {
-        if(codes[i]->bbs)
-        {
-            emit_body(codes[i]);
-        }
-    }
-
-    patch_infos();
 }

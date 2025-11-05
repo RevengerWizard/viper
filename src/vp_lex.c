@@ -84,6 +84,12 @@ static void lex_nummod(LexState* ls)
             ls->mod = (sign == 'u') ? NUM_U8 : NUM_I8;
             return;
         }
+        else if(ls->c == 'z')
+        {
+            lex_next(ls);
+            ls->mod = (sign == 'u') ? NUM_USZ : NUM_ISZ;
+            return;
+        }
         else if(ls->c == '1' || ls->c == '3' || ls->c == '6')
         {
             LexChar dig = ls->c;
@@ -268,6 +274,7 @@ static LexChar lex_string(LexState* ls, LexValue* val)
             case '\r':
             {
                 vp_lex_error(ls, "unterminated string");
+                break;
             }
             case '\\':
             {

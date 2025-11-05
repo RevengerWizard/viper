@@ -27,9 +27,9 @@ static void elf_build(VpState* V, SBuf* sb)
 {
     size_t codesize = sbuf_len(&V->code);
 
-    Code* c = vp_tab_get(&V->funcs, vp_str_newlen("main"));
-    vp_assertX(c, "?");
-    int32_t entryofs = c->ofs;
+    Code* code = vp_tab_get(&V->funcs, vp_str_newlen("main"));
+    vp_assertX(code, "?");
+    int32_t entryofs = code->ofs;
 
     /* ELF header */
     char* p = vp_buf_need(sb, 64);
@@ -91,7 +91,7 @@ static void elf_build(VpState* V, SBuf* sb)
     *(uint64_t*)(&p[48]) = 1;               /* sh_addralign */
     *(uint64_t*)(&p[56]) = 0;               /* sh_entsize */
     sb->w = p + 64;
-    
+
     /* Section 2: .shstrtab (string table) */
     p = vp_buf_more(sb, 64);
     *(uint32_t*)(&p[0]) = 7;                /* sh_name = string table offset */

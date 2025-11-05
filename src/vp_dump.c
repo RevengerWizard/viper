@@ -388,14 +388,14 @@ static void dump_ir(IR* ir)
     }
 }
 
-void vp_dump_bb(Code* cd)
+void vp_dump_bb(Code* code)
 {
-    printf("fn %s\n", str_data(cd->name));
+    printf("fn %s\n", str_data(code->name));
     printf("params and locals:\n");
     vec_t(VarInfo*) stackvars = NULL;
-    for(uint32_t i = 0; i < vec_len(cd->scopes); i++)
+    for(uint32_t i = 0; i < vec_len(code->scopes); i++)
     {
-        Scope* scope = cd->scopes[i];
+        Scope* scope = code->scopes[i];
         if(scope->vars == NULL)
             continue;
         for(uint32_t j = 0; j < vec_len(scope->vars); j++)
@@ -422,7 +422,7 @@ void vp_dump_bb(Code* cd)
         printf("\n");
     }
 
-    RegAlloc* ra = cd->ra;
+    RegAlloc* ra = code->ra;
     printf("VREG: #%d\n", vec_len(ra->vregs));
     LiveInterval** sorted = ra->sorted;
     if(sorted)
@@ -461,7 +461,7 @@ void vp_dump_bb(Code* cd)
     }
 
     uint32_t nip = 0;
-    BB** bbs = cd->bbs;
+    BB** bbs = code->bbs;
     printf("BB: #%d\n", vec_len(bbs));
     for(uint32_t i = 0; i < vec_len(bbs); i++)
     {
@@ -531,8 +531,10 @@ void vp_dump_type(Type* ty)
         case TY_int32:
         case TY_uint64:
         case TY_int64:
-        case TY_float:
-        case TY_double:
+        case TY_isize:
+        case TY_usize:
+        case TY_float32:
+        case TY_float64:
         case TY_void:
             printf("%s", type_name(ty));
             break;

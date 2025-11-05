@@ -12,12 +12,14 @@
 #include "vp_ir.h"
 #include "vp_mem.h"
 #include "vp_regalloc.h"
+#include "vp_target.h"
 #include "vp_type.h"
 #include "vp_tab.h"
 #include "vp_map.h"
 
 typedef const char* (*VpReader)(void* ud, size_t* size);
 
+/* Viper State */
 typedef struct VpState
 {
     SBuf code;
@@ -43,6 +45,8 @@ typedef struct VpState
     Tab funcs;
     vec_t(Str*) strs;
     vec_t(uint32_t) strofs;
+    vec_t(struct PatchInfo) patches;
+    const TargetInfo* target;
 } VpState;
 
 #define TARGET_PTR_SIZE (8)

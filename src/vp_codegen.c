@@ -4,12 +4,12 @@
 */
 
 #include "vp_codegen.h"
+#include "vp_low.h"
 #include "vp_mem.h"
 #include "vp_opt.h"
 #include "vp_regalloc.h"
 #include "vp_ast.h"
 #include "vp_ir.h"
-#include "vp_sel.h"
 #include "vp_str.h"
 #include "vp_tab.h"
 #include "vp_target.h"
@@ -139,6 +139,8 @@ static void gen_stmt(Stmt* st);
 static VReg* gen_expr(Expr* e);
 static VReg* gen_complit(Expr* e);
 static VReg* gen_lval(Expr* e);
+
+/* -- Gen expressions ----------------------------------------------- */
 
 /* Generate nil constant (0) */
 static VReg* gen_nil(Expr* e)
@@ -845,6 +847,8 @@ static VReg* gen_expr(Expr* e)
     return (*genexprtab[e->kind])(e);
 }
 
+/* -- Gen statements ------------------------------------------------ */
+
 /* Generate expression statement */
 static void gen_expr_stmt(Stmt* st)
 {
@@ -1226,15 +1230,15 @@ static void ra_living(RegAlloc* ra, vec_t(BB*) bbs)
 }
 
 /* Set stack offsets for spills/slots */
-static void gen_stack(Code* cd)
+static void gen_stack(Code* code)
 {
-    vp_assertX(cd->framesize == 0, "?");
+    vp_assertX(code->framesize == 0, "?");
     uint32_t framesize = 0;
 
     /* Allocate stack frame */
-    for(uint32_t i = 0; i < vec_len(cd->slots); i++)
+    for(uint32_t i = 0; i < vec_len(code->slots); i++)
     {
-        Slot* slot = &cd->slots[i];
+        Slot* slot = &code->slots[i];
         FrameInfo* fi = slot->fi;
         Type* type = slot->type;
 
@@ -1246,7 +1250,7 @@ static void gen_stack(Code* cd)
     }
 
     /* Allocate spilled variables onto stack frame */
-    RegAlloc* ra = cd->ra;
+    RegAlloc* ra = code->ra;
     for(uint32_t i = 0; i < vec_len(ra->vregs); i++)
     {
         LiveInterval* li = ra->sorted[i];
@@ -1264,7 +1268,7 @@ static void gen_stack(Code* cd)
         vr->fi.ofs = -(int32_t)framesize;
     }
 
-    cd->framesize = framesize;
+    code->framesize = framesize;
 }
 
 /* Generate function parameters */
@@ -1344,7 +1348,7 @@ static Code* gen_fn(Decl* d)
         return code;
     }
 
-    RegAlloc* ra = V->ra = vp_ra_new(&winx64_ra);
+    RegAlloc* ra = V->ra = vp_ra_new(V->target->raset);
     code->ra = ra;
     V->fncode = code;
 
@@ -1365,7 +1369,7 @@ static Code* gen_fn(Decl* d)
     vp_bb_detect(code->bbs);
     vp_opt(code);
 
-    vp_sel_tweak(code);
+    vp_ir_x64_tweak(code);
     vp_bb_analyze(code->bbs);
     vp_ra_alloc(ra, code->bbs);
     ra_living(ra, code->bbs);
@@ -1389,8 +1393,8 @@ vec_t(Code*) vp_codegen(vec_t(Decl*) decls)
         if(!d) continue;
         if(d->kind == DECL_FN)
         {
-            Code* cd = gen_fn(d);
-            vec_push(codes, cd);
+            Code* code = gen_fn(d);
+            vec_push(codes, code);
         }
     }
     return codes;

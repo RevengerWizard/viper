@@ -222,27 +222,6 @@ typedef struct BB
     vec_t(VReg*) assignregs;    /* Assigned vregs */
 } BB;
 
-typedef enum PatchKind
-{
-    PATCH_LEA_REL,
-    PATCH_LEA_ABS,
-    PATCH_JMP_REL,
-    PATCH_CALL_REL,
-    PATCH_CALL_ABS,
-} PatchKind;
-
-typedef struct PatchInfo
-{
-    PatchKind kind; /* The type of patch */
-    int32_t ofs;   /* Offset to patch */
-    union
-    {
-        Str* label;
-        struct Code* c;
-        BB* target;
-    };
-} PatchInfo;
-
 extern const char* const vp_ir_name[];
 
 /* IR instructions */
@@ -265,6 +244,10 @@ IR* vp_ir_keep(VReg* dst, VReg* src1, VReg* src2);
 IR* vp_ir_asm(struct Inst* inst);
 VReg* vp_ir_binop(IrKind kind, VReg* src1, VReg* src2, VRSize vsize, uint8_t irflag);
 VReg* vp_ir_unary(IrKind kind, VReg* src, VRSize vsize, uint8_t irflag);
+
+/* IR transformations */
+uint32_t ir_tmp_fmov(VReg** vp, vec_t(IR*)* irs, uint32_t pos);
+void ir_tmp_mov(VReg** vp, vec_t(IR*)* irs, uint32_t pos, uint8_t flag);
 
 /* Frame info */
 FrameInfo* vp_frameinfo_new();

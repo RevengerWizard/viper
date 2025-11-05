@@ -14,8 +14,6 @@
 
 - fix `const` types
 
-- fix casts
-
 - object files
 
 - linker?
@@ -30,7 +28,7 @@
 
 - macros?
 
-- stronger types
+- stronger types?
 
 - enums
 
@@ -52,9 +50,11 @@
 
 `isize` `usize`
 
-`float16` `float32` `float64` `float80` ?
+`float32` `float64`
 
-`float` `double`
+`float16` `float80` ?
+
+`ptrdiff` `intptr` `uintptr` ?
 
 `bool`
 
@@ -70,21 +70,33 @@ custom-width integer types
 
 ---
 
-1. lex              → tokens
-2. parse            → AST
-3. sema             → type-check, scope check
-4. codegen          → AST → IR (3-address, infinite vregs)
-5. opt              → IR cleanup, constant folding
-6. regalloc         → assign physical regs or stack slots (linear scan)
-7. sel              → IR → x64 instructions (abstract x64 form)
-8. emit             → binary x64 emission (Rex, ModRM...)
-9. obj writer       → emit ELF/COFF
+### cmd
+
+`vxc [mode] [options] [file]`
+
+- `build`
+
+- `link`
 
 ---
 
-### cmd
+`vxc [options] [file]`
 
-`nostd`
+`--nostd`
+
+`--version` `--help`
+
+`--emit <kind>` -  `obj | asm | ir | exe | bin`
+
+`--target <kind>`
+
+---
+
+`VIPER_PATH`
+`VIPER_LIB`
+`VIPER_TARGET`
+
+---
 
 ### asm blocks
 
@@ -133,11 +145,15 @@ asm
 
 `mem::alloc`
 
+`math::sin`
+
+`math::cos`
+
+`math::pi`
+
 ---
 
 ### keywords
-
-`len`
 
 `typeid`
 
@@ -163,6 +179,8 @@ asm
 
 ### notes
 
+`#fall`
+
 `#staticassert`
 
 `#error`
@@ -181,8 +199,6 @@ asm
 
 `#doc`
 
-`[[attribute]]` ?
-
 ---
 
 ### intrinsics
@@ -192,6 +208,8 @@ asm
 `@ctz(x)` --- count trailing zeroes
 
 `@memcpy`
+
+`@syscall`
 
 ---
 
@@ -236,6 +254,8 @@ asm
 
 `ptrcast`
 
+`constcast` ?
+
 | Cast        | Purpose                             | Notes                  |
 | ----------- | ----------------------------------- | ---------------------- |
 | `cast`      | Safe, context-based conversions     | Default option         |
@@ -244,8 +264,8 @@ asm
 | `bitcast`   | Raw bit reinterpretation            | Must match size        |
 | `ptrcast`   | Pointer ↔ pointer or int            | Use with caution       |
 
-float <- int16, uint16, int8, uint8, bool
-double <- int32, uint32, int16, uint16, int8, uint8, bool
+float32 <- int16, uint16, int8, uint8, bool
+float64 <- int32, uint32, int16, uint16, int8, uint8, bool
 
 uint8 <- bool
 uint16 <- uint8 <- bool
@@ -271,7 +291,7 @@ int64 <- int32 | uint32 | int16 | uint16 | int8 | uint8 | bool
 
 ### abi
 
-x64
+### x64
 
 [rax, rdi, rsi, rdx, rcx, r8, r9, r10, r11, r12, r13, r14, r15]
 

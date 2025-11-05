@@ -28,12 +28,12 @@ typedef struct LiveInterval
     RegSet regbits;   /* Occupied registers */
 } LiveInterval;
 
-typedef struct RegAlloc RegAlloc;
+struct RegAlloc;
 
 /* Register allocator settings */
 typedef struct RASettings
 {
-    RegSet (*extra)(RegAlloc* ra, IR* ir);    /* Detect extra register constraints */
+    RegSet (*extra)(struct RegAlloc* ra, IR* ir);    /* Detect extra register constraints */
     const uint32_t* imap;    /* Mapping of integer params -> registers */
     const uint32_t* fmap;    /* Mapping of float params -> registers */
     uint32_t iphysmax;  /* Max physical integer registers */

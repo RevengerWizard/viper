@@ -53,7 +53,7 @@ static void bb_remove_unused(vec_t(BB*)* bbs)
             if(irjmp && irjmp->jmp.bb == bb->next)  /* .L1: JMP .L2; .L2 ...  */
             {
                 /* Remove jump to next instruction */
-                vec_pop(bb->irs);
+                UNUSED(vec_pop(bb->irs));
                 irjmp = NULL;
             }
             if(vec_len(bb->irs) == 0 && bb->next != NULL)

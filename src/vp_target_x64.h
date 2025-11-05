@@ -41,6 +41,9 @@ typedef enum
     RIP = 0xFFF
 } X64Reg;
 
+#define X64_IREG (16)
+#define X64_FREG (16)
+
 typedef int64_t X64Mem;
 
 #define NOREG (0)

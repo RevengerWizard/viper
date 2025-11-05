@@ -18,6 +18,8 @@ const char* const vp_ir_name[] = {
 #undef IRSTR
 };
 
+/* -- IR instructions ----------------------------------------------- */
+
 static IR* ir_new(IrKind kind)
 {
     IR* ir = vp_arena_alloc(&V->irarena, sizeof(*ir));
@@ -291,7 +293,7 @@ static VReg* ir_binop_fold(IrKind kind, VReg* src1, VReg* src2, VRSize vsize, ui
             case IR_DIV:
                 if(rval == 0)
                     return src1;  /* Detect zero division */
-                /* Fall */
+                /* Fallthrough */
             case IR_MUL:
                 switch(rval)
                 {
@@ -350,6 +352,47 @@ VReg* vp_ir_unary(IrKind kind, VReg* src, VRSize vsize, uint8_t irflag)
     return dst;
 }
 
+/* -- IR transformations -------------------------------------------- */
+
+uint32_t ir_tmp_fmov(VReg** vp, vec_t(IR*)* irs, uint32_t pos)
+{
+    VReg* v = *vp;
+    vp_assertX(vrf_const(v) && (v->flag & VRF_FLO), "not const float");
+
+    uint64_t bits = 0;
+    if(v->vsize == VRSize4)
+    {
+        float f = (float)v->n;
+        memcpy(&bits, &f, sizeof(float));
+    }
+    else
+    {
+        double d = v->n;
+        memcpy(&bits, &d, sizeof(double));
+    }
+    v = vp_vreg_ki(bits, v->vsize);
+    VReg* tmp1 = vp_ra_spawn(v->vsize, 0);
+    IR* mov1 = vp_ir_mov(tmp1, v, 0);
+    vec_insert(*irs, pos, mov1); pos++;
+
+    VReg* tmp2 = vp_ra_spawn(v->vsize, VRF_FLO);
+    IR* mov2 = vp_ir_mov(tmp2, tmp1, 0);
+    vec_insert(*irs, pos, mov2); pos++;
+
+    *vp = tmp2;
+
+    return pos;
+}
+
+void ir_tmp_mov(VReg** vp, vec_t(IR*)* irs, uint32_t pos, uint8_t flag)
+{
+    VReg* v = *vp;
+    VReg* tmp = vp_ra_spawn(v->vsize, v->flag & VRF_MASK);
+    IR* mov = vp_ir_mov(tmp, v, flag);
+    vec_insert(*irs, pos, mov);
+    *vp = tmp;
+}
+
 /* Create a new frame info offset */
 FrameInfo* vp_frameinfo_new()
 {
@@ -368,6 +411,8 @@ IRCallInfo* vp_ircallinfo_new(VReg** args, uint32_t argnum, Str* label)
     return ci;
 }
 
+/* -- Conditions ---------------------------------------------------- */
+
 CondKind vp_cond_swap(CondKind cond)
 {
     vp_assertX((cond & ~COND_MASK) == 0, "bad condition");
@@ -385,6 +430,8 @@ CondKind vp_cond_invert(CondKind cond)
             : (vp_assertX((COND_LT & 3) == 0, "COND_LT must be aligned to 4 (LSBs 00)"), c ^ 2);
     return ic | (cond & ~COND_MASK);
 }
+
+/* -- Basic Blocks -------------------------------------------------- */
 
 /* Create a new basic block */
 BB* vp_bb_new()

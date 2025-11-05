@@ -395,8 +395,10 @@ static ParseRule expr_rule(LexToken t)
         case TK_int16:
         case TK_int32:
         case TK_int64:
-        case TK_float:
-        case TK_double:
+        case TK_float32:
+        case TK_float64:
+        case TK_isize:
+        case TK_usize:
         case TK_void:
             return PREFIX(expr_tycast);
         case TK_cast:
@@ -465,8 +467,10 @@ static Type* tok2type(LexToken tok)
     case TK_int16: ty = tyint16; break;
     case TK_int32: ty = tyint32; break;
     case TK_int64: ty = tyint64; break;
-    case TK_float: ty = tyfloat; break;
-    case TK_double: ty = tydouble; break;
+    case TK_float32: ty = tyfloat32; break;
+    case TK_float64: ty = tyfloat64; break;
+    case TK_isize: ty = tyisize; break;
+    case TK_usize: ty = tyusize; break;
     default: break;
     }
     return ty;

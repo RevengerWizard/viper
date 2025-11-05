@@ -589,7 +589,7 @@ void vp_ra_alloc(RegAlloc *ra, BB** bbs)
         VReg* vr = ra->vregs[i];
         if(vr)
         {
-            vp_assertX(!vrf_const(vr) && vr->virt >= 0, "invalid vreg");
+            vp_assertX(!vrf_const(vr) && vr->virt != REG_NO, "invalid vreg");
             vr->phys = ra->intervals[vr->virt].phys;
         }
     }

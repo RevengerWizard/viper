@@ -3,7 +3,8 @@
 ** Frontend driver: parse + compile
 */
 
-/* I HATE YOU MSVC, I HATE YOU */
+/* You are not MSVC, clang... */
+
 #ifdef _MSC_VER
 #define _CRT_SECURE_NO_WARNINGS
 #endif
@@ -17,7 +18,8 @@
 #include "vp_ast.h"
 #include "vp_sema.h"
 #include "vp_codegen.h"
-#include "vp_sel.h"
+#include "vp_low.h"
+#include "vp_link.h"
 
 typedef struct FileReaderCtx
 {
@@ -53,6 +55,7 @@ void vp_load(VpState* V, const char* filename)
     vec_t(Decl*) decls = vp_parse(V, &ls);
     decls = vp_sema(decls);
     vec_t(Code*) codes = vp_codegen(decls);
-    vp_sel(codes);
+    vp_low(codes);
+    vp_patch_infos();
     fclose(ctx.fp);
 }

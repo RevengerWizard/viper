@@ -1,5 +1,6 @@
 src/
 ├── viper.c             ← Viper compiler
+├── vp_arch.h           ← Target architectures
 ├── vp_asm.h            ← Inline assembler
 ├── vp_asm_x64.c        ← x64 inline assembler
 ├── vp_assert.c         ← Internal assertions
@@ -10,20 +11,24 @@ src/
 ├── vp_def.h            ← Viper common internal definitions
 ├── vp_dump.c/h         ← Data structure print
 ├── vp_elf.c            ← ELF emitter
-├── vp_emit.h           ← Instruction emitter
-├── vp_emit_x64.h       ← x64 Instruction emitter
+├── vp_emit.h           ← Instruction emitter interface
+├── vp_emit_x64.c/h     ← x64 Instruction emitter
 ├── vp_err.c/h          ← Error and warning handling
+├── vp_inst_x64.c       ← x64 asm instruction handling
 ├── vp_ir.c/h           ← Intermediate Representation
+├── vp_ir_x64.c         ← IR instruction emitting (IR -> x64)
 ├── vp_lex.c/h          ← Lexical analyzer
+├── vp_link.h           ← Linker interface
+├── vp_link_x64.c       ← Address patching
 ├── vp_load.c           ← Frontend driver: parse + compile
+├── vp_low.h            ← IR lowering interface
+├── vp_low_x64.c        ← IR x64 lowering
 ├── vp_map.c/h          ← Map handling
 ├── vp_mem.c/h          ← Memory management
 ├── vp_opt.c/h          ← Optimization pass (IR -> (opt) -> IR)
 ├── vp_parse.c/h        ← Syntax analyser
 ├── vp_pe.c             ← Windows PE emitter
 ├── vp_regalloc.c/h     ← Register allocation
-├── vp_sel.h            ← Instruction selection
-├── vp_sel_x64.c        ← x64 instruction selection (IR -> x64)
 ├── vp_sema.c/h         ← Semantic analyser
 ├── vp_state.c/h        ← State management
 ├── vp_str.c/h          ← String handling

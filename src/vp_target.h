@@ -8,38 +8,70 @@
 
 #include "vp_regalloc.h"
 
-/* x64 integer registers */
-#define X64IREGDEF(_) \
-    _(rax) _(rcx) _(rdx) _(rbx) \
-    _(rsp) _(rbp) _(rsi) _(rdi) \
-    _(r8) _(r9) _(r10) _(r11) \
-    _(r12) _(r13) _(r14) _(r15) \
-
-/* x64 float registers */
-#define X64FREGDEF(_) \
-    _(xmm0) _(xmm1) _(xmm2) _(xmm3) \
-    _(xmm4) _(xmm5) _(xmm6) _(xmm7) \
-    _(xmm8) _(xmm9) _(xmm10) _(xmm11) \
-    _(xmm12) _(xmm13) _(xmm14) _(xmm15)
-
-enum
+/* Operating systems */
+typedef enum
 {
-#define IREGENUM(name) REG_##name,
-#define FREGENUM(name) REG_##name,
-    X64IREGDEF(IREGENUM)
-    __ = -1,
-    X64FREGDEF(FREGENUM)
-#undef IREGENUM
-#undef FREGENUM
-};
+    OS_WINDOWS
+} OSType;
 
-extern const uint32_t winx64_icaller[];
-extern const uint32_t winx64_fcaller[];
+/* Architectures */
+typedef enum
+{
+    ARCH_X64
+} ArchType;
 
-#define ICALLER_SIZE (7)
-#define FCALLER_SIZE (4)
+/* Architecture features */
+typedef struct
+{
+    uint8_t ptrsize;    /* Size of pointer */
+    uint32_t iregnum;   /* Number of int registers */
+    uint32_t fregnum;   /* Number of float registers */
+    const char* name;
+} ArchInfo;
 
-extern const RASettings sysvx64_ra;
-extern const RASettings winx64_ra;
+/* ABIs */
+typedef enum
+{
+    ABI_WIN_X64,    /* Windows x64 ABI */
+    ABI_SYSV_X64,   /* System V x64 */
+} ABIType;
+
+/* ABI configurations */
+typedef struct
+{
+    /* Parameter registers */
+    const uint32_t* imap;
+    const uint32_t* fmap;
+
+    /* Caller-save registers */
+    const uint32_t* icaller;
+    const uint32_t* fcaller;
+    uint32_t icallersize, fcallersize;
+
+    /* Callee-save registers */
+    RegSet icallee;
+    RegSet fcallee;
+} ABIInfo;
+
+/* Predefined targets */
+typedef enum
+{
+    TARGET_X64_WINDOWS  /* x64-windows */
+} TargetID;
+
+/* Target configuration */
+typedef struct TargetInfo
+{
+    TargetID id;
+    OSType os;
+    ArchType arch;
+    ABIType abi;
+    const char* name;
+    const ABIInfo* abiinfo;
+    const ArchInfo* archinfo;
+    const RASettings* raset;
+} TargetInfo;
+
+const TargetInfo* vp_target_init(TargetID id);
 
 #endif

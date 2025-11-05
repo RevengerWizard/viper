@@ -30,9 +30,9 @@ int main(int argc, char** argv)
         print_usage();
         return EXIT_SUCCESS;
     }
-    
+
     V = vp_state_open();
-    
+
     SBuf* code = &V->code;
     vp_buf_init(code);
     vp_buf_need(code, 1024);
