@@ -155,6 +155,10 @@ asm
 
 ### keywords
 
+`import`
+
+`pub`
+
 `typeid`
 
 `typeof` `sizeof` `alignof` `offsetof`
