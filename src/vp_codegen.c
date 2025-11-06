@@ -1276,7 +1276,7 @@ static void gen_params(Decl* d, Code* code)
 {
     Type* ret = d->fn.rett;
     bool stack = param_isstack(ret);
-    uint32_t paramofs = 0;
+    uint32_t paramofs = TARGET_PTR_SIZE * 2;
     uint32_t start = stack ? 1 : 0;
 
     if(stack)
@@ -1306,13 +1306,13 @@ static void gen_params(Decl* d, Code* code)
             else
             {
                 vr->flag |= VRF_STACK_PARAM;
-                if(!vi->fi)
+                vreg_spill(vr);
+                if(!raf_stackframe(V->ra))
                 {
-                    vi->fi = vp_frameinfo_new();
-                    vreg_spill(vr);
+                    V->ra->flag = RAF_STACK_FRAME;
                 }
                 /* Stack parameter offset */
-                vi->fi->ofs = paramofs = ALIGN_UP(paramofs, TARGET_PTR_SIZE);
+                vr->fi.ofs = paramofs = ALIGN_UP(paramofs, TARGET_PTR_SIZE);
                 paramofs += TARGET_PTR_SIZE;
             }
         }
