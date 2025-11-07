@@ -332,6 +332,7 @@ typedef enum DeclKind
     DECL_DEF,
     DECL_FN,
     DECL_TYPE,
+    DECL_ALIAS,
     DECL_STRUCT,
     DECL_UNION,
     DECL_ENUM,
@@ -427,6 +428,7 @@ Decl* vp_decl_fn(SrcLoc loc, vec_t(Attr) attrs, TypeSpec* ret, Str* name, vec_t(
 Decl* vp_decl_var(SrcLoc loc, Str* name, TypeSpec* spec, Expr* e);
 Decl* vp_decl_def(SrcLoc loc, Str* name, TypeSpec* spec, Expr* e);
 Decl* vp_decl_type(SrcLoc loc, Str* name, TypeSpec* spec);
+Decl* vp_decl_alias(SrcLoc loc, Str* name, TypeSpec* spec);
 Decl* vp_decl_aggr(SrcLoc loc, DeclKind kind, Str* name, Aggregate* agr);
 Decl* vp_decl_note(SrcLoc loc, Note note);
 Decl* vp_decl_enum(SrcLoc loc, Str* name, TypeSpec* spec, vec_t(EnumItem) items);

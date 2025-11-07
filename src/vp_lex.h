@@ -19,12 +19,12 @@
     _(var) _(const) \
     _(def) \
     _(not) _(and) _(or) \
-    _(type) _(void) \
+    _(type) _(alias) \
     _(cast) \
     _(intcast) _(floatcast) _(ptrcast) \
     _(bitcast) \
     _(typeof) _(sizeof) _(alignof) _(offsetof) \
-    _(bool) \
+    _(void) _(bool) \
     _(int8) _(int16) _(int32) _(int64) \
     _(uint8) _(uint16) _(uint32) _(uint64) \
     _(usize) _(isize) \

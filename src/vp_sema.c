@@ -106,6 +106,7 @@ static Sym* sym_decl(Decl* d)
     SymKind kind = SYM_NONE;
     switch(d->kind)
     {
+        case DECL_ALIAS:
         case DECL_TYPE:
         case DECL_STRUCT:
         case DECL_UNION:
@@ -1523,14 +1524,14 @@ static Operand sema_expr(Expr* e, Type* ret)
         {
             Type* ty = sema_typespec(e->spec);
             sym_complete(ty);
-            res = opr_const(tyuint64, (Val){.u64 = vp_type_sizeof(ty)});
+            res = opr_const(tyusize, (Val){.u64 = vp_type_sizeof(ty)});
             break;
         }
         case EX_ALIGNOF:
         {
             Type* ty = sema_typespec(e->spec);
             sym_complete(ty);
-            res = opr_const(tyuint64, (Val){.u64 = vp_type_alignof(ty)});
+            res = opr_const(tyusize, (Val){.u64 = vp_type_alignof(ty)});
             break;
         }
         case EX_OFFSETOF:
@@ -1546,7 +1547,7 @@ static Operand sema_expr(Expr* e, Type* ret)
             {
                 vp_err_error(e->loc, "no field '%s' in type", str_data(e->ofst.name));
             }
-            res = opr_const(tyuint64, (Val){.u64 = ty->st.fields[idx].offset});
+            res = opr_const(tyusize, (Val){.u64 = ty->st.fields[idx].offset});
             break;
         }
         default:
@@ -1684,7 +1685,7 @@ static Type* sema_typespec(TypeSpec* spec)
 /* Resolve type declaration */
 static Type* sema_typedef(Decl* d)
 {
-    vp_assertX(d->kind == DECL_TYPE, "type declaration");
+    vp_assertX(d->kind == DECL_TYPE || d->kind == DECL_ALIAS, "type/alias declaration");
     return sema_typespec(d->ts.spec);
 }
 

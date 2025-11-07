@@ -329,6 +329,13 @@ Decl* vp_decl_type(SrcLoc loc, Str* name, TypeSpec* spec)
     return d;
 }
 
+Decl* vp_decl_alias(SrcLoc loc, Str* name, TypeSpec* spec)
+{
+    Decl* d = decl_new(DECL_ALIAS, loc, name);;
+    d->ts.spec = spec;
+    return d;
+}
+
 Decl* vp_decl_aggr(SrcLoc loc, DeclKind kind, Str* name, Aggregate* agr)
 {
     Decl* d = decl_new(kind, loc, name);

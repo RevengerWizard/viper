@@ -759,6 +759,7 @@ static vec_t(Param) parse_params(LexState* ls)
     return params;
 }
 
+/* Parse type declaration */
 static Decl* parse_typedef(LexState* ls)
 {
     vp_lex_next(ls);    /* Skip 'type' */
@@ -768,6 +769,18 @@ static Decl* parse_typedef(LexState* ls)
     TypeSpec* spec = parse_type(ls);
     vp_lex_consume(ls, ';');
     return vp_decl_type(loc, name, spec);
+}
+
+/* Parse alias declaration */
+static Decl* parse_alias(LexState* ls)
+{
+    vp_lex_next(ls);    /* Skip 'alias' */
+    SrcLoc loc = lex_srcloc(ls);
+    Str* name = lex_name(ls);
+    vp_lex_consume(ls, '=');
+    TypeSpec* spec = parse_type(ls);
+    vp_lex_consume(ls, ';');
+    return vp_decl_alias(loc, name, spec);
 }
 
 static Aggregate* parse_aggr(LexState* ls);
@@ -1058,6 +1071,9 @@ static Decl* parse_decl(LexState* ls)
             break;
         case TK_type:
             d = parse_typedef(ls);
+            break;
+        case TK_alias:
+            d = parse_alias(ls);
             break;
         case TK_struct:
             d = parse_struct(ls);

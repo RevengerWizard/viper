@@ -1068,6 +1068,11 @@ void vp_dump_ast(Decl* d)
             dump_typespec(d->ts.spec);
             printf("\n");
             break;
+        case DECL_ALIAS:
+            printf("alias %s = ", str_data(d->name));
+            dump_typespec(d->ts.spec);
+            printf("\n");
+            break;
         case DECL_DEF:
         {
             dump_indent();
