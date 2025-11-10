@@ -13,7 +13,7 @@
 /* Viper lexer tokens */
 #define TKDEF(_, __) \
     /* Keywords */ \
-    _(fn) \
+    _(fn) _(pub) \
     _(struct) _(union) _(enum) \
     _(asm) \
     _(var) _(const) \
@@ -23,7 +23,7 @@
     _(cast) \
     _(intcast) _(floatcast) _(ptrcast) \
     _(bitcast) \
-    _(typeof) _(sizeof) _(alignof) _(offsetof) \
+    _(typeid) _(typeof) _(sizeof) _(alignof) _(offsetof) \
     _(void) _(bool) \
     _(int8) _(int16) _(int32) _(int64) \
     _(uint8) _(uint16) _(uint32) _(uint64) \

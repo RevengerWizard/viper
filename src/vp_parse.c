@@ -191,13 +191,6 @@ static Expr* expr_dot(LexState* ls, Expr* lhs, SrcLoc loc)
     return vp_expr_field(loc, lhs, name);
 }
 
-/* Parse name access expression */
-static Expr* expr_access(LexState* ls, Expr* lhs, SrcLoc loc)
-{
-    Str* name = lex_name(ls);
-    return vp_expr_access(loc, lhs, name);
-}
-
 /* Parse unary expression */
 static Expr* expr_unary(LexState* ls, SrcLoc loc)
 {
@@ -305,14 +298,23 @@ static Expr* expr_comp(LexState* ls, SrcLoc loc)
     return expr_comp_type(ls, NULL);
 }
 
+/* Parse name access expression */
+static Expr* expr_access(LexState* ls, Expr* lhs, SrcLoc loc)
+{
+    if(lex_match(ls, '{'))
+    {
+        if(lhs->kind != EX_NAME)
+            vp_err_error(lhs->loc, "expected name");
+        return expr_comp_type(ls, vp_typespec_name(loc, lhs->name));
+    }
+    Str* name = lex_name(ls);
+    return vp_expr_access(loc, lhs, name);
+}
+
 /* Parse name expression */
 static Expr* expr_name(LexState* ls, SrcLoc loc)
 {
     Str* name = ls->val.name;
-    if(lex_match(ls, '{'))
-    {
-        return expr_comp_type(ls, vp_typespec_name(loc, name));
-    }
     return vp_expr_name(loc, name);
 }
 
