@@ -2035,6 +2035,7 @@ static void emit_sse_mem(VpState* V, uint8_t prefix, uint8_t op, X64Reg reg, X64
 
     uint8_t rex = rex_mem(reg, base, idx, false);
     if(rex) emit_u8(V, rex);
+    emit_u8(V, 0x0F);
     emit_u8(V, op);
 
     emit_modrm_sib_disp(V, reg, base, idx, scale, disp);

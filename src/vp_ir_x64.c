@@ -111,8 +111,8 @@ static void ir_x64_store(IR* ir)
         vp_assertX(!vrf_const(ir->src1), "const src1");
         switch(ir->src1->vsize)
         {
-        case VRSize4: emit_movss_mr(V, src, MEM(base, NOREG, 1, disp)); break;
-        case VRSize8: emit_movsd_mr(V, src, MEM(base, NOREG, 1, disp)); break;
+        case VRSize4: emit_movss_mr(V, MEM(base, NOREG, 1, disp), src); break;
+        case VRSize8: emit_movsd_mr(V, MEM(base, NOREG, 1, disp), src); break;
         default: vp_assertX(0, "?");
         }
     }
