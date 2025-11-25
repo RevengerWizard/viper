@@ -785,7 +785,7 @@ static Decl* parse_alias(LexState* ls)
     return vp_decl_alias(loc, name, spec);
 }
 
-static Aggregate* parse_aggr(LexState* ls);
+static Aggregate* parse_aggr(LexState* ls, AggregateKind kind);
 
 static AggregateItem parse_aggr_item(LexState* ls)
 {
@@ -793,7 +793,14 @@ static AggregateItem parse_aggr_item(LexState* ls)
     {
         return (AggregateItem) {
             .kind = AGR_ITEM_SUB,
-            .sub = parse_aggr(ls)
+            .sub = parse_aggr(ls, AGR_STRUCT)
+        };
+    }
+    else if(lex_match(ls, TK_union))
+    {
+        return (AggregateItem) {
+            .kind = AGR_ITEM_SUB,
+            .sub = parse_aggr(ls, AGR_UNION)
         };
     }
     else
@@ -819,7 +826,7 @@ static AggregateItem parse_aggr_item(LexState* ls)
 }
 
 /* Parse struct/union item */
-static Aggregate* parse_aggr(LexState* ls)
+static Aggregate* parse_aggr(LexState* ls, AggregateKind kind)
 {
     vp_lex_consume(ls, '{');
     SrcLoc loc = lex_srcloc(ls);
@@ -830,25 +837,26 @@ static Aggregate* parse_aggr(LexState* ls)
         vec_push(items, item);
     }
     vp_lex_consume(ls, '}');
-    return vp_aggr_new(loc, AGR_STRUCT, items);
+    return vp_aggr_new(loc, kind, items);
 }
 
-/* Parse 'struct' declaration */
-static Decl* parse_struct(LexState* ls)
+/* Parse 'struct' or 'union' declaration */
+static Decl* parse_structunion(LexState* ls, DeclKind kind)
 {
-    vp_lex_next(ls);    /* Skip 'struct' */
+    vp_lex_next(ls);    /* Skip 'struct'/'union' */
     SrcLoc loc = lex_srcloc(ls);
     Str* name = lex_name(ls);
+    AggregateKind agrkind = kind == DECL_STRUCT ? AGR_STRUCT : AGR_UNION;
     if(lex_match(ls, ';'))
     {
-        Decl* d = vp_decl_aggr(loc, DECL_STRUCT, name, vp_aggr_new(loc, AGR_STRUCT, NULL));
+        Decl* d = vp_decl_aggr(loc, kind, name, vp_aggr_new(loc, AGR_STRUCT, NULL));
         d->isincomplete = true;
         return d;
     }
     else
     {
-        Aggregate* aggr = parse_aggr(ls);
-        return vp_decl_aggr(loc, DECL_STRUCT, name, aggr);
+        Aggregate* aggr = parse_aggr(ls, agrkind);
+        return vp_decl_aggr(loc, kind, name, aggr);
     }
 }
 
@@ -1086,8 +1094,11 @@ static Decl* parse_decl(LexState* ls)
         case TK_alias:
             d = parse_alias(ls);
             break;
+        case TK_union:
+            d = parse_structunion(ls, DECL_UNION);
+            break;
         case TK_struct:
-            d = parse_struct(ls);
+            d = parse_structunion(ls, DECL_STRUCT);
             break;
         case TK_enum:
             d = parse_enum(ls);

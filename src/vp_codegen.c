@@ -267,7 +267,7 @@ static VReg* gen_name(Expr* e)
         VReg* dst = vp_ir_load(src, vp_vsize(ty), vp_vflag(ty), ir_flag(ty))->dst;
         return dst;
     }
-    else if(ty->kind == TY_array || ty->kind == TY_struct)
+    else if(ty->kind == TY_array || ty->kind == TY_struct || ty->kind == TY_union)
     {
         return gen_lval(e);
     }

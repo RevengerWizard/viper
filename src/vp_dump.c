@@ -1246,6 +1246,15 @@ void vp_dump_ast(Decl* d)
             indent--;
             printf("}\n");
             break;
+        case DECL_UNION:
+        {
+            printf("union %s\n{\n", str_data(d->name));
+            indent++;
+            dump_ast_aggr(d->agr);
+            indent--;
+            printf("}\n");
+            break;
+        }
         case DECL_STRUCT:
             printf("struct %s\n{\n", str_data(d->name));
             indent++;
