@@ -35,7 +35,7 @@ static void elf_build(VpState* V, SBuf* sb)
     char* p = vp_buf_need(sb, 64);
 
     /* e_ident */
-    p[0] = 0x7f; p[1]= 'E'; p[2] = 'L'; p[3] = 'F'; /* ELF magic */
+    memcpy(p, "\x7f" "ELF", 4); /* ELF magic */
     p[4] = ELFCLASS64;  /* 64 bit */
     p[5] = ELFDATA2LSB; /* Little endian */
     p[6] = EV_CURRENT;  /* ELF version */

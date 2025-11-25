@@ -327,6 +327,10 @@ static VReg* gen_ref(Expr* e)
                 {
                     vi->vreg->flag |= VRF_REF;
                     vreg_spill(vi->vreg);
+                    if(!raf_stackframe(V->ra))
+                    {
+                        V->ra->flag |= RAF_STACK_FRAME;
+                    }
                 }
                 vi->fi = &vi->vreg->fi;
             }
@@ -475,7 +479,7 @@ static VReg* gen_call(Expr* e)
             if(p->stack)
             {
                 Type* argty = e->call.args[i]->ty;
-                VReg* dst = vp_ir_sofs(p->offset)->dst;
+                VReg* dst = vp_ir_sofs(p->offset + 32)->dst;    /* +32 for shadow space? */
                 if(param_isstack(argty))
                 {
                     gen_memcpy(argty, dst, src);
@@ -561,6 +565,24 @@ static VReg* gen_cast(Expr* e)
     }
 
     uint32_t dstsize = vp_type_sizeof(dstty);
+    if(vrf_const(vr))
+    {
+        vp_assertX(!vrf_flo(vr), "const flo");
+        int64_t i = vr->i64;
+        if(dstsize < (1U << vr->vsize) && dstsize < sizeof(int64_t))
+        {
+            /* Assume two's complement */
+            size_t bit = dstsize * 8;
+            uint64_t mask = (-1ULL) << bit;
+            if(!ty_isunsigned(dstty) && (i & ((int64_t)1 << (bit - 1))))    /* signed and negative */
+                i |= mask;
+            else
+                i &= ~mask;
+        }
+
+        VRSize vsize = vp_vsize(dstty);
+        return vp_vreg_ki(i, vsize);
+    }
 
     uint32_t srcsize = 1U << vr->vsize;
     if(dstsize == srcsize &&
@@ -1375,7 +1397,7 @@ static Code* gen_fn(Decl* d)
     ra_living(ra, code->bbs);
     gen_stack(code);
 
-    vp_dump_bb(code);
+    vp_dump_bbs(code);
 
     V->fncode = NULL;
     V->ra = NULL;

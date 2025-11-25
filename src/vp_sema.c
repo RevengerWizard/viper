@@ -16,6 +16,7 @@
 #include "vp_type.h"
 #include "vp_var.h"
 #include "vp_vec.h"
+#include "vp_link.h"
 
 #include "vp_dump.h"
 
@@ -148,6 +149,10 @@ static void sym_complete(Type* ty)
         return;
 
     Decl* d = ty->sym->decl;
+    if(d->isincomplete)
+    {
+        vp_err_error(d->loc, "use of incomplete type as complete");
+    }
     ty->kind = TY_name;
     vp_assertX(d->kind == DECL_STRUCT || d->kind == DECL_UNION, "struct/union");
 
@@ -777,7 +782,8 @@ static Operand sema_expr(Expr* e, Type* ret);
 /* Resolve rval expression */
 static Operand sema_expr_rval(Expr* e, Type* ret)
 {
-    return opr_decay(sema_expr(e, ret));
+    Operand opr = sema_expr(e, ret);
+    return opr_decay(opr);
 }
 
 /* Resolve constant expression */
@@ -998,6 +1004,8 @@ static Operand sema_expr_binary(Expr* e, Type* ret)
 {
     Operand lop = sema_expr_rval(e->binop.lhs, ret);
     Operand rop = sema_expr_rval(e->binop.rhs, ret);
+    opr_fold(e->loc, &e->binop.lhs, lop);
+    opr_fold(e->loc, &e->binop.rhs, rop);
     ExprKind op = e->kind;
     return sema_expr_binop(e->loc, op, lop, rop, ret);
 }
@@ -1294,11 +1302,11 @@ static Operand sema_expr_intcast(Expr* e)
     Type* ty = sema_typespec(e->cast.spec);
     Operand opr = sema_expr_rval(e->cast.expr, NULL);
     bool isconst = opr.isconst;
-    if(!ty_isint(ty) || ty_isint(opr.ty))
+    if(!ty_isint(ty) || !ty_isint(opr.ty))
     {
         vp_err_error(e->loc, "illegal 'intcast' from '%s' to '%s'", type_name(opr.ty), type_name(ty));
     }
-    return isconst ? opr_const(opr.ty, opr.val) : opr_lval(opr.ty);
+    return isconst ? opr_const(ty, opr.val) : opr_lval(ty);
 }
 
 /* Resolve floatcast */
@@ -1327,7 +1335,7 @@ static Operand sema_expr_ptrcast(Expr* e)
     bool dstvalid = ty_isptrlike(ty);
     if(!srcvalid || !dstvalid)
     {
-        vp_err_error(e->loc, "invalid 'ptrcast' between '%s' and '%s'; requires a combination of pointer, function pointer, or integer types.", type_name(opr.ty), type_name(ty));
+        vp_err_error(e->loc, "invalid 'ptrcast' between '%s' and '%s'; requires a combination of pointer, function pointer, or integer types", type_name(opr.ty), type_name(ty));
     }
     return isconst ? opr_const(ty, opr.val) : opr_lval(ty);
 }
@@ -1689,6 +1697,64 @@ static Type* sema_typedef(Decl* d)
     return sema_typespec(d->ts.spec);
 }
 
+/* Resolve fn attributes */
+static void sema_attrs(vec_t(Attr) attrs, Str* funcname)
+{
+    for(uint32_t i = 0; i < vec_len(attrs); i++)
+    {
+        Attr* at = &attrs[i];
+        Str* name = at->name;
+        uint32_t argnum = vec_len(at->args);
+        if(strncmp(str_data(name), "lib", name->len) == 0)
+        {
+            if(argnum != 1) vp_err_error(at->loc, "expected 1 argument to lib");
+            if(at->args[0].e->kind != EX_STR) vp_err_error(at->loc, "expected library name");
+            Str* lib = at->args[0].e->str;
+
+            /* Find or create the DLL entry */
+            ImportDLL* dll = NULL;
+            for(uint32_t j = 0; j < vec_len(V->imports); j++)
+            {
+                if(V->imports[j].name == lib)
+                {
+                    dll = &V->imports[j];
+                    break;
+                }
+            }
+
+            /* If DLL doesn't exist, create it */
+            if(!dll)
+            {
+                ImportDLL new_dll = {.name = lib, .funcs = NULL};
+                vec_push(V->imports, new_dll);
+                dll = &V->imports[vec_len(V->imports) - 1];
+            }
+
+            /* Check if function is already imported from this DLL */
+            bool exists = false;
+            for(uint32_t j = 0; j < vec_len(dll->funcs); j++)
+            {
+                if(dll->funcs[j].name == funcname)
+                {
+                    exists = true;
+                    break;
+                }
+            }
+
+            /* Add function to the DLL's import list if not already present */
+            if(!exists)
+            {
+                ImportFunc func = {.name = funcname, .rva = 0};
+                vec_push(dll->funcs, func);
+            }
+        }
+        else
+        {
+            vp_err_error(at->loc, "unknown attribute [[%s]]", str_data(name));
+        }
+    }
+}
+
 /* Resolve fn declaration */
 static Type* sema_fn(Decl* d)
 {
@@ -2022,19 +2088,20 @@ static void sema_resolve(Sym* sym)
     }
     vp_assertX(sym->state == SYM_PENDING, "bad symbol state");
     sym->state = SYM_PROGRESS;
+    Decl* d = sym->decl;
     switch(sym->kind)
     {
         case SYM_TYPE:
-            sym->type = sema_typedef(sym->decl);
+            sym->type = sema_typedef(d);
             break;
         case SYM_VAR:
-            sym->type = sema_var(sym->decl);
+            sym->type = sema_var(d);
             break;
         case SYM_DEF:
-            sym->type = sema_def(sym->decl, &sym->val);
+            sym->type = sema_def(d, &sym->val);
             break;
         case SYM_FN:
-            sym->type = sema_fn(sym->decl);
+            sym->type = sema_fn(d);
             break;
         default:
             vp_assertX(0, "unknown symbol");
@@ -2061,6 +2128,10 @@ vec_t(Decl*) vp_sema(vec_t(Decl*) decls)
             {
                 sema_enum(d, sym);
             }
+            else if(d->kind == DECL_FN && d->fn.attrs)
+            {
+                sema_attrs(d->fn.attrs, d->name);
+            }
         }
     }
     /* Resolve symbols */
@@ -2068,16 +2139,19 @@ vec_t(Decl*) vp_sema(vec_t(Decl*) decls)
     {
         Sym* sym = *p;
         sema_resolve(sym);
-        switch(sym->kind)
+        if(sym->decl && !sym->decl->isincomplete)
         {
-            case SYM_TYPE:
-                sym_complete(sym->type);
-                break;
-            case SYM_FN:
-                sema_fn_body(sym);
-                break;
-            default:
-                break;
+            switch(sym->kind)
+            {
+                case SYM_TYPE:
+                    sym_complete(sym->type);
+                    break;
+                case SYM_FN:
+                    sema_fn_body(sym);
+                    break;
+                default:
+                    break;
+            }
         }
     }
 

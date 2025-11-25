@@ -10,6 +10,22 @@
 
 #include "vp_ir.h"
 #include "vp_codegen.h"
+#include "vp_str.h"
+
+typedef struct ImportFunc
+{
+    Str* name;
+    uint32_t rva;
+} ImportFunc;
+
+typedef struct ImportDLL
+{
+    Str* name;
+    vec_t(ImportFunc) funcs;
+} ImportDLL;
+
+void vp_layout_init(Layout* L);
+void vp_import_calc_rvas();
 
 typedef enum PatchKind
 {
@@ -32,7 +48,7 @@ typedef struct PatchInfo
     };
 } PatchInfo;
 
-void vp_patch_infos(void);
+void vp_link(void);
 
 static VP_AINLINE void patchinfo_learel(Code* fn, uint32_t ofs)
 {

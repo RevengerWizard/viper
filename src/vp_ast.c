@@ -290,6 +290,7 @@ static Decl* decl_new(DeclKind kind, SrcLoc loc, Str* name)
     d->kind = kind;
     d->loc = loc;
     d->name = name;
+    d->isincomplete = false;
     return d;
 }
 

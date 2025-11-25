@@ -210,25 +210,25 @@ void pop_caller_save(vec_t(RegSave) saves, uint32_t ofs)
     }
 }
 
-static uint32_t push_callee_save(RegAlloc* ra, RegSet used)
+static uint32_t push_callee_save(RegAlloc* ra, RegSet iused)
 {
-    uint32_t count = 0;
+    uint32_t inum = 0;
     for(uint32_t i = 0; i < ra->set->iphysmax; i++)
     {
-        if((ra->set->itemp & (1ULL << i)) && (used & (1ULL << i)))
+        if((ra->set->itemp & (1ULL << i)) && (iused & (1ULL << i)))
         {
             emit_push64_r(V, i);
-            count++;
+            inum++;
         }
     }
-    return count;
+    return inum;
 }
 
-static void pop_callee_save(RegAlloc* ra, RegSet used)
+static void pop_callee_save(RegAlloc* ra, RegSet iused)
 {
     for(uint32_t i = ra->set->iphysmax; i-- > 0;)
     {
-        if((ra->set->itemp & (1ULL << i)) && (used & (1ULL << i)))
+        if((ra->set->itemp & (1ULL << i)) && (iused & (1ULL << i)))
         {
             emit_pop64_r(V, i);
         }
@@ -267,6 +267,7 @@ static void emit_body(Code* code)
             /* Align frame size to 16 */
             size_t calleesize = numcallee * TARGET_PTR_SIZE;
             framesize += -(framesize + calleesize + frameofs) & 15;
+            framesize += 32;    /* Shadow space? */
         }
 
         if(framesize > 0)

@@ -323,7 +323,7 @@ typedef struct Attr
 {
     SrcLoc loc;
     Str* name;
-    AttrArg* args;
+    vec_t(AttrArg) args;
 } Attr;
 
 typedef enum DeclKind
@@ -344,6 +344,7 @@ typedef struct Decl
     DeclKind kind;
     SrcLoc loc;
     Str* name;
+    bool isincomplete;
     union
     {
         Note note;

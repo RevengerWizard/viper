@@ -17,6 +17,37 @@
 #include "vp_tab.h"
 #include "vp_map.h"
 
+typedef enum SectionKind
+{
+    SEC_TEXT,
+    SEC_DATA,
+    SEC_IDATA
+} SectionKind;
+
+typedef struct
+{
+    SectionKind kind;
+    uint32_t secofs;   /* Section alignment */
+    uint32_t secsize;  /* Aligned section size */
+    uint32_t virtaddr;  /* Relative virtual address */
+    uint32_t virtsize;  /* Virtual address size */
+    SBuf sb;
+} Section;
+
+typedef struct Layout
+{
+    Section text;
+    Section idata;
+    Section data;
+    vec_t(Section) secs;    /* Sections */
+    uint32_t entry; /* Entry point */
+    uint32_t imgsize;
+    uint32_t nsecs; /* Number of sections */
+} Layout;
+
+#define FILE_ALIGNMENT 512
+#define SECTION_ALIGNMENT 4096
+
 typedef const char* (*VpReader)(void* ud, size_t* size);
 
 /* Viper State */
@@ -43,10 +74,13 @@ typedef struct VpState
     FILE* txtfile;
     SBuf tmpbuf;
     Tab funcs;
+    Layout L;
     vec_t(Str*) strs;
     vec_t(uint32_t) strofs;
     vec_t(struct PatchInfo) patches;
     const TargetInfo* target;
+    vec_t(struct ImportDLL) imports;
+    uint32_t importsize;
 } VpState;
 
 #define TARGET_PTR_SIZE (8)

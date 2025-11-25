@@ -256,9 +256,6 @@ static void ir_x64_call(IR* ir)
         emit_call64_r(V, ir->src1->phys);
     }
 
-    /* Restore caller registers */
-    pop_caller_save(ir->call->saves, total);
-
     if(ir->dst)
     {
         if(vrf_flo(ir->dst))
@@ -267,8 +264,8 @@ static void ir_x64_call(IR* ir)
             {
                 switch(ir->dst->vsize)
                 {
-                case VRSize4: emit_movss_rr(V, XMM0, ir->dst->phys); break;
-                case VRSize8: emit_movsd_rr(V, XMM0, ir->dst->phys); break;
+                case VRSize4: emit_movss_rr(V, ir->dst->phys, XMM0); break;
+                case VRSize8: emit_movsd_rr(V, ir->dst->phys, XMM0); break;
                 default: vp_assertX(0, "?");
                 }
             }
@@ -279,10 +276,13 @@ static void ir_x64_call(IR* ir)
             {
                 VRSize p = ir->dst->vsize;
                 vp_assertVSize(p, VRSize1, VRSize8);
-                emit_mov_rr(p, RAX, ir->dst->phys);
+                emit_mov_rr(p, ir->dst->phys, RAX);
             }
         }
     }
+
+    /* Restore caller registers */
+    pop_caller_save(ir->call->saves, total);
 }
 
 static void ir_x64_cast(IR* ir)

@@ -388,7 +388,7 @@ static void dump_ir(IR* ir)
     }
 }
 
-void vp_dump_bb(Code* code)
+void vp_dump_bbs(Code* code)
 {
     printf("fn %s\n", str_data(code->name));
     printf("params and locals:\n");
@@ -461,7 +461,7 @@ void vp_dump_bb(Code* code)
     }
 
     uint32_t nip = 0;
-    BB** bbs = code->bbs;
+    vec_t(BB*) bbs = code->bbs;
     printf("BB: #%d\n", vec_len(bbs));
     for(uint32_t i = 0; i < vec_len(bbs); i++)
     {
@@ -500,6 +500,78 @@ void vp_dump_bb(Code* code)
     }
 }
 
+static void dump_inst(void* p, uint32_t size)
+{
+    /* Windows temp file */
+    char tmpname[L_tmpnam];
+    tmpnam(tmpname);
+    FILE* tmp = fopen(tmpname, "wb");
+    if(!tmp)
+    {
+        printf("  [failed to create temp file]\n");
+    }
+
+    fwrite(p, 1, size, tmp);
+    fclose(tmp);
+
+    char cmd[512];
+    snprintf(cmd, sizeof(cmd),
+                "objdump -D -b binary -m i386:x86-64 -M intel \"%s\" 2>nul",
+                tmpname);
+
+    FILE* pipe = _popen(cmd, "r");
+    if(pipe)
+    {
+        char line[512];
+        int skip = 7;
+        while(fgets(line, sizeof(line), pipe))
+        {
+            if(skip-- > 0) continue;
+            printf("  %s", line);
+        }
+        _pclose(pipe);
+    }
+
+    remove(tmpname);
+}
+
+void vp_dump_code(vec_t(Code*) codes)
+{
+    vp_assertX(sbuf_size(&V->code), "empty code");
+    uint8_t* base = (uint8_t*)V->code.b;
+    for(uint32_t i = 0; i < vec_len(codes); i++)
+    {
+        Code* code = codes[i];
+        vec_t(BB*) bbs = code->bbs;
+        if(vec_len(bbs) > 0)
+        {
+            uint32_t start = code->ofs;
+            uint32_t end = bbs[0]->ofs;
+            uint32_t size = end - start;
+
+            if(size > 0)
+            {
+                printf("\n%s: (offset=%d, size=%d)\n",
+                        str_data(code->name), start, size);
+                dump_inst(base + start, size);
+            }
+        }
+        for(uint32_t j = 0; j < vec_len(bbs); j++)
+        {
+            BB* bb = bbs[j];
+            uint32_t start = bb->ofs;
+            uint32_t end = (j + 1 < vec_len(bbs)) ? bbs[j + 1]->ofs : ((i + 1 < vec_len(codes)) ? codes[i + 1]->ofs : sbuf_len(&V->code));
+            uint32_t size = end - start;
+            if(size == 0) continue;
+
+            printf("\n%.*s: (offset=%d, size=%d)\n",
+                           bb->label->len, str_data(bb->label), start, size);
+
+            dump_inst(base + start, size);
+        }
+    }
+}
+
 /* -- String interning dump ----------------------------------------- */
 
 void vp_dump_strintern(void)
@@ -522,6 +594,8 @@ void vp_dump_type(Type* ty)
 {
     switch(ty->kind)
     {
+        case TY_none:
+            break;
         case TY_bool:
         case TY_uint8:
         case TY_int8:

@@ -1,36 +1,44 @@
 ### todo
 
-- `import`
+- [ ] `union` handling
 
-- intrinsics
+- [ ] `import`
 
-- `asm` blocks
+- [ ] intrinsics
 
-- `def` declarations
+- [ ] `asm` blocks
 
-- `const` variable declarations
+- [x] `def` declarations
 
-- fix casts, conversions
+- [ ] `const` variable declarations
 
-- fix `const` types
+- [ ] fix casts, conversions
 
-- object files
+- [ ] fix `const` types
 
-- linker?
+- [ ] object files
 
-- length from string literals/arrays
+- [ ] linker?
 
-- function prototypes from dynamic (Win32) libraries
+- [ ] length from string literals/arrays
 
-- globals emission
+- [x] function prototypes from dynamic (Win32) libraries
 
-- strings emission
+- [ ] globals emission
 
-- macros?
+- [ ] strings emission
 
-- stronger types?
+- [ ] macros?
 
-- enums
+- [ ] stronger types?
+
+- [ ] default constant values for `struct`/`union` fields?
+
+- [ ] non nil-able ptr types `uint8*?`
+
+- [x] enums
+
+- [x] incomplete struct/union declarations `struct tea_State;`
 
 ### integer literals
 
@@ -181,6 +189,21 @@ asm
 
 ---
 
+### macros
+
+```
+struct VecHeader
+{
+    len : uint32;
+    size : uint32;
+    data : uint8[];
+}
+
+macro vec_hdr(v) = cast(VecHeader*, cast(uint8*, v - offset(VecHeader, data)));
+```
+
+---
+
 ### notes
 
 `#fall`
@@ -233,7 +256,9 @@ asm
 
 `[[interrupt]]`
 
-`[[entry]]`
+`[[start]]` `[[entry]]`
+
+`[[format]]`
 
 ---
 
@@ -297,39 +322,73 @@ int64 <- int32 | uint32 | int16 | uint16 | int8 | uint8 | bool
 
 ### x64
 
-[rax, rdi, rsi, rdx, rcx, r8, r9, r10, r11, r12, r13, r14, r15]
+[`rax`, `rdi`, `rsi`, `rdx`, `rcx`, `r8`, `r9`, `r10`, `r11`, `r12`, `r13`, `r14`, `r15`]
 
 max physical registers : 16
+
+- special purpose
+`rsp` (stack pointer)
+`rbp` (base pointer)
+
+---
 
 Windows x64
 
 - caller-saved (volatile), can be freely used in expressions
-rax, rcx, rdx, r8, r9, r10, r11
+`rax`, `rcx`, `rdx`, `r8`, `r9`, `r10`, `r11`
 
 - callee-saved (non-volatile), must preserve across function calls
-rbx, rsi, rdi, r12, r13, r14, r15
-
-- special purpose
-rsp (stack pointer)
-rbp (base pointer)
+`rbx`, `rsi`, `rdi`, `r12`, `r13`, `r14`, `r15`
 
 - floating point registers
-xmm0, xmm1, xmm2, xmm3 (volatile)
-xmm6, xmm7, xmm8, xmm9 (non-volatile)
+`xmm0`, `xmm1`, `xmm2`, `xmm3` (volatile)
+`xmm6`, `xmm7`, `xmm8`, `xmm9` (non-volatile)
 
 - params
-rcx, rdx, r8, r9 (first 4 int)
-xmm0, xmm1, xmm2, xmm3 (first 4 floats)
+`rcx`, `rdx`, `r8`, `r9` (first 4 int)
+`xmm0`, `xmm1`, `xmm2`, `xmm3` (first 4 floats)
 
 ---
 
 Linux System-V x64
 
 - caller-saved
-rax, rcx, rdx, rsi, rdi, r8, r9, r10, r11
+`rax`, `rcx`, `rdx`, `rsi`, `rdi`, `r8`, `r9`, `r10`, `r11`
 
 - callee-saved
-rbx, rbp, r12, r13, r14, r15
+`rbx`, `rbp`, `r12`, `r13`, `r14`, `r15`
+
+Linux Syscall x64
+
+`rax` = syscall number
+`rdi` = arg0
+`rsi` = arg1
+`rdx` = arg2
+`r10` = arg3
+`r8` = arg4
+`r9` = arg5
+
+`rax` = return
+
+- clobbers
+`rcx`, `r11`
+
+```
+[[syscall]]
+fn write(fd : uint32, buf : const uint8*, count : usize) : isize;
+```
+
+```
+[[syscall]]
+fn write(fd : uint32, buf : const uint8*, count : usize) : isize
+{
+    asm
+    {
+        mov rax, 1; // sys_write
+        syscall;
+    }
+}
+```
 
 # win32 API
 
@@ -337,4 +396,33 @@ rbx, rbp, r12, r13, r14, r15
 var h : HANDLE = GetStdHandle(STD_OUTPUT_HANDLE);
 var written : DWORD;
 WriteConsoleA(h, "Hello\n", 6, &written, nil);
+```
+
+```c
+MessageBoxA(
+    nil,
+    "Here is a nice message box",
+    "Win32 Example",
+    MB_OKCANCEL | MB_ICONWARNING
+);
+```
+
+---
+
+### wat
+
+```c
+fn example<T>(a : T, b : T) : T
+{
+    // get type info with some operator, I'll use % as an example
+    const T_info: type = %T;
+    if !T_info.is_numerical { compile_error("raagh"); }
+
+    switch T_info.id
+    {
+      case %int32.id: return a + b;
+      case %float.id: return a / b;
+      else: return 0;
+    }
+}
 ```

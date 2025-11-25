@@ -839,8 +839,17 @@ static Decl* parse_struct(LexState* ls)
     vp_lex_next(ls);    /* Skip 'struct' */
     SrcLoc loc = lex_srcloc(ls);
     Str* name = lex_name(ls);
-    Aggregate* aggr = parse_aggr(ls);
-    return vp_decl_aggr(loc, DECL_STRUCT, name, aggr);
+    if(lex_match(ls, ';'))
+    {
+        Decl* d = vp_decl_aggr(loc, DECL_STRUCT, name, vp_aggr_new(loc, AGR_STRUCT, NULL));
+        d->isincomplete = true;
+        return d;
+    }
+    else
+    {
+        Aggregate* aggr = parse_aggr(ls);
+        return vp_decl_aggr(loc, DECL_STRUCT, name, aggr);
+    }
 }
 
 /* Parse enum items */

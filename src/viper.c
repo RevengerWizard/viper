@@ -33,29 +33,13 @@ int main(int argc, char** argv)
 
     V = vp_state_open();
 
-    SBuf* code = &V->code;
-    vp_buf_init(code);
-    vp_buf_need(code, 1024);
-
     vp_load(V, argv[1]);
-
-    FILE* f = fopen("out.bin", "wb");
-    if(f)
-    {
-        fwrite(code->b, 1, sbuf_len(code), f);
-        fclose(f);
-    }
-    else
-    {
-        fprintf(stderr, "unable to open out.bin\n");
-        return EXIT_FAILURE;
-    }
 
     SBuf sb;
     vp_buf_init(&sb);
     vp_buf_need(&sb, 1024);
     vp_emit_exe(V, &sb);
-    f = fopen("out.exe", "wb");
+    FILE* f = fopen("out.exe", "wb");
     if(f)
     {
         fwrite(sb.b, 1, sbuf_len(&sb), f);
