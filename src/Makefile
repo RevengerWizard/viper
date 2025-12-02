@@ -110,7 +110,8 @@ VPCORE_O = vp_assert.o vp_mem.o vp_buf.o \
 	vp_opt.o \
 	vp_codegen.o vp_ir.o vp_var.o vp_regalloc.o \
 	vp_ir_x64.o vp_low_x64.o vp_link_x64.o vp_emit_x64.o vp_inst_x64.o \
-	vp_dump.o vp_state.o
+	vp_dump.o vp_state.o \
+	vp_pe.o vp_coff.o
 
 VP_O = viper.o
 VP_A = libvp.a

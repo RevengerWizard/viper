@@ -36,9 +36,6 @@ typedef struct
 
 typedef struct Layout
 {
-    Section text;
-    Section idata;
-    Section data;
     vec_t(Section) secs;    /* Sections */
     uint32_t entry; /* Entry point */
     uint32_t imgsize;
@@ -71,6 +68,7 @@ typedef struct VpState
     BB* bb;
     struct Code* fncode;
     RegAlloc* ra;
+    vec_t(struct Code*) codes;
     FILE* txtfile;
     SBuf tmpbuf;
     Tab funcs;

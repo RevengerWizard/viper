@@ -5,49 +5,44 @@
 
 #include <string.h>
 
+#include "vp_pe.h"
 #include "vp_buf.h"
 #include "vp_state.h"
 #include "vp_str.h"
 #include "vp_link.h"
 
-#define PE32_PLUS_MAGIC         0x20b
-#define MAJOR_SUBSYSTEM_VERSION 4
-
-/* Subsystems */
-#define IMAGE_SUBSYSTEM_WINDOWS_GUI 2
-#define IMAGE_SUBSYSTEM_CONSOLE 3
-
-/* Machine types */
-#define IMAGE_FILE_MACHINE_AMD64    0x8664
-
-/* Characteristics */
-#define IMAGE_FILE_EXECUTABLE_IMAGE 0x0002
-#define IMAGE_FILE_LARGE_ADDRESS_AWARE 0x0020
-#define IMAGE_FILE_DEBUG_STRIPPED   0x0200
-
-/*  Section flags */
-#define IMAGE_SCN_CNT_INITIALIZED_DATA  0x00000040
-#define IMAGE_SCN_CNT_CODE              0x00000020
-#define IMAGE_SCN_MEM_EXECUTE           0x20000000
-#define IMAGE_SCN_MEM_READ              0x40000000
-#define IMAGE_SCN_MEM_WRITE             0x80000000
-
-#define PE_CHARACTERISTICS \
-    (IMAGE_FILE_EXECUTABLE_IMAGE | IMAGE_FILE_LARGE_ADDRESS_AWARE | IMAGE_FILE_DEBUG_STRIPPED)
-
-#define TEXT_CHARACTERISTICS \
-    (IMAGE_SCN_CNT_CODE | IMAGE_SCN_MEM_EXECUTE | IMAGE_SCN_MEM_READ)
-#define IDATA_CHARACTERISTICS \
-    (IMAGE_SCN_CNT_INITIALIZED_DATA | IMAGE_SCN_MEM_READ)
-#define DATA_CHARACTERISTICS \
-    (IMAGE_SCN_CNT_INITIALIZED_DATA | IMAGE_SCN_MEM_READ | IMAGE_SCN_MEM_WRITE)
-
-static void pe_sec_text(VpState* V, SBuf* sb, Layout* L)
+static uint32_t pe_sec_flags(SectionKind kind)
 {
-    char *p = vp_buf_more(sb, L->text.secsize);
-    memcpy(p, V->code.b, L->text.virtsize);
-    memset(p + L->text.virtsize, 0, L->text.secsize - L->text.virtsize);
-    sb->w = p + L->text.secsize;
+    switch(kind)
+    {
+        case SEC_TEXT:
+            return IMAGE_SCN_CNT_CODE | IMAGE_SCN_MEM_EXECUTE | IMAGE_SCN_MEM_READ;
+        case SEC_IDATA:
+            return IMAGE_SCN_CNT_INITIALIZED_DATA | IMAGE_SCN_MEM_READ;
+        case SEC_DATA:
+            return IMAGE_SCN_CNT_INITIALIZED_DATA | IMAGE_SCN_MEM_READ | IMAGE_SCN_MEM_WRITE;
+    }
+}
+
+static Str* pe_sec_names(SectionKind kind)
+{
+    switch(kind)
+    {
+        case SEC_TEXT:
+            return vp_str_newlit(".text");
+        case SEC_IDATA:
+            return vp_str_newlit(".idata");
+        case SEC_DATA:
+            return vp_str_newlit(".data");
+    }
+}
+
+static void pe_sec_text(VpState* V, SBuf* sb, Section* sec)
+{
+    char *p = vp_buf_more(sb, sec->secsize);
+    memcpy(p, V->code.b, sec->virtsize);
+    memset(p + sec->virtsize, 0, sec->secsize - sec->virtsize);
+    sb->w = p + sec->secsize;
 }
 
 static void pe_sec_idata(VpState* V, SBuf* sb, uint32_t base, uint32_t size)
@@ -164,7 +159,6 @@ static void pe_sec_idata(VpState* V, SBuf* sb, uint32_t base, uint32_t size)
     for(uint32_t i = 0; i < dllsnum; i++)
     {
         ImportDLL* dll = &V->imports[i];
-
         for(uint32_t j = 0; j < vec_len(dll->funcs); j++)
         {
             ImportFunc* func = &dll->funcs[j];
@@ -196,7 +190,7 @@ static void pe_sec_data(VpState* V, SBuf* sb, uint32_t size)
     sb->w = p + size;
 }
 
-static void pe_build(VpState* V, SBuf* sb, Layout* L)
+static void pe_build(VpState* V, SBuf* sb, Layout* L, uint32_t nsecs)
 {
     /* DOS header */
     char* p = vp_buf_need(sb, 64);
@@ -212,69 +206,48 @@ static void pe_build(VpState* V, SBuf* sb, Layout* L)
     *(uint16_t*)(&p[6]) = L->nsecs;     /* NumberOfSections */
     memset(&p[8], 0, 20);   /* TimeDateStamp, PointerToSymbolTable, NumberOfSymbols */
     *(uint16_t*)(&p[20]) = 240;    /* SizeOfOptionalHeader */
-    *(uint16_t*)(&p[22]) = PE_CHARACTERISTICS;    /* Characteristics */
+    *(uint16_t*)(&p[22]) = IMAGE_FILE_EXECUTABLE_IMAGE | IMAGE_FILE_LARGE_ADDRESS_AWARE | IMAGE_FILE_DEBUG_STRIPPED;    /* Characteristics */
     sb->w = p + 24;
 
     /* Optional header */
     p = vp_buf_more(sb, 240);
     memset(p, 0, 240);
-    *(uint16_t*)(&p[0]) = PE32_PLUS_MAGIC;    /* Magic (PE32+) */
+    *(uint16_t*)(&p[0]) = 0x20b;    /* Magic (PE32+) */
     *(uint32_t*)(&p[16]) = L->entry;    /* AddressOfEntryPoint */
     *(uint64_t*)(&p[24]) = 0x00400000ULL;    /* ImageBase (64-bit) */
     *(uint32_t*)(&p[32]) = SECTION_ALIGNMENT;    /* SectionAlignment */
     *(uint32_t*)(&p[36]) = FILE_ALIGNMENT;    /* FileAlignment (standard) */
-    *(uint16_t*)(&p[48]) = MAJOR_SUBSYSTEM_VERSION;    /* MajorSubsystemVersion */
+    *(uint16_t*)(&p[48]) = 4;    /* MajorSubsystemVersion */
     *(uint32_t*)(&p[56]) = L->imgsize;    /* SizeOfImage (total runtime memory size) */
     *(uint32_t*)(&p[60]) = 512;    /* SizeOfHeaders */
     *(uint16_t*)(&p[68]) = IMAGE_SUBSYSTEM_CONSOLE;    /* Subsystem */
     *(uint32_t*)(&p[108]) = 16;    /* NumberOfRvaAndSizes */
 
     /* Data directories */
-    if(L->idata.secsize)
+    for(uint32_t i = 0; i < nsecs; i++)
     {
-        /* ImportTable  */
-        *(uint32_t*)(&p[120]) = L->idata.virtaddr; /* VirtualAddress */
-        *(uint32_t*)(&p[124]) = 512;    /* Size */
+        if(L->secs[i].kind == SEC_IDATA)
+        {
+            *(uint32_t*)(&p[120]) = L->secs[i].virtaddr;
+            *(uint32_t*)(&p[124]) = 512;
+            break;
+        }
     }
     sb->w = p + 240;
 
-    /* Section tables */
-    /* .text */
-    p = vp_buf_more(sb, 40);
-    memset(p, 0, 40);
-    memcpy(p, ".text", 5);
-    *(uint32_t*)(&p[8]) = L->text.virtsize;   /* VirtualSize */
-    *(uint32_t*)(&p[12]) = L->text.virtaddr;   /* VirtualAddress */
-    *(uint32_t*)(&p[16]) = L->text.secsize;   /* SizeOfRawData */
-    *(uint32_t*)(&p[20]) = L->text.secofs;   /* PointerToRawData */
-    *(uint32_t*)(&p[36]) = TEXT_CHARACTERISTICS;   /* Characteristics */
-    sb->w = p + 40;
-
-    if(L->idata.secsize)
+    /* Section headers */
+    for(uint32_t i = 0; i < nsecs; i++)
     {
-        /* .idata */
+        Section* s = &L->secs[i];
+        Str* name = pe_sec_names(s->kind);
         p = vp_buf_more(sb, 40);
         memset(p, 0, 40);
-        memcpy(p, ".idata", 6);
-        *(uint32_t*)(&p[8]) = L->idata.virtsize;   /* VirtualSize */
-        *(uint32_t*)(&p[12]) = L->idata.virtaddr;   /* VirtualAddress */
-        *(uint32_t*)(&p[16]) = L->idata.secsize;   /* SizeOfRawData */
-        *(uint32_t*)(&p[20]) = L->idata.secofs;   /* PointerToRawData */
-        *(uint32_t*)(&p[36]) = IDATA_CHARACTERISTICS;   /* Characteristics */
-        sb->w = p + 40;
-    }
-
-    if(L->data.secsize)
-    {
-        /* .data */
-        p = vp_buf_more(sb, 40);
-        memset(p, 0, 40);
-        memcpy(p, ".data", 5);
-        *(uint32_t*)(&p[8]) = L->data.virtsize;   /* VirtualSize */
-        *(uint32_t*)(&p[12]) = L->data.virtaddr;   /* VirtualAddress */
-        *(uint32_t*)(&p[16]) = L->data.secsize;   /* SizeOfRawData */
-        *(uint32_t*)(&p[20]) = L->data.secofs;   /* PointerToRawData */
-        *(uint32_t*)(&p[36]) = DATA_CHARACTERISTICS;   /* Characteristics */
+        memcpy(p, str_data(name), name->len);
+        *(uint32_t*)(&p[8]) = s->virtsize;
+        *(uint32_t*)(&p[12]) = s->virtaddr;
+        *(uint32_t*)(&p[16]) = s->secsize;
+        *(uint32_t*)(&p[20]) = s->secofs;
+        *(uint32_t*)(&p[36]) = pe_sec_flags(s->kind);
         sb->w = p + 40;
     }
 
@@ -290,22 +263,45 @@ static void pe_build(VpState* V, SBuf* sb, Layout* L)
 
 void vp_emit_exe(VpState* V, SBuf* sb)
 {
-    Layout L = V->L;
+    Layout* L = &V->L;
+    uint32_t nsecs = vec_len(L->secs);
 
-    pe_build(V, sb, &L);
-
-    /* .text */
-    pe_sec_text(V, sb, &L);
-
-    /* .idata */
-    if(L.idata.secsize)
+    /* Entry point */
+    for(uint32_t i = 0; i < nsecs; i++)
     {
-        pe_sec_idata(V, sb, L.idata.virtaddr, L.idata.secsize);
+        Section* sec = &L->secs[i];
+        if(L->secs[i].kind == SEC_TEXT)
+        {
+            Code *maincode = vp_tab_get(&V->funcs, vp_str_newlen("main"));
+            vp_assertX(maincode, "main not found");
+            V->L.entry = sec->virtaddr + maincode->ofs;
+            break;
+        }
     }
 
-    /* .data */
-    if(L.data.secsize)
+    pe_build(V, sb, L, nsecs);
+
+    /* Section data */
+    for(uint32_t i = 0; i < nsecs; i++)
     {
-        pe_sec_data(V, sb, L.data.secsize);
+        Section* sec = &L->secs[i];
+        switch(sec->kind)
+        {
+            case SEC_TEXT:
+            {
+                pe_sec_text(V, sb, sec);
+                break;
+            }
+            case SEC_IDATA:
+            {
+                pe_sec_idata(V, sb, sec->virtaddr, sec->secsize);
+                break;
+            }
+            case SEC_DATA:
+            {
+                pe_sec_data(V, sb, sec->secsize);
+                break;
+            }
+        }
     }
 }

@@ -3,7 +3,9 @@
 ** Address patching
 */
 
+#include "vp_buf.h"
 #include "vp_link.h"
+#include "vp_state.h"
 
 static uint32_t calc_idata_size()
 {
@@ -45,10 +47,12 @@ static uint32_t calc_idata_size()
 
 static uint32_t calc_data_size()
 {
-    uint32_t sz = 0;
+    uint32_t size = 0;
     for(uint32_t i = 0; i < vec_len(V->strs); i++)
-        sz += V->strs[i]->len + 1;
-    return sz;
+    {
+        size += V->strs[i]->len + 1;
+    }
+    return size;
 }
 
 static void calc_import_rvas(VpState *V)
@@ -84,50 +88,75 @@ static void calc_import_rvas(VpState *V)
     vp_mem_free(iat_ofs);
 }
 
+static Section* sec_find(Layout* L, SectionKind kind)
+{
+    for(uint32_t i = 0; i < vec_len(L->secs); i++)
+    {
+        if(L->secs[i].kind == kind)
+            return &L->secs[i];
+    }
+    return NULL;
+}
+
 void vp_layout_init(Layout *L)
 {
     uint32_t csize = sbuf_len(&V->code);
     uint32_t isize = calc_idata_size();
     uint32_t dsize = calc_data_size();
 
-    L->nsecs = 1 + (isize > 0) + (dsize > 0);
+    {
+        Section sec = {.kind = SEC_TEXT, .secsize = csize};
+        char* p = vp_buf_need(&sec.sb, csize);
+        memcpy(p, V->code.b, csize);
+        sec.sb.w = p + csize;
+        vec_push(L->secs, sec);
+    }
+
+    if(dsize > 0)
+    {
+        Section sec = {.kind = SEC_DATA, .secsize = dsize};
+        char* p = vp_buf_need(&sec.sb, dsize);
+        memset(p, 0, dsize);
+        char* w = p;
+        printf("STRS %d\n", vec_len(V->strs));
+        for(uint32_t i = 0; i < vec_len(V->strs); i++)
+        {
+            Str* s = V->strs[i];
+            memcpy(w, str_data(s), s->len);
+            w[s->len] = '\0';
+            w += s->len + 1;    /* + \0 */
+        }
+        sec.sb.w = p + dsize;
+        printf("DATA\n'''%.*s'''\n%d", (int)sbuf_len(&sec.sb), sec.sb.b, sbuf_len(&sec.sb));
+        vec_push(L->secs, sec);
+    }
+
+    L->nsecs = vec_len(L->secs);
 
     uint32_t fofs = FILE_ALIGNMENT;
     uint32_t vaddr = SECTION_ALIGNMENT;
 
-    /* .text */
-    L->text.secofs = fofs;
-    L->text.secsize = ALIGN_UP(csize, FILE_ALIGNMENT);
-    L->text.virtaddr = vaddr;
-    L->text.virtsize = csize;
+    for(uint32_t i = 0; i < L->nsecs; i++)
+    {
+        Section* sec = &L->secs[i];
+        sec->virtaddr = vaddr;
+        sec->virtsize = sec->secsize;
+        sec->secofs = fofs;
+        sec->secsize = ALIGN_UP(sec->secsize, FILE_ALIGNMENT);
 
-    fofs += L->text.secsize;
-    vaddr += ALIGN_UP(L->text.virtsize, SECTION_ALIGNMENT);
-
-    /* .idata */
-    L->idata.secofs = fofs;
-    L->idata.secsize = ALIGN_UP(isize, FILE_ALIGNMENT);
-    L->idata.virtaddr = vaddr;
-    L->idata.virtsize = isize;
-
-    fofs += L->idata.secsize;
-    vaddr += ALIGN_UP(L->idata.virtsize, SECTION_ALIGNMENT);
-
-    /* .data */
-    L->data.secofs = fofs;
-    L->data.secsize = ALIGN_UP(dsize, FILE_ALIGNMENT);
-    L->data.virtaddr = vaddr;
-    L->data.virtsize = dsize;
-
-    vaddr += ALIGN_UP(L->data.virtsize, SECTION_ALIGNMENT);
+        fofs += sec->secsize;
+        vaddr += ALIGN_UP(sec->virtsize, SECTION_ALIGNMENT);
+    }
 
     L->imgsize = vaddr;
 
-    calc_import_rvas(V);
+    /*calc_import_rvas(V); */
 }
 
 static uint32_t rva_import(Str* label)
 {
+    Section* text = sec_find(&V->L, SEC_TEXT);
+    Section* idata = sec_find(&V->L, SEC_IDATA);
     uint32_t rva = 0;
     for(uint32_t i = 0; i < vec_len(V->imports); i++)
     {
@@ -138,23 +167,26 @@ static uint32_t rva_import(Str* label)
             if(func->name == label)
             {
                 rva = func->rva;
+                break;
             }
         }
     }
     vp_assertX(rva, "external function not found: %.*s",
                 (int)label->len, str_data(label));
-    return (V->L.idata.virtaddr - V->L.text.virtaddr) + rva;
+    return (idata->virtaddr - text->virtaddr) + rva;
 }
 
 static uint32_t rva_str(Str* label)
 {
+    Section* text = sec_find(&V->L, SEC_TEXT);
+    Section* data = sec_find(&V->L, SEC_DATA);
     uint32_t i;
     for(i = 0; i < vec_len(V->strs); i++)
     {
         if(V->strs[i] == label)
             break;
     }
-    return (V->L.data.virtaddr - V->L.text.virtaddr) + V->strofs[i];
+    return (data->virtaddr - text->virtaddr) + V->strofs[i];
 }
 
 void vp_link(void)
@@ -167,17 +199,19 @@ void vp_link(void)
 
         switch(p->kind)
         {
-            case PATCH_LEA_REL:
             case PATCH_JMP_REL:
-            case PATCH_CALL_REL:
+            case PATCH_LEA_REL:
             {
                 int32_t ofs = p->kind == PATCH_JMP_REL ? p->target->ofs : p->code->ofs;
                 rel = ofs - (from + 4);
                 break;
             }
+            case PATCH_CALL_REL:
             case PATCH_CALL_ABS:
+            case PATCH_LEA_ABS:
+                break;
+            /*case PATCH_CALL_ABS:
             {
-                /* offset = RVA_IAT - next_instruction_offset */
                 uint32_t iat_rva = rva_import(p->label);
                 uint32_t next_instr = from + 4;
                 rel = iat_rva - next_instr;
@@ -185,12 +219,11 @@ void vp_link(void)
             }
             case PATCH_LEA_ABS:
             {
-                /* offset = RVA_IAT - next_instruction_offset */
                 uint32_t iat_rva = rva_str(p->label);
                 uint32_t next_instr = from + 4;
                 rel = iat_rva - next_instr;
                 break;
-            }
+            }*/
             default:
                 vp_assertX(0, "?");
                 break;

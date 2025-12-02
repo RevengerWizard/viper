@@ -3,8 +3,6 @@
 ** Map handling
 */
 
-#include <stdlib.h>
-
 #include "vp_map.h"
 #include "vp_mem.h"
 

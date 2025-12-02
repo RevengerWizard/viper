@@ -12,7 +12,7 @@
 
 #include "vp_state.h"
 
-#include "vp_pe.c"
+#include "vp_pe.h"
 
 static void print_usage()
 {
@@ -36,7 +36,7 @@ int main(int argc, char** argv)
     vp_load(V, argv[1]);
 
     SBuf sb;
-    vp_buf_init(&sb);
+    /*vp_buf_init(&sb);
     vp_buf_need(&sb, 1024);
     vp_emit_exe(V, &sb);
     FILE* f = fopen("out.exe", "wb");
@@ -48,6 +48,21 @@ int main(int argc, char** argv)
     else
     {
         fprintf(stderr, "unable to open out.exe\n");
+        return EXIT_FAILURE;
+        }*/
+
+    vp_buf_init(&sb);
+    vp_buf_need(&sb, 1024);
+    vp_emit_coff(V, &sb);
+    FILE* f = fopen("out.obj", "wb");
+    if(f)
+    {
+        fwrite(sb.b, 1, sbuf_len(&sb), f);
+        fclose(f);
+    }
+    else
+    {
+        fprintf(stderr, "unable to open out.obj\n");
         return EXIT_FAILURE;
     }
 

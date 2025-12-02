@@ -9,6 +9,7 @@
 #include <string.h>
 
 #include "vp_def.h"
+#include "vp_str.h"
 
 typedef struct SBuf
 {
@@ -21,6 +22,8 @@ typedef struct SBuf
 
 char* vp_buf_need2(SBuf* sb, size_t size);
 char* vp_buf_more2(SBuf* sb, size_t size);
+
+Str* vp_buf_cat2str(Str* s1, Str* s2);
 
 static VP_AINLINE void vp_buf_init(SBuf* sb)
 {
@@ -56,6 +59,11 @@ static VP_AINLINE void vp_buf_putb(SBuf* sb, int c)
     char* w = vp_buf_more(sb, 1);
     *w++ = (char)c;
     sb->w = w;
+}
+
+static VP_AINLINE Str* vp_buf_str(SBuf* sb)
+{
+    return vp_str_new(sb->b, sbuf_len(sb));
 }
 
 #endif

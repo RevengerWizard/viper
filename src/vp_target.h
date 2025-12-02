@@ -8,6 +8,14 @@
 
 #include "vp_regalloc.h"
 
+/* Object target format */
+typedef enum
+{
+    TARGET_PE,
+    TARGET_ELF,
+    TARGET_COFF
+} TargetFormat;
+
 /* Operating systems */
 typedef enum
 {

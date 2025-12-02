@@ -56,13 +56,10 @@ void vp_load(VpState* V, const char* filename)
     vec_t(Decl*) decls = vp_parse(V, &ls);
     decls = vp_sema(decls);
     vec_t(Code*) codes = vp_codegen(decls);
+    V->codes = codes;
     vp_low(codes);
-    vp_layout_init(&V->L);
     vp_link();
-    /* Entry point */
-    Code *maincode = vp_tab_get(&V->funcs, vp_str_newlen("main"));
-    vp_assertX(maincode, "main not found");
-    V->L.entry = V->L.text.virtaddr + maincode->ofs;
-    vp_dump_code(codes);
+    vp_layout_init(&V->L);
+    //vp_dump_code(codes);
     fclose(ctx.fp);
 }

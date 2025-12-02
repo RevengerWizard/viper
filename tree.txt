@@ -8,6 +8,7 @@ src/
 ├── vp_buf.c/h          ← Buffer handling
 ├── vp_char.c/h         ← Character types
 ├── vp_codegen.c/h      ← Code generation (AST -> IR)
+├── vp_coff.c           ← COFF object file emitter
 ├── vp_def.h            ← Viper common internal definitions
 ├── vp_dump.c/h         ← Data structure print
 ├── vp_elf.c            ← ELF emitter
@@ -27,7 +28,7 @@ src/
 ├── vp_mem.c/h          ← Memory management
 ├── vp_opt.c/h          ← Optimization pass (IR -> (opt) -> IR)
 ├── vp_parse.c/h        ← Syntax analyser
-├── vp_pe.c             ← Windows PE emitter
+├── vp_pe.c/h           ← Windows PE emitter
 ├── vp_regalloc.c/h     ← Register allocation
 ├── vp_sema.c/h         ← Semantic analyser
 ├── vp_state.c/h        ← State management
