@@ -16,6 +16,7 @@
 #include "vp_type.h"
 #include "vp_var.h"
 #include "vp_vec.h"
+#include "vp_mod.h"
 #include "vp_link.h"
 
 #include "vp_dump.h"
@@ -23,11 +24,10 @@
 /* Semantic state */
 typedef struct
 {
-    vec_t(Decl*) sorted;
-    Tab globsyms;
-    vec_t(Sym*) syms;
-    vec_t(Sym*) localsyms;
-    Decl* currfn;
+    vec_t(Sym*) syms;   /* All reachable symbols */
+    vec_t(Sym*) localsyms;  /* Local scope symbols */
+    Decl* currfn;   /* Current function declaration */
+    Module* root;   /* Root module */
 } SemaState;
 
 SemaState S;
@@ -41,6 +41,7 @@ static Sym* sym_new(SymKind kind, Str* name, Decl* d)
     sym->kind = kind;
     sym->name = name;
     sym->decl = d;
+    sym->mod = V->mod;
     return sym;
 }
 
@@ -50,6 +51,8 @@ static void sym_add(Str* name, Type* ty)
     Sym* sym = sym_new(SYM_VAR, name, NULL);
     sym->state = SYM_DONE;
     sym->type = ty;
+    sym->local = true;
+    sym->mod = V->mod;
     vec_push(S.localsyms, sym);
 }
 
@@ -69,12 +72,26 @@ static void sym_leave(uint32_t len)
 }
 
 /* Add a global symbol */
-static void sym_glob_put(Sym* sym)
+static void sym_glob_put(Str* name, Sym* sym)
 {
-    vp_tab_set(&S.globsyms, sym->name, sym);
-    vec_push(S.syms, sym);
+    Sym* old = vp_tab_get(&V->mod->symstab, name);
+    /* Allow overrides of external defined symbols, but not internal */
+    if(old && !(sym->mod == V->mod && old->mod != V->mod))
+    {
+        if(sym == old)
+            return;
+        if(sym->kind == SYM_MODULE && old->kind == SYM_MODULE && sym->mod == old->mod)
+            return;
+        if(sym->mod == V->mod)
+        {
+            vp_err_error(sym->decl->loc, "duplicate definition of symbol '%s'", str_data(name));
+        }
+    }
+    vp_tab_set(&V->mod->symstab, name, sym);
+    vec_push(V->mod->syms, sym);
 }
 
+/* Search for local or global symbol */
 static Sym* sym_find(Str* name)
 {
     uint32_t len = vec_len(S.localsyms);
@@ -84,7 +101,7 @@ static Sym* sym_find(Str* name)
         if(sym->name == name)
             return sym;
     }
-    return vp_tab_get(&S.globsyms, name);
+    return vp_tab_get(&V->mod->symstab, name);
 }
 
 static void sema_resolve(Sym* sym);
@@ -149,7 +166,7 @@ static void sym_complete(Type* ty)
         return;
 
     Decl* d = ty->sym->decl;
-    if(d->isincomplete)
+    if(declflag_empty(d))
     {
         vp_err_error(d->loc, "use of incomplete type as complete");
     }
@@ -1747,6 +1764,8 @@ static void sema_attrs(vec_t(Attr) attrs, Str* funcname)
                 ImportFunc func = {.name = funcname, .rva = 0};
                 vec_push(dll->funcs, func);
             }
+
+            vp_tab_set(&V->ifuncs, funcname, funcname);
         }
         else
         {
@@ -1760,7 +1779,7 @@ static Type* sema_fn(Decl* d)
 {
     vp_assertX(d->kind == DECL_FN, "fn declaration");
 
-    vec_push(S.sorted, d);
+    vec_push(V->mod->sorted, d);
     vec_t(Type*) params = NULL;
     for(uint32_t i = 0; i < vec_len(d->fn.params); i++)
     {
@@ -1924,34 +1943,35 @@ static void sema_fn_body(Sym* sym)
     vp_assertX(d->kind == DECL_FN, "fn declaration");
     vp_assertX(sym->state == SYM_DONE, "unresolved symbol");
 
-    /* Add function name to global scope */
-    VarInfo* vi = vp_scope_add(V->globscope, d->name, sym->type);
-    vi->storage |= VS_FN;
-
     if(!d->fn.body)
         return;
 
+    Module* mod = vp_mod_enter(sym->mod);
     Scope* scope = vp_scope_begin();
     vec_push(d->fn.scopes, scope);
     S.currfn = d;
-
     uint32_t len = sym_enter();
-    for(uint32_t i = 0; i < vec_len(d->fn.params); i++)
-    {
-        Param* param = &d->fn.params[i];
-        Type* pty = sema_typespec(param->spec);
-        sym_add(param->name, pty);
 
-        vp_scope_add(V->currscope, param->name, pty);
-    }
-    Type* ret = sema_typespec(d->fn.ret);
-    d->fn.rett = ret;
-    for(uint32_t i = 0; i < vec_len(d->fn.body->block); i++)
     {
-        sema_stmt(d->fn.body->block[i], ret);
+        for(uint32_t i = 0; i < vec_len(d->fn.params); i++)
+        {
+            Param* param = &d->fn.params[i];
+            Type* pty = sema_typespec(param->spec);
+            sym_add(param->name, pty);
+
+            vp_scope_add(V->currscope, param->name, pty);
+        }
+        Type* ret = sema_typespec(d->fn.ret);
+        d->fn.rett = ret;
+        for(uint32_t i = 0; i < vec_len(d->fn.body->block); i++)
+        {
+            sema_stmt(d->fn.body->block[i], ret);
+        }
     }
+
     sym_leave(len);
     vp_scope_end();
+    vp_mod_leave(mod);
 }
 
 /* Resolve var declaration */
@@ -2087,6 +2107,10 @@ static void sema_resolve(Sym* sym)
         vp_err_error(sym->decl->loc, "cyclic dependency");
     }
     vp_assertX(sym->state == SYM_PENDING, "bad symbol state");
+    if(!sym->local)
+    {
+        vec_push(S.syms, sym);
+    }
     sym->state = SYM_PROGRESS;
     Decl* d = sym->decl;
     switch(sym->kind)
@@ -2110,56 +2134,161 @@ static void sema_resolve(Sym* sym)
     sym->state = SYM_DONE;
 }
 
-vec_t(Decl*) vp_sema(vec_t(Decl*) decls)
+/* Complete symbols */
+static void sema_complete()
 {
-    /* Create symbols */
-    for(uint32_t i = 0; i < vec_len(decls); i++)
-    {
-        Decl* d = decls[i];
-        if(d->kind == DECL_NOTE)
-        {
-            sema_note(&d->note);
-        }
-        else
-        {
-            Sym* sym = sym_decl(d);
-            sym_glob_put(sym);
-            if(d->kind == DECL_ENUM)
-            {
-                sema_enum(d, sym);
-            }
-            else if(d->kind == DECL_FN && d->fn.attrs)
-            {
-                sema_attrs(d->fn.attrs, d->name);
-            }
-        }
-    }
-    /* Resolve symbols */
     for(Sym** p = S.syms; p != vec_end(S.syms); p++)
     {
         Sym* sym = *p;
-        sema_resolve(sym);
-        if(sym->decl && !sym->decl->isincomplete)
+        vp_assertX(sym->state == SYM_DONE, "unresolved symbol");
+        if(sym->decl && !declflag_empty(sym->decl))
         {
-            switch(sym->kind)
+            if(sym->kind == SYM_TYPE)
             {
-                case SYM_TYPE:
-                    sym_complete(sym->type);
-                    break;
-                case SYM_FN:
+                sym_complete(sym->type);
+            }
+            else if(sym->kind == SYM_FN)
+            {
+                /* Add function name to global scope */
+                VarInfo* vi = vp_scope_add(V->globscope, sym->name, sym->type);
+                vi->storage |= VS_FN;
+
+                if(sym->mod == S.root)
+                {
                     sema_fn_body(sym);
-                    break;
-                default:
-                    break;
+                }
             }
         }
     }
+}
 
+/* Resolve the module symbols */
+static void sema_mod(Module* mod)
+{
+    Module* old = vp_mod_enter(mod);
+    for(uint32_t i = 0; i < vec_len(mod->syms); i++)
+    {
+        if(mod->syms[i]->mod == mod)
+        {
+            sema_resolve(mod->syms[i]);
+        }
+    }
+    vp_mod_leave(old);
+}
+
+/* Resolve import symbols */
+void vp_sema_imports(vec_t(Decl*) decls)
+{
     for(uint32_t i = 0; i < vec_len(decls); i++)
     {
-        vp_dump_ast(decls[i]);
-    }
-    //vp_dump_typecache();
+        Decl* d = decls[i];
+        if(d->kind == DECL_IMPORT)
+        {
+            Str* path = d->name;
+            Module* mod = vp_mod_get(d->loc, path);
 
-    return S.sorted;
+            if(d->imp.wildcard)
+            {
+                /* from "file" import * */
+                for(uint32_t j = 0; j < vec_len(mod->syms); j++)
+                {
+                    Sym* sym = mod->syms[j];
+                    if(sym->mod == mod && declflag_pub(sym->decl))
+                    {
+                        sym_glob_put(sym->name, sym);
+                    }
+                }
+            }
+            else if(d->imp.items)
+            {
+                /* from "file" import foo, bar as b */
+                for(uint32_t j = 0; j < vec_len(d->imp.items); j++)
+                {
+                    ImportItem* item = &d->imp.items[j];
+                    Sym* sym = vp_tab_get(&mod->symstab, item->name);
+                    if(!sym)
+                    {
+                        vp_err_error(item->loc, "symbol '%s' not found in module '%s'",
+                                   str_data(item->name), str_data(path));
+                    }
+                    if(!declflag_pub(sym->decl))
+                    {
+                        vp_err_error(item->loc, "symbol '%s' is not public", str_data(item->name));
+                    }
+                    Str* localname = item->alias ? item->alias : item->name;
+                    sym_glob_put(localname, sym);
+                }
+            }
+            else if(d->imp.alias)
+            {
+                /* import "file" as mod */
+                Sym* modsym = sym_new(SYM_MODULE, d->imp.alias, d);
+                modsym->state = SYM_DONE;
+                modsym->mod = mod;
+                sym_glob_put(d->imp.alias, modsym);
+            }
+            else
+            {
+                /* import "file" - import all public symbols */
+                for(uint32_t j = 0; j < vec_len(mod->syms); j++)
+                {
+                    Sym* sym = mod->syms[j];
+                    if(sym->mod == mod && declflag_pub(sym->decl))
+                    {
+                        sym_glob_put(sym->name, sym);
+                    }
+                }
+            }
+        }
+    }
+}
+
+/* Create symbols from declarations */
+void vp_sema_decls(vec_t(Decl*) decls)
+{
+    for(uint32_t i = 0; i < vec_len(decls); i++)
+    {
+        Decl* d = decls[i];
+        switch(d->kind)
+        {
+            case DECL_NOTE:
+                sema_note(&d->note);
+                break;
+            case DECL_IMPORT:
+                break;
+            default:
+            {
+                Sym* sym = sym_decl(d);
+                sym_glob_put(sym->name, sym);
+                if(d->kind == DECL_ENUM)
+                {
+                    sema_enum(d, sym);
+                }
+                else if(d->kind == DECL_FN && d->fn.attrs)
+                {
+                    sema_attrs(d->fn.attrs, d->name);
+                }
+                break;
+            }
+        }
+    }
+}
+
+vec_t(Decl*) vp_sema(Str* name)
+{
+    Module* root = vp_mod_get((SrcLoc){0}, name);
+    S.root = root;
+
+    for(uint32_t i = 0; i < vec_len(V->mods); i++)
+    {
+        sema_mod(V->mods[i]);
+    }
+    sema_complete();
+
+    for(uint32_t i = 0; i < vec_len(root->decls); i++)
+    {
+        vp_dump_decl(root->decls[i]);
+    }
+
+    return root->sorted;
 }

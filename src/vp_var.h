@@ -16,6 +16,7 @@ enum
 {
     VS_GLOBAL = 1 << 0,
     VS_FN = 1 << 1,
+    VS_PUB = 1 << 2,
 };
 
 typedef struct VarInfo

@@ -37,12 +37,11 @@ static const char* reader(void* ud, size_t* size)
     return (*size > 0) ? ctx->buf : NULL;
 }
 
-void vp_load(VpState* V, const char* filename)
+vec_t(Decl*) vp_load_file(VpState* V, const char* filename)
 {
     FileReaderCtx ctx;
     ctx.fp = fopen(filename, "rb");
-    V->txtfile = fopen(filename, "r");
-    if(!ctx.fp || !V->txtfile)
+    if(!ctx.fp)
     {
         fprintf(stderr, "cannot open '%s'\n", filename);
         exit(EXIT_FAILURE);
@@ -54,12 +53,18 @@ void vp_load(VpState* V, const char* filename)
     vp_buf_init(&ls.sb);
     vp_lex_setup(&ls);
     vec_t(Decl*) decls = vp_parse(V, &ls);
-    decls = vp_sema(decls);
+    fclose(ctx.fp);
+    return decls;
+}
+
+void vp_load(VpState* V, const char* filename)
+{
+    Str* name = vp_str_newlen(filename);
+    vec_t(Decl*) decls = vp_sema(name);
     vec_t(Code*) codes = vp_codegen(decls);
     V->codes = codes;
     vp_low(codes);
     vp_link();
     vp_layout_init(&V->L);
     //vp_dump_code(codes);
-    fclose(ctx.fp);
 }

@@ -185,7 +185,29 @@ asm
 
 `aligned(8)`
 
-`alias` ?
+`alias`
+
+---
+
+### import
+
+```
+import "file" as mod
+from "file" import *
+from "file" import foo, bar, baz
+from "file" as mod import foo
+from "file" import foo as f, bar as b, baz as z
+
+mod::thing
+
+import std::math
+from std::math import *
+from std::math import pi
+//from std import math::pi
+from std::math import sinf32 as sin
+
+std::math::pi
+```
 
 ---
 

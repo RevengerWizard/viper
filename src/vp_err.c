@@ -7,6 +7,7 @@
 #include <stdlib.h>
 
 #include "vp_err.h"
+#include "vp_mod.h"
 
 /* Show line of error with an offset indicator */
 static void err_line(LexLine line, LexOffset ofs)
@@ -14,22 +15,25 @@ static void err_line(LexLine line, LexOffset ofs)
     int c;
     uint32_t fline = 1;
     vp_buf_reset(&V->tmpbuf);
-    rewind(V->txtfile); /* Rewind file at the start */
+    vp_assertX(V->mod, "no module");
+    /* Not really efficient, but the file handle is already opened */
+    FILE* ftxt = fopen(str_data(V->mod->path), "r");
+    /*rewind(V->txtfile);*/ /* Rewind file at the start */
 
     /* Find the error line */
-    while(fline < line && (c = fgetc(V->txtfile)) != EOF)
+    while(fline < line && (c = fgetc(ftxt)) != EOF)
     {
         if(c == '\n')
             fline++;
     }
-    
+
     vp_assertX(fline == line, "no error line");
-    while((c = fgetc(V->txtfile)) != EOF && c != '\n')
+    while((c = fgetc(ftxt)) != EOF && c != '\n')
     {
         vp_buf_putb(&V->tmpbuf, c);
     }
     vp_buf_putb(&V->tmpbuf, '\0');  /* Terminate the line */
-    
+
     /* Print the actual line */
     fputs(V->tmpbuf.b, stderr);
     fputc('\n', stderr);
@@ -40,6 +44,7 @@ static void err_line(LexLine line, LexOffset ofs)
         fputc(V->tmpbuf.b[i] == '\t' ? '\t' : ' ', stderr);
     }
     fputs("^\n", stderr);
+    fclose(ftxt);
 }
 
 /* Warning */

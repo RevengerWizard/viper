@@ -118,7 +118,6 @@ void vp_layout_init(Layout *L)
         char* p = vp_buf_need(&sec.sb, dsize);
         memset(p, 0, dsize);
         char* w = p;
-        printf("STRS %d\n", vec_len(V->strs));
         for(uint32_t i = 0; i < vec_len(V->strs); i++)
         {
             Str* s = V->strs[i];
@@ -127,7 +126,6 @@ void vp_layout_init(Layout *L)
             w += s->len + 1;    /* + \0 */
         }
         sec.sb.w = p + dsize;
-        printf("DATA\n'''%.*s'''\n%d", (int)sbuf_len(&sec.sb), sec.sb.b, sbuf_len(&sec.sb));
         vec_push(L->secs, sec);
     }
 
@@ -209,7 +207,7 @@ void vp_link(void)
             case PATCH_CALL_REL:
             case PATCH_CALL_ABS:
             case PATCH_LEA_ABS:
-                break;
+                continue;
             /*case PATCH_CALL_ABS:
             {
                 uint32_t iat_rva = rva_import(p->label);

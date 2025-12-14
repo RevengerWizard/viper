@@ -1124,7 +1124,7 @@ static void dump_ast_stmt(Stmt* st)
         }
         case ST_DECL:
         {
-            vp_dump_ast(st->decl);
+            vp_dump_decl(st->decl);
             break;
         }
         default:
@@ -1133,10 +1133,60 @@ static void dump_ast_stmt(Stmt* st)
     }
 }
 
-void vp_dump_ast(Decl* d)
+void vp_dump_decl(Decl* d)
 {
+    if(d->flags & DECL_FLAG_PUB)
+    {
+        printf("pub ");
+    }
     switch(d->kind)
     {
+        case DECL_IMPORT:
+        {
+            Str* path = d->name;
+            if(d->imp.items)
+            {
+                /* from "file" import foo, bar as b */
+                printf("from ");
+                dump_str(path);
+                printf(" import ");
+                for(uint32_t i = 0; i < vec_len(d->imp.items); i++)
+                {
+                    ImportItem* item = &d->imp.items[i];
+                    printf("%s", str_data(item->name));
+                    if(item->alias)
+                    {
+                        printf(" as %s", str_data(item->alias));
+                    }
+                    if(i != vec_len(d->imp.items) - 1)
+                    {
+                        printf(", ");
+                    }
+                }
+            }
+            else if(d->imp.wildcard)
+            {
+                /* from "file" import * */
+                printf("from ");
+                dump_str(path);
+                printf(" import *");
+            }
+            else if(d->imp.alias)
+            {
+                /* import "file" as mod */
+                printf("import ");
+                dump_str(path);
+                printf(" as %s", str_data(d->imp.alias));
+            }
+            else
+            {
+                /* import "file" */
+                printf("import ");
+                dump_str(path);
+            }
+            printf("\n");
+            break;
+        }
         case DECL_TYPE:
             printf("type %s = ", str_data(d->name));
             dump_typespec(d->ts.spec);

@@ -612,6 +612,57 @@ static TypeSpec* parse_type(LexState* ls)
 /* Forward declaration */
 static Stmt* parse_stmt(LexState* ls);
 
+/* Parse 'import' */
+static Decl* parse_import(LexState* ls)
+{
+    SrcLoc loc = lex_srcloc(ls);
+    vp_lex_next(ls);    /* Skip 'import' */
+    vp_lex_consume(ls, TK_string);
+    Str* path = ls->val.name;
+    Str* alias = NULL;
+    if(lex_match(ls, TK_as))
+    {
+        alias = lex_name(ls);
+    }
+    return vp_decl_import(loc, path, alias);
+}
+
+/* Parse 'from' */
+static Decl* parse_from(LexState* ls)
+{
+    SrcLoc loc = lex_srcloc(ls);
+    vp_lex_next(ls);    /* Skip 'from' */
+    vp_lex_consume(ls, TK_string);
+    Str* path = ls->val.name;
+    vp_lex_consume(ls, TK_import);
+    bool wildcard = false;
+    vec_t(ImportItem) items = NULL;
+    if(lex_match(ls, '*'))
+    {
+        wildcard = true;
+    }
+    else
+    {
+        do
+        {
+            SrcLoc itemloc = lex_srcloc(ls);
+            Str* name = lex_name(ls);
+            Str* alias = NULL;
+
+            if(lex_match(ls, TK_as))
+            {
+                alias = lex_name(ls);
+            }
+
+            ImportItem item = {.loc = itemloc, .name = name, .alias = alias};
+            vec_push(items, item);
+        }
+        while(lex_match(ls, ','));
+    }
+
+    return vp_decl_from(loc, path, NULL, items, wildcard);
+}
+
 /* Parse note argument */
 static NoteArg parse_note_arg(LexState* ls)
 {
@@ -762,7 +813,7 @@ static vec_t(Param) parse_params(LexState* ls)
 }
 
 /* Parse type declaration */
-static Decl* parse_typedef(LexState* ls)
+static Decl* parse_typedef(LexState* ls, uint32_t flags)
 {
     vp_lex_next(ls);    /* Skip 'type' */
     SrcLoc loc = lex_srcloc(ls);
@@ -770,11 +821,11 @@ static Decl* parse_typedef(LexState* ls)
     vp_lex_consume(ls, '=');
     TypeSpec* spec = parse_type(ls);
     vp_lex_consume(ls, ';');
-    return vp_decl_type(loc, name, spec);
+    return vp_decl_type(loc, flags, name, spec);
 }
 
 /* Parse alias declaration */
-static Decl* parse_alias(LexState* ls)
+static Decl* parse_alias(LexState* ls, uint32_t flags)
 {
     vp_lex_next(ls);    /* Skip 'alias' */
     SrcLoc loc = lex_srcloc(ls);
@@ -782,7 +833,7 @@ static Decl* parse_alias(LexState* ls)
     vp_lex_consume(ls, '=');
     TypeSpec* spec = parse_type(ls);
     vp_lex_consume(ls, ';');
-    return vp_decl_alias(loc, name, spec);
+    return vp_decl_alias(loc, flags, name, spec);
 }
 
 static Aggregate* parse_aggr(LexState* ls, AggregateKind kind);
@@ -841,7 +892,7 @@ static Aggregate* parse_aggr(LexState* ls, AggregateKind kind)
 }
 
 /* Parse 'struct' or 'union' declaration */
-static Decl* parse_structunion(LexState* ls, DeclKind kind)
+static Decl* parse_structunion(LexState* ls, DeclKind kind, uint32_t flags)
 {
     vp_lex_next(ls);    /* Skip 'struct'/'union' */
     SrcLoc loc = lex_srcloc(ls);
@@ -849,14 +900,13 @@ static Decl* parse_structunion(LexState* ls, DeclKind kind)
     AggregateKind agrkind = kind == DECL_STRUCT ? AGR_STRUCT : AGR_UNION;
     if(lex_match(ls, ';'))
     {
-        Decl* d = vp_decl_aggr(loc, kind, name, vp_aggr_new(loc, AGR_STRUCT, NULL));
-        d->isincomplete = true;
+        Decl* d = vp_decl_aggr(loc, kind, flags | DECL_FLAG_EMPTY, name, vp_aggr_new(loc, AGR_STRUCT, NULL));
         return d;
     }
     else
     {
         Aggregate* aggr = parse_aggr(ls, agrkind);
-        return vp_decl_aggr(loc, kind, name, aggr);
+        return vp_decl_aggr(loc, kind, flags, name, aggr);
     }
 }
 
@@ -870,7 +920,7 @@ static EnumItem parse_enum_item(LexState* ls)
 }
 
 /* Parse 'enum' declaration */
-static Decl* parse_enum(LexState* ls)
+static Decl* parse_enum(LexState* ls, uint32_t flags)
 {
     vp_lex_next(ls);    /* Skip 'enum' */
     SrcLoc loc = lex_srcloc(ls);
@@ -892,11 +942,11 @@ static Decl* parse_enum(LexState* ls)
         }
     }
     vp_lex_consume(ls, '}');
-    return vp_decl_enum(loc, name, spec, items);
+    return vp_decl_enum(loc, flags, name, spec, items);
 }
 
 /* Parse 'fn' declaration */
-static Decl* parse_fn(LexState* ls, vec_t(Attr) attrs)
+static Decl* parse_fn(LexState* ls, uint32_t flags, vec_t(Attr) attrs)
 {
     vp_lex_next(ls);    /* Skip 'fn' */
     SrcLoc loc = lex_srcloc(ls);
@@ -915,7 +965,7 @@ static Decl* parse_fn(LexState* ls, vec_t(Attr) attrs)
     {
         body = parse_block(ls);
     }
-    return vp_decl_fn(loc, attrs, ret, name, params, body);
+    return vp_decl_fn(loc, flags, attrs, ret, name, params, body);
 }
 
 /* Parse attribute argument */
@@ -931,6 +981,7 @@ static Decl* parse_attr(LexState* ls)
 {
     vp_lex_next(ls);    /* Skip '[[' */
 
+    uint32_t flags = 0;
     vec_t(Attr) attrs = NULL;
     do
     {
@@ -961,12 +1012,16 @@ static Decl* parse_attr(LexState* ls)
     }
     while(lex_match(ls, TK_dbleft));
 
+    if(lex_match(ls, TK_pub))
+    {
+        flags |= DECL_FLAG_PUB;
+    }
     vp_lex_test(ls, TK_fn);
-    return parse_fn(ls, attrs);
+    return parse_fn(ls, flags, attrs);
 }
 
 /* Parse 'def' */
-static Decl* parse_def(LexState* ls)
+static Decl* parse_def(LexState* ls, uint32_t flags)
 {
     vp_lex_next(ls);    /* Skip 'def' */
     SrcLoc loc = lex_srcloc(ls);
@@ -980,11 +1035,11 @@ static Decl* parse_def(LexState* ls)
     Expr* e = expr(ls);
     vp_lex_consume(ls, ';');
 
-    return vp_decl_def(loc, name, spec, e);
+    return vp_decl_def(loc, flags, name, spec, e);
 }
 
 /* Parse 'var' */
-static Decl* parse_var(LexState* ls)
+static Decl* parse_var(LexState* ls, uint32_t flags)
 {
     vp_lex_next(ls);    /* Skip 'var' */
     SrcLoc loc = lex_srcloc(ls);
@@ -997,7 +1052,7 @@ static Decl* parse_var(LexState* ls)
     Expr* e = lex_match(ls, '=') ? expr(ls) : NULL;
     vp_lex_consume(ls, ';');
 
-    return vp_decl_var(loc, name, spec, e);
+    return vp_decl_var(loc, flags, name, spec, e);
 }
 
 /* Parse simple statement */
@@ -1070,9 +1125,25 @@ static Stmt* parse_stmt(LexState* ls)
 /* Parse a declaration */
 static Decl* parse_decl(LexState* ls)
 {
+    uint32_t flags = 0;
     Decl* d = NULL;
+    if(lex_match(ls, TK_pub))
+    {
+        flags |= DECL_FLAG_PUB;
+        if(lex_check(ls, TK_import) || lex_check(ls, TK_from) || lex_check(ls, TK_note) || lex_check(ls, TK_dbleft))
+        {
+            const char* tokstr = vp_lex_tok2str(ls, ls->curr);
+            vp_err_error(d->loc, "'pub' cannot be applied to '%s'", tokstr);
+        }
+    }
     switch(ls->curr)
     {
+        case TK_import:
+            d = parse_import(ls);
+            break;
+        case TK_from:
+            d = parse_from(ls);
+            break;
         case TK_note:
             d = parse_note(ls);
             break;
@@ -1080,28 +1151,28 @@ static Decl* parse_decl(LexState* ls)
             d = parse_attr(ls);
             break;
         case TK_fn:
-            d = parse_fn(ls, NULL);
+            d = parse_fn(ls, flags, NULL);
             break;
         case TK_var:
-            d = parse_var(ls);
+            d = parse_var(ls, flags);
             break;
         case TK_def:
-            d = parse_def(ls);
+            d = parse_def(ls, flags);
             break;
         case TK_type:
-            d = parse_typedef(ls);
+            d = parse_typedef(ls, flags);
             break;
         case TK_alias:
-            d = parse_alias(ls);
+            d = parse_alias(ls, flags);
             break;
         case TK_union:
-            d = parse_structunion(ls, DECL_UNION);
+            d = parse_structunion(ls, DECL_UNION, flags);
             break;
         case TK_struct:
-            d = parse_structunion(ls, DECL_STRUCT);
+            d = parse_structunion(ls, DECL_STRUCT, flags);
             break;
         case TK_enum:
-            d = parse_enum(ls);
+            d = parse_enum(ls, flags);
             break;
         default:
             break;

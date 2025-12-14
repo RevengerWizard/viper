@@ -326,6 +326,13 @@ typedef struct Attr
     vec_t(AttrArg) args;
 } Attr;
 
+typedef struct ImportItem
+{
+    SrcLoc loc;
+    Str* name;  /* Imported name */
+    Str* alias; /* Optional alias */
+} ImportItem;
+
 typedef enum DeclKind
 {
     DECL_VAR,
@@ -336,15 +343,25 @@ typedef enum DeclKind
     DECL_STRUCT,
     DECL_UNION,
     DECL_ENUM,
-    DECL_NOTE
+    DECL_NOTE,
+    DECL_IMPORT,
 } DeclKind;
+
+enum
+{
+    DECL_FLAG_PUB = 1 << 0, /* Public declaration */
+    DECL_FLAG_EMPTY = 1 << 1,   /* Body-less declaration */
+};
+
+#define declflag_pub(d) ((d)->flags & DECL_FLAG_PUB)
+#define declflag_empty(d) ((d)->flags & DECL_FLAG_EMPTY)
 
 typedef struct Decl
 {
     DeclKind kind;
     SrcLoc loc;
     Str* name;
-    bool isincomplete;
+    uint32_t flags;
     union
     {
         Note note;
@@ -378,6 +395,12 @@ typedef struct Decl
             TypeSpec* spec;
             EnumItem* items;
         } enm;
+        struct
+        {
+            Str* alias;
+            vec_t(ImportItem) items;
+            bool wildcard;
+        } imp;
     };
 } Decl;
 
@@ -425,14 +448,16 @@ Stmt* vp_stmt_while(SrcLoc loc, Expr* cond, Stmt* body);
 Stmt* vp_stmt_asm(SrcLoc loc, vec_t(Inst*) insts);
 
 /* Declarations */
-Decl* vp_decl_fn(SrcLoc loc, vec_t(Attr) attrs, TypeSpec* ret, Str* name, vec_t(Param) params, Stmt* body);
-Decl* vp_decl_var(SrcLoc loc, Str* name, TypeSpec* spec, Expr* e);
-Decl* vp_decl_def(SrcLoc loc, Str* name, TypeSpec* spec, Expr* e);
-Decl* vp_decl_type(SrcLoc loc, Str* name, TypeSpec* spec);
-Decl* vp_decl_alias(SrcLoc loc, Str* name, TypeSpec* spec);
-Decl* vp_decl_aggr(SrcLoc loc, DeclKind kind, Str* name, Aggregate* agr);
+Decl* vp_decl_fn(SrcLoc loc, uint32_t flags, vec_t(Attr) attrs, TypeSpec* ret, Str* name, vec_t(Param) params, Stmt* body);
+Decl* vp_decl_var(SrcLoc loc, uint32_t flags, Str* name, TypeSpec* spec, Expr* e);
+Decl* vp_decl_def(SrcLoc loc, uint32_t flags, Str* name, TypeSpec* spec, Expr* e);
+Decl* vp_decl_type(SrcLoc loc, uint32_t flags, Str* name, TypeSpec* spec);
+Decl* vp_decl_alias(SrcLoc loc, uint32_t flags, Str* name, TypeSpec* spec);
+Decl* vp_decl_aggr(SrcLoc loc, DeclKind kind, uint32_t flags, Str* name, Aggregate* agr);
 Decl* vp_decl_note(SrcLoc loc, Note note);
-Decl* vp_decl_enum(SrcLoc loc, Str* name, TypeSpec* spec, vec_t(EnumItem) items);
+Decl* vp_decl_enum(SrcLoc loc, uint32_t flags, Str* name, TypeSpec* spec, vec_t(EnumItem) items);
+Decl* vp_decl_import(SrcLoc loc, Str* name, Str* alias);
+Decl* vp_decl_from(SrcLoc loc, Str* name, Str* alias, vec_t(ImportItem) items, bool wildcard);
 
 Aggregate* vp_aggr_new(SrcLoc loc, AggregateKind kind, AggregateItem* items);
 

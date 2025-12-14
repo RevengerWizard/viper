@@ -511,7 +511,7 @@ static VReg* gen_call(Expr* e)
     if(e->call.expr->kind == EX_NAME)
     {
         VarInfo* vi = vp_scope_find(e->call.expr->scope, e->call.expr->name, NULL);
-        vp_assertX(vi, "name not found");
+        vp_assertX(vi, "'%s' not found", str_data(e->call.expr->name));
         labelcall = vi->type->kind == TY_func && (vi->storage & VS_FN);
     }
 
@@ -534,10 +534,11 @@ static VReg* gen_call(Expr* e)
     if(label)
     {
         ci->fn = vp_tab_get(&V->funcs, label);
-    }
-    if(ci->fn)
-    {
-        ci->export = ci->fn->export;
+        if(!ci->fn)
+        {
+            vp_tab_set(&V->ifuncs, label, NULL);
+            ci->export = true;
+        }
     }
 
     IR* ir = vp_ir_call(ci, dst, freg);
@@ -1360,11 +1361,6 @@ static Code* gen_fn(Decl* d)
     code->scopes = d->fn.scopes;
     vp_tab_set(&V->funcs, code->name, code);
 
-    if(d->fn.attrs)
-    {
-        code->export = true;
-    }
-
     if(!d->fn.body)
     {
         return code;
@@ -1412,8 +1408,7 @@ vec_t(Code*) vp_codegen(vec_t(Decl*) decls)
     for(uint32_t i = 0; i < vec_len(decls); i++)
     {
         Decl* d = decls[i];
-        if(!d) continue;
-        if(d->kind == DECL_FN)
+        if(d && d->kind == DECL_FN)
         {
             Code* code = gen_fn(d);
             vec_push(codes, code);

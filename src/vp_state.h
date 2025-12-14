@@ -69,9 +69,9 @@ typedef struct VpState
     struct Code* fncode;
     RegAlloc* ra;
     vec_t(struct Code*) codes;
-    FILE* txtfile;
     SBuf tmpbuf;
     Tab funcs;
+    Tab ifuncs;
     Layout L;
     vec_t(Str*) strs;
     vec_t(uint32_t) strofs;
@@ -79,12 +79,16 @@ typedef struct VpState
     const TargetInfo* target;
     vec_t(struct ImportDLL) imports;
     uint32_t importsize;
+    Tab modules;
+    vec_t(struct Module*) mods;
+    struct Module* mod; /* Current module */
 } VpState;
 
 #define TARGET_PTR_SIZE (8)
 
 extern VpState* V;
 
+vec_t(struct Decl*) vp_load_file(VpState* V, const char* filename);
 void vp_load(VpState* V, const char* filename);
 
 VpState* vp_state_open();

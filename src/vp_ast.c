@@ -284,36 +284,36 @@ Stmt* vp_stmt_asm(SrcLoc loc, vec_t(Inst*) insts)
 
 /* -- AST declarations ---------------------------------------------- */
 
-static Decl* decl_new(DeclKind kind, SrcLoc loc, Str* name)
+static Decl* decl_new(DeclKind kind, SrcLoc loc, uint32_t flags, Str* name)
 {
     Decl* d = ast_alloc(sizeof(*d));
     d->kind = kind;
     d->loc = loc;
     d->name = name;
-    d->isincomplete = false;
+    d->flags = flags;
     return d;
 }
 
-Decl* vp_decl_var(SrcLoc loc, Str* name, TypeSpec* spec, Expr* e)
+Decl* vp_decl_var(SrcLoc loc, uint32_t flags, Str* name, TypeSpec* spec, Expr* e)
 {
-    Decl* d = decl_new(DECL_VAR, loc, name);
+    Decl* d = decl_new(DECL_VAR, loc, flags, name);
     d->var.spec = spec;
     d->var.expr = e;
     d->var.vi = NULL;
     return d;
 }
 
-Decl* vp_decl_def(SrcLoc loc, Str* name, TypeSpec* spec, Expr* e)
+Decl* vp_decl_def(SrcLoc loc, uint32_t flags, Str* name, TypeSpec* spec, Expr* e)
 {
-    Decl* d = decl_new(DECL_DEF, loc, name);
+    Decl* d = decl_new(DECL_DEF, loc, flags, name);
     d->def.spec = spec;
     d->def.expr = e;
     return d;
 }
 
-Decl* vp_decl_fn(SrcLoc loc, vec_t(Attr) attrs, TypeSpec* ret, Str* name, vec_t(Param) params, Stmt* body)
+Decl* vp_decl_fn(SrcLoc loc, uint32_t flags, vec_t(Attr) attrs, TypeSpec* ret, Str* name, vec_t(Param) params, Stmt* body)
 {
-    Decl* d = decl_new(DECL_FN, loc, name);
+    Decl* d = decl_new(DECL_FN, loc, flags, name);
     d->fn.attrs = attrs;
     d->fn.rett = NULL;
     d->fn.ret = ret;
@@ -323,39 +323,57 @@ Decl* vp_decl_fn(SrcLoc loc, vec_t(Attr) attrs, TypeSpec* ret, Str* name, vec_t(
     return d;
 }
 
-Decl* vp_decl_type(SrcLoc loc, Str* name, TypeSpec* spec)
+Decl* vp_decl_type(SrcLoc loc, uint32_t flags, Str* name, TypeSpec* spec)
 {
-    Decl* d = decl_new(DECL_TYPE, loc, name);;
+    Decl* d = decl_new(DECL_TYPE, loc, flags, name);
     d->ts.spec = spec;
     return d;
 }
 
-Decl* vp_decl_alias(SrcLoc loc, Str* name, TypeSpec* spec)
+Decl* vp_decl_alias(SrcLoc loc, uint32_t flags, Str* name, TypeSpec* spec)
 {
-    Decl* d = decl_new(DECL_ALIAS, loc, name);;
+    Decl* d = decl_new(DECL_ALIAS, loc, flags, name);
     d->ts.spec = spec;
     return d;
 }
 
-Decl* vp_decl_aggr(SrcLoc loc, DeclKind kind, Str* name, Aggregate* agr)
+Decl* vp_decl_aggr(SrcLoc loc, DeclKind kind, uint32_t flags, Str* name, Aggregate* agr)
 {
-    Decl* d = decl_new(kind, loc, name);
+    Decl* d = decl_new(kind, loc, flags, name);
     d->agr = agr;
     return d;
 }
 
 Decl* vp_decl_note(SrcLoc loc, Note note)
 {
-    Decl* d = decl_new(DECL_NOTE, loc, NULL);
+    Decl* d = decl_new(DECL_NOTE, loc, 0, NULL);
     d->note = note;
     return d;
 }
 
-Decl* vp_decl_enum(SrcLoc loc, Str* name, TypeSpec* spec, vec_t(EnumItem) items)
+Decl* vp_decl_enum(SrcLoc loc, uint32_t flags, Str* name, TypeSpec* spec, vec_t(EnumItem) items)
 {
-    Decl* d = decl_new(DECL_ENUM, loc, name);
+    Decl* d = decl_new(DECL_ENUM, loc, flags, name);
     d->enm.items = items;
     d->enm.spec = spec;
+    return d;
+}
+
+Decl* vp_decl_import(SrcLoc loc, Str* name, Str* alias)
+{
+    Decl* d = decl_new(DECL_IMPORT, loc, 0, name);
+    d->imp.alias = alias;
+    d->imp.items = NULL;
+    d->imp.wildcard = false;
+    return d;
+}
+
+Decl* vp_decl_from(SrcLoc loc, Str* name, Str* alias, vec_t(ImportItem) items, bool wildcard)
+{
+    Decl* d = decl_new(DECL_IMPORT, loc, 0, name);
+    d->imp.alias = alias;
+    d->imp.items = items;
+    d->imp.wildcard = wildcard;
     return d;
 }
 

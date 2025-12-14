@@ -43,6 +43,7 @@ typedef enum SymKind
     SYM_DEF,
     SYM_TYPE,
     SYM_ENUM,
+    SYM_MODULE,
 } SymKind;
 
 typedef enum SymState
@@ -56,12 +57,16 @@ typedef struct Sym
 {
     SymKind kind;
     SymState state;
+    struct Module* mod;
     Str* name;
     Decl* decl;
     Type* type;
     Val val;
+    bool local;
 } Sym;
 
-vec_t(Decl*) vp_sema(vec_t(Decl*) decls);
+void vp_sema_decls(vec_t(Decl*) decls);
+void vp_sema_imports(vec_t(Decl*) decls);
+vec_t(Decl*) vp_sema(Str* name);
 
 #endif

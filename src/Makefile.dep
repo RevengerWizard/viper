@@ -30,7 +30,7 @@ vp_emit_x64.o: vp_emit_x64.c vp_emit.h vp_def.h vp_buf.h vp_str.h \
   vp_target.h vp_tab.h vp_map.h vp_target_x64.h
 vp_err.o: vp_err.c vp_err.h vp_lex.h vp_buf.h vp_def.h vp_str.h \
   vp_state.h vp_ir.h vp_type.h vp_vec.h vp_mem.h vp_regalloc.h \
-  vp_target.h vp_tab.h vp_map.h
+  vp_target.h vp_tab.h vp_map.h vp_mod.h vp_ast.h vp_asm.h vp_var.h
 vp_inst_x64.o: vp_inst_x64.c vp_asm.h vp_lex.h vp_buf.h vp_def.h vp_str.h \
   vp_state.h vp_ir.h vp_type.h vp_vec.h vp_mem.h vp_regalloc.h \
   vp_target.h vp_tab.h vp_map.h vp_emit_x64.h vp_target_x64.h vp_low.h \
@@ -48,7 +48,7 @@ vp_lex.o: vp_lex.c vp_lex.h vp_buf.h vp_def.h vp_str.h vp_state.h vp_ir.h \
 vp_link_x64.o: vp_link_x64.c vp_buf.h vp_def.h vp_str.h vp_link.h vp_ir.h \
   vp_type.h vp_vec.h vp_codegen.h vp_ast.h vp_asm.h vp_lex.h vp_state.h \
   vp_mem.h vp_regalloc.h vp_target.h vp_tab.h vp_map.h vp_var.h
-vp_load.o: vp_load.c vp_lex.h vp_buf.h vp_def.h vp_str.h vp_state.h \
+vp_load.o: vp_load.c vp_str.h vp_def.h vp_lex.h vp_buf.h vp_state.h \
   vp_ir.h vp_type.h vp_vec.h vp_mem.h vp_regalloc.h vp_target.h vp_tab.h \
   vp_map.h vp_parse.h vp_ast.h vp_asm.h vp_var.h vp_sema.h vp_codegen.h \
   vp_low.h vp_link.h vp_dump.h
@@ -58,6 +58,9 @@ vp_low_x64.o: vp_low_x64.c vp_low.h vp_asm.h vp_lex.h vp_buf.h vp_def.h \
   vp_emit_x64.h vp_target_x64.h
 vp_map.o: vp_map.c vp_map.h vp_def.h vp_mem.h vp_vec.h
 vp_mem.o: vp_mem.c vp_mem.h vp_vec.h vp_def.h
+vp_mod.o: vp_mod.c vp_mod.h vp_str.h vp_def.h vp_tab.h vp_vec.h vp_ast.h \
+  vp_asm.h vp_lex.h vp_buf.h vp_state.h vp_ir.h vp_type.h vp_mem.h \
+  vp_regalloc.h vp_target.h vp_map.h vp_var.h vp_err.h vp_sema.h
 vp_opt.o: vp_opt.c vp_opt.h vp_codegen.h vp_ast.h vp_asm.h vp_lex.h \
   vp_buf.h vp_def.h vp_str.h vp_state.h vp_ir.h vp_type.h vp_vec.h \
   vp_mem.h vp_regalloc.h vp_target.h vp_tab.h vp_map.h vp_var.h
@@ -72,7 +75,7 @@ vp_regalloc.o: vp_regalloc.c vp_regalloc.h vp_ir.h vp_str.h vp_def.h \
   vp_map.h
 vp_sema.o: vp_sema.c vp_sema.h vp_ast.h vp_asm.h vp_lex.h vp_buf.h \
   vp_def.h vp_str.h vp_state.h vp_ir.h vp_type.h vp_vec.h vp_mem.h \
-  vp_regalloc.h vp_target.h vp_tab.h vp_map.h vp_var.h vp_err.h \
+  vp_regalloc.h vp_target.h vp_tab.h vp_map.h vp_var.h vp_err.h vp_mod.h \
   vp_link.h vp_codegen.h vp_dump.h
 vp_state.o: vp_state.c vp_state.h vp_buf.h vp_def.h vp_str.h vp_ir.h \
   vp_type.h vp_vec.h vp_mem.h vp_regalloc.h vp_target.h vp_tab.h \

@@ -36,21 +36,6 @@ int main(int argc, char** argv)
     vp_load(V, argv[1]);
 
     SBuf sb;
-    /*vp_buf_init(&sb);
-    vp_buf_need(&sb, 1024);
-    vp_emit_exe(V, &sb);
-    FILE* f = fopen("out.exe", "wb");
-    if(f)
-    {
-        fwrite(sb.b, 1, sbuf_len(&sb), f);
-        fclose(f);
-    }
-    else
-    {
-        fprintf(stderr, "unable to open out.exe\n");
-        return EXIT_FAILURE;
-        }*/
-
     vp_buf_init(&sb);
     vp_buf_need(&sb, 1024);
     vp_emit_coff(V, &sb);

@@ -94,6 +94,25 @@ static void coff_build()
         vp_map_put(&strsyms, V->strs[i], (void*)(uintptr_t)idx);
     }
 
+    /* Add externel function symbols */
+    for(uint32_t i = 0; i < V->ifuncs.size; i++)
+    {
+        TabEntry* entry = &V->ifuncs.entries[i];
+        Str* name = entry->key;
+        if(entry->key != NULL && entry->val == NULL)
+        {
+            name = vp_buf_cat2str(vp_str_newlit("__imp_"), name);
+            COFFSym sym = {
+                .name = name,
+                .value = 0,
+                .sec = 0 /* undefined */,
+                .type = 0,
+                .scl = IMAGE_SYM_CLASS_EXTERNAL
+            };
+            vec_push(syms, sym);
+        }
+    }
+
     /* Add function symbols */
     for(uint32_t i = 0; i < vec_len(V->codes); i++)
     {
@@ -147,7 +166,6 @@ static void coff_build()
                 void* idx = vp_map_get(&strsyms, p->label);
                 if(idx)
                 {
-                    printf("SYMBOL %s, %d\n", str_data(p->label), (uint32_t)(uintptr_t)idx);
                     rel.symidx = (uint32_t)(uintptr_t)idx;
                 }
                 else

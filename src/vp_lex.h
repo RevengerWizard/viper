@@ -13,8 +13,9 @@
 /* Viper lexer tokens */
 #define TKDEF(_, __) \
     /* Keywords */ \
-    _(fn) _(pub) \
+    _(fn) \
     _(struct) _(union) _(enum) \
+    _(pub) _(import) _(from) _(as) \
     _(asm) \
     _(var) _(const) \
     _(def) \
