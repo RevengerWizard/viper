@@ -6,2623 +6,713 @@
 #include "vp_emit.h"
 #include "vp_state.h"
 #include "vp_target_x64.h"
+#include "vp_emit_x64.h"
 
-/* -- MOV instructions ---------------------------------------------- */
+/* REX prefix bits */
+#define REX_W 0x48  /* 64 bit operand size */
+#define REX_R 0x44  /* Extension of ModR/M reg field */
+#define REX_X 0x42  /* Extension of SIB index field */
+#define REX_B 0x41  /* Extension of ModR/M r/m, SIB base, or opcode reg */
 
-/* MOV reg64, reg64 */
-void emit_mov64_rr(VpState* V, X64Reg dst, X64Reg src)
+/* ModR/M encoding */
+#define MODRM(mod, reg, rm) ((((mod) & 3) << 6) | (((reg) & 7) << 3) | ((rm) & 7))
+
+#define RM_SIB 4    /* R/M = 4; SIB byte follows */
+
+/* SIB encoding */
+#define SIB(scale, idx, base) ((((scale) & 3) << 6) | (((idx) & 7) << 3) | ((base) & 7))
+
+/* Check for R8-R15 registers (needs REX extension) */
+#define regext(r) ((r) & 0x8)
+
+/* Calculate REX prefix from dst, src */
+static VP_AINLINE uint8_t rexRR(uint8_t size, uint8_t rd, uint8_t rs)
 {
-    uint8_t rex = REX_W;
-    if(regext(src)) rex |= REX_R;
-    if(regext(dst)) rex |= REX_B;
-    emit_u8(V, rex);
-    emit_u8(V, 0x89);
-    emit_u8(V, MODRM(3, src & 7, dst & 7));
-}
-
-/* MOV reg32, reg32 */
-void emit_mov32_rr(VpState* V, X64Reg dst, X64Reg src)
-{
-    uint8_t rex = 0;
-    if(regext(src)) rex |= REX_R;
-    if(regext(dst)) rex |= REX_B;
-    if(rex) emit_u8(V, rex);
-    emit_u8(V, 0x89);
-    emit_u8(V, MODRM(3, src & 7, dst & 7));
-}
-
-/* MOV reg16, reg16 */
-void emit_mov16_rr(VpState* V, X64Reg dst, X64Reg src)
-{
-    emit_u8(V, 0x66);
-    uint8_t rex = 0;
-    if(regext(src)) rex |= REX_R;
-    if(regext(dst)) rex |= REX_B;
-    if(rex) emit_u8(V, rex);
-    emit_u8(V, 0x89);
-    emit_u8(V, MODRM(3, src & 7, dst & 7));
-}
-
-/* MOV reg8, reg8 */
-void emit_mov8_rr(VpState* V, X64Reg dst, X64Reg src)
-{
-    uint8_t rex = 0;
-    if(src & 8) rex |= REX_R;
-    if(regext(dst) || (dst >= RSP && dst <= RDI)) rex |= REX_B;
-    if(regext(src) || (src >= RSP && src <= RDI)) rex |= REX_R;
-    if(rex || (dst >= RSP && dst <= RDI) || (src >= RSP && src <= RDI))
-    {
-        if(!(rex & (REX_W | REX_R | REX_X | REX_B)))
-        {
-
-        }
-        if(rex) emit_u8(V, rex);
-    }
-    emit_u8(V, 0x88);
-    emit_u8(V, MODRM(3, src & 7, dst & 7));
-}
-
-/* MOV reg64, imm64 */
-void emit_mov64_ri(VpState* V, X64Reg reg, int64_t imm)
-{
-    uint8_t rex = REX_W;
-    if(regext(reg)) rex |= REX_B;
-    emit_u8(V, rex);
-    if(vp_isimm32(imm))
-    {
-        /* imm32 */
-        emit_u8(V, 0xC7);
-        emit_u8(V, MODRM(3, 0, reg & 7));
-        emit_im32(V, (int32_t)imm);
-    }
-    else
-    {
-        /* imm64 */
-        emit_u8(V, 0xB8 + (reg & 7));
-        emit_im64(V, imm);
-    }
-}
-
-/* MOV reg32, imm32 */
-void emit_mov32_ri(VpState* V, X64Reg reg, int32_t imm)
-{
-    if(regext(reg)) emit_u8(V, REX_B);
-    emit_u8(V, 0xB8 + (reg & 7));
-    emit_im32(V, imm);
-}
-
-/* MOV reg16, imm16 */
-void emit_mov16_ri(VpState* V, X64Reg reg, int16_t imm)
-{
-    emit_u8(V, 0x66);
-    if(regext(reg)) emit_u8(V, REX_B);
-    emit_u8(V, 0xB8 + (reg & 7));
-    emit_im16(V, imm);
-}
-
-/* MOV reg8, imm8 */
-void emit_mov8_ri(VpState* V, X64Reg reg, int8_t imm)
-{
-    if(regext(reg) || (reg >= RSP && reg <= RDI))
-    {
-        if(regext(reg)) emit_u8(V, REX_B);
-        emit_u8(V, 0xC6);
-        emit_u8(V, MODRM(3, 0, reg & 7));
-    }
-    else    /* AL, CL, DL, BL (or AX/EAX/RAX if reg is 0) */
-    {
-        /* These can use the 0xB0 + reg opcode */
-        emit_u8(V, 0xB0 + (reg & 7));
-    }
-    emit_u8(V, (uint8_t)imm);
-}
-
-static void mem_op(X64Mem mem, X64Reg* base, X64Reg* idx, uint8_t* scale, int32_t* off)
-{
-    mem &= ~((int64_t)1 << 63);
-
-    *base = (X64Reg)((mem >> 32) & 0xfff);
-    *idx = (X64Reg)((mem >> 44) & 0xfff);
-    *scale = (uint8_t)((mem >> 56) & 0xf);
-    *off = (int32_t)(mem & 0xffffffff);
-}
-
-/* Determine REX for memory instructions */
-static VP_AINLINE uint8_t rex_mem(X64Reg dst, X64Reg base, X64Reg idx, bool is64)
-{
-    uint8_t rex = 0;
-    if(is64) rex |= REX_W;
-    if(regext(dst)) rex |= REX_R;
-    if(base != RIP && regext(base)) rex |= REX_B;
-    if(idx != NOREG && regext(idx)) rex |= REX_X;
+    uint8_t rex = (size == 8) ? REX_W : 0;
+    if(regext(rs)) rex |= REX_R;
+    if(regext(rd)) rex |= REX_B;
     return rex;
 }
 
-static void emit_modrm_sib_disp(VpState* V, X64Reg src, X64Reg base, X64Reg idx, uint8_t scale, int32_t disp)
+/* Calculate REX prefix from reg, mem */
+static VP_AINLINE uint8_t rexM(uint8_t reg, X64Mem mem, uint8_t rex)
 {
-    uint8_t mod = 0;
-    uint8_t rm = 0;
-    bool needs_sib = false;
-
-    if(base == RIP)
+    uint8_t base = MEM_BASE(mem);
+    uint8_t idx = MEM_INDEX(mem);
+    if(regext(reg)) rex |= REX_R;
+    if(!MEM_ISRIP(mem))
     {
+        if(regext(base)) rex |= REX_B;
+        if(regext(idx)) rex |= REX_X;
+    }
+    return rex;
+}
+
+static void emit_mem(VpState* V, uint8_t reg, X64Mem mem)
+{
+    uint8_t base  = MEM_BASE(mem);
+    uint8_t idx = MEM_INDEX(mem);
+    uint8_t scale = MEM_SCALE(mem);
+    int32_t disp  = MEM_DISP(mem);
+    uint8_t mod;
+    bool sib = (idx != NOREG) || ((base & 7) == 4);
+
+    if(MEM_ISRIP(mem))
+    {
+        emit_u8(V, MODRM(0, reg & 7, 5));  /* mod=00, r/m=101 */
+        emit_im32(V, disp);
+        return;
+    }
+
+    /* Determine ModR/M mod field based on displacement size */
+    if((disp == 0) && (base & 7) != 5)
+    {
+        /* no displacement (except for RBP/R13 which need disp8) */
         mod = 0;
-        rm = 5;
-        /* No SIB byte for RIP-relative addressing */
+    }
+    else if(vp_isimm8(disp))
+    {
+        /* 8-bit displacement */
+        mod = 1;
     }
     else
     {
-        if(disp == 0 && (base != RBP && base != R13))
-        {
-            mod = 0;
-        }
-        else if(vp_isimm8(disp))
-        {
-            mod = 1;
-        }
-        else
-        {
-            mod = 2;
-        }
-
-        if(idx != NOREG || base == RSP || base == R12)
-        {
-            needs_sib = true;
-            rm = RM_SIB;
-        }
-        else
-        {
-            rm = base & 7;
-        }
+        /* 32-bit displacement */
+        mod = 2;
     }
 
-    emit_u8(V, MODRM(mod, src & 7, rm));
-
-    /* Emit SIB byte if needed */
-    if(needs_sib)
+    /* Emit ModR/M byte */
+    if(sib)
     {
-        uint8_t sib_scale = 0;
-        if(scale == 2) sib_scale = 1;
-        else if(scale == 4) sib_scale = 2;
-        else if(scale == 8) sib_scale = 3;
-
-        uint8_t sib_idx = (idx == NOREG) ? RSP & 7 : idx & 7;
-        uint8_t sib_base = base & 7;
-
-        emit_u8(V, SIB(sib_scale, sib_idx, sib_base));
+        emit_u8(V, MODRM(mod, reg & 7, RM_SIB));
+        emit_u8(V, SIB(__builtin_ctz(scale), idx & 7, base & 7));
+    }
+    else
+    {
+        emit_u8(V, MODRM(mod, reg & 7, base & 7));
     }
 
     if(mod == 1)
     {
-        emit_u8(V, (int8_t)disp);
+        emit_u8(V, (uint8_t)disp);
     }
-    else if (mod == 2 || (base == RIP && mod == 0))
+    else if(mod == 2)
     {
         emit_im32(V, disp);
     }
+    /* mod == 0: no displacement */
 }
 
-/* Emit common MOV instructions with memory operand (load/store) */
-static void emit_mov_mem(VpState* V, X64Reg src, X64Mem mem, int size, bool is_load)
+/* MOV gpr, gpr */
+void EMITX64(movRR)(X64Reg dst, X64Reg src)
 {
-    X64Reg base, idx;
-    uint8_t scale;
-    int32_t disp;
-    mem_op(mem, &base, &idx, &scale, &disp);
+    vp_assertX(REG_CLASS(dst) == RC_GPR, "dst != gpr");
+    vp_assertX(REG_CLASS(src) == RC_GPR, "src != gpr");
+    vp_assertX(REG_SIZE(dst) == REG_SIZE(src), "size mismatch");
+    uint8_t size = REG_SIZE(dst);
+    uint8_t rd = REG_NUM(dst);
+    uint8_t rs = REG_NUM(src);
+    uint8_t op = size == 1 ? 0x88 : 0x89;
+    uint8_t rex = rexRR(size, rd, rs);
 
-    if(idx != NOREG)
-    {
-        vp_assertX(IS_POW2(scale) && (scale >= 1 && scale <= 8), "bad scale (1/2/4/8)");
-    }
-
-    uint8_t rex = rex_mem(src, base, idx, size == 64);
-    if(size == 8 && (src & 7) >= 4)
-    {
-        if(rex == 0) rex = 0x40;
-    }
+    if(size == 2) emit_u8(V, 0x66);
     if(rex) emit_u8(V, rex);
-
-    if(size == 16) emit_u8(V, 0x66);
-
-    uint8_t op = is_load ? 0x8B : 0x89; /* MOV reg, r/m vs MOV r/m, reg */
-    if(size == 8) op = is_load ? 0x8A : 0x88; /* MOV reg8, r/m8 vs MOV r/m8, reg8 */
-
     emit_u8(V, op);
-    emit_modrm_sib_disp(V, src, base, idx, scale, disp);
+    emit_u8(V, MODRM(3, rs & 7, rd & 7));
 }
 
-/* MOV reg, [base + index*scale + disp32] */
-void emit_mov8_rm(VpState* V, X64Reg dst, X64Mem mem) { emit_mov_mem(V, dst, mem, 8, true); }
-void emit_mov16_rm(VpState* V, X64Reg dst, X64Mem mem) { emit_mov_mem(V, dst, mem, 16, true); }
-void emit_mov32_rm(VpState* V, X64Reg dst, X64Mem mem) { emit_mov_mem(V, dst, mem, 32, true); }
-void emit_mov64_rm(VpState* V, X64Reg dst, X64Mem mem) { emit_mov_mem(V, dst, mem, 64, true); }
-
-/* MOV [base + index*scale + disp32], reg */
-void emit_mov8_mr(VpState* V, X64Mem mem, X64Reg src) { emit_mov_mem(V, src, mem, 8, false); }
-void emit_mov16_mr(VpState* V, X64Mem mem, X64Reg src) { emit_mov_mem(V, src, mem, 16, false); }
-void emit_mov32_mr(VpState* V, X64Mem mem, X64Reg src) { emit_mov_mem(V, src, mem, 32, false); }
-void emit_mov64_mr(VpState* V, X64Mem mem, X64Reg src) { emit_mov_mem(V, src, mem, 64, false); }
-
-/* Helper to emit MOV [reg], imm instructions */
-static void emit_mov_mi_common(VpState* V, X64Reg dst, int size, int64_t imm)
+/* MOV gpr, imm */
+void EMITX64(movRI)(X64Reg dst, int64_t imm)
 {
-    uint8_t rex = 0;
-    if(size == 64) rex |= REX_W;
-    if(regext(dst)) rex |= REX_B;
+    vp_assertX(REG_CLASS(dst) == RC_GPR, "dst != gpr");
+    uint8_t size = REG_SIZE(dst);
+    uint8_t rd = REG_NUM(dst);
+    uint8_t rex = (size == 8) ? REX_W : 0;
+
+    if(regext(rd)) rex |= REX_B;
+    if(size == 2) emit_u8(V, 0x66);
     if(rex) emit_u8(V, rex);
 
-    if(size == 16) emit_u8(V, 0x66);
-
-    uint8_t op;
-    if(size == 8) op = 0xC6; /* MOV r/m8, imm8 */
-    else op = 0xC7; /* MOV r/m16/32/64, imm16/32 */
-    emit_u8(V, op);
-
-    uint8_t modrm_rm = dst & 7;
-    if(dst == RSP || ((dst & 7) == (R12 & 7) && regext(dst)))
+    if(size == 1)
     {
-        modrm_rm = RM_SIB;
-    }
-    emit_u8(V, MODRM(0, 0, modrm_rm));
-
-    if(modrm_rm == RM_SIB)
-    {
-        emit_u8(V, SIB(0, RSP & 7, dst & 7));
-    }
-
-    if(size == 8)
-    {
+        emit_u8(V, 0xB0 | (rd & 7));
         emit_u8(V, (uint8_t)imm);
     }
-    else if(size == 16)
+    else if(size == 4)
     {
-        emit_im16(V, (int16_t)imm);
-    }
-    else if(size == 32 || size == 64)
-    {
+        emit_u8(V, 0xB8 | (rd & 7));
         emit_im32(V, (int32_t)imm);
     }
+    else
+    {
+        emit_u8(V, 0xC7);
+        emit_u8(V, MODRM(3, 0, rd & 7));
+        if(size == 2) emit_im16(V, (int16_t)imm);
+        else emit_im32(V, (int32_t)imm);
+    }
 }
 
-/* MOV [reg8], imm8 */
-void emit_mov8_mi(VpState* V, X64Reg reg, int8_t imm)
+/* MOV gpr, [mem] */
+void EMITX64(movRM)(X64Reg dst, X64Mem src)
 {
-    emit_mov_mi_common(V, reg, 8, imm);
+    vp_assertX(REG_CLASS(dst) == RC_GPR, "dst != gpr");
+    uint8_t size = REG_SIZE(dst);
+    uint8_t rd = REG_NUM(dst);
+    uint8_t rex = rexM(rd, src, (size == 8) ? REX_W : 0);
+    if(size == 2) emit_u8(V, 0x66);
+    if(rex) emit_u8(V, rex);
+    uint8_t op = (size == 1) ? 0x8A : 0x8B;
+    emit_u8(V, op);
+    emit_mem(V, rd, src);
 }
 
-/* MOV [reg16], imm16 */
-void emit_mov16_mi(VpState* V, X64Reg reg, int16_t imm)
+/* MOV [mem], gpr */
+void EMITX64(movMR)(X64Mem dst, X64Reg src)
 {
-    emit_mov_mi_common(V, reg, 16, imm);
+    vp_assertX(REG_CLASS(src) == RC_GPR, "src != gpr");
+    uint8_t size = REG_SIZE(src);
+    uint8_t rs = REG_NUM(src);
+    uint8_t rex = rexM(rs, dst, (size == 8) ? REX_W : 0);
+    if(size == 2) emit_u8(V, 0x66);
+    if(rex) emit_u8(V, rex);
+    uint8_t op = (size == 1) ? 0x88 : 0x89;
+    emit_u8(V, op);
+    emit_mem(V, REG_NUM(src), dst);
 }
 
-/* MOV [reg32], imm32 */
-void emit_mov32_mi(VpState* V, X64Reg reg, int32_t imm)
+/* MOV [mem], imm */
+void EMITX64(movMI)(X64Mem dst, int64_t imm)
 {
-    emit_mov_mi_common(V, reg, 32, imm);
+    uint8_t size = MEM_SIZE(dst);
+    uint8_t rex = rexM(0, dst, (size == 8) ? REX_W : 0);
+
+    if(size == 2) emit_u8(V, 0x66);
+    if(rex) emit_u8(V, rex);
+
+    uint8_t op = (size == 1) ? 0xC6 : 0xC7;
+    emit_u8(V, op);
+    emit_mem(V, 0, dst);
+
+    switch(size)
+    {
+    case 1: emit_u8(V, (uint8_t)imm); break;
+    case 2: emit_im16(V, (int16_t)imm); break;
+    case 4: case 8: emit_im32(V, (int32_t)imm); break;
+    }
 }
 
-/* MOV [reg64], imm32 (sign-extended to 64-bit) */
-void emit_mov64_mi(VpState* V, X64Reg reg, int32_t imm)
+/* MOVSX gpr, gpr */
+void EMITX64(movsxRR)(X64Reg dst, X64Reg src)
 {
-    emit_mov_mi_common(V, reg, 64, imm);
+    vp_assertX(REG_CLASS(dst) == RC_GPR, "dst != gpr");
+    vp_assertX(REG_CLASS(src) == RC_GPR, "src != gpr");
+    vp_assertX(REG_SIZE(dst) > REG_SIZE(src), "dst < src");
+    uint8_t ds = REG_SIZE(dst);
+    uint8_t ss = REG_SIZE(src);
+    uint8_t rd = REG_NUM(dst);
+    uint8_t rs = REG_NUM(src);
+    uint8_t rex = rexRR(ds, rd, rs);
+
+    if(ds == 2 && ss == 1) emit_u8(V, 0x66);
+    if(rex) emit_u8(V, rex);
+
+    if(ss == 1)
+    {
+        emit_u8(V, 0x0F);
+        emit_u8(V, 0xBE);
+    }
+    else if(ss == 2)
+    {
+        emit_u8(V, 0x0F);
+        emit_u8(V, 0xBF);
+    }
+    else /* ss == 4, ds == 8 */
+    {
+        vp_assertX(ss == 4 && ds == 8, "MOVSX r32, r64");
+        emit_u8(V, 0x63);
+    }
+    emit_u8(V, MODRM(3, rd & 7, rs & 7));
 }
 
-/* -- MOVSX instructions -------------------------------------------- */
-
-/* MOVSX reg16, reg8 */
-void emit_movsx_r16r8(VpState* V, X64Reg dst, X64Reg src)
+/* MOVZX gpr, gpr */
+void EMITX64(movzxRR)(X64Reg dst, X64Reg src)
 {
+    vp_assertX(REG_CLASS(dst) == RC_GPR, "dst != gpr");
+    vp_assertX(REG_CLASS(src) == RC_GPR, "src != gpr");
+    vp_assertX(REG_SIZE(dst) > REG_SIZE(src), "dst < src");
+    uint8_t ds = REG_SIZE(dst);
+    uint8_t ss = REG_SIZE(src);
+    uint8_t rd = REG_NUM(dst);
+    uint8_t rs = REG_NUM(src);
+    uint8_t op = (ss == 1) ? 0xB6 : 0xB7;
+    uint8_t rex = rexRR(ds, rd, rs);
+
+    if(ds == 2) emit_u8(V, 0x66);
+    if(rex) emit_u8(V, rex);
+
+    emit_u8(V, 0x0F);
+    emit_u8(V, op);
+    emit_u8(V, MODRM(3, rd & 7, rs & 7));
+}
+
+/* MOVD xmm, gpr */
+void EMITX64(movdXR)(X64Reg dst, X64Reg src)
+{
+    vp_assertX(REG_CLASS(dst) == RC_XMM, "dst != xmm");
+    vp_assertX(REG_CLASS(src) == RC_GPR, "src != gpr");
+    uint8_t size = REG_SIZE(src);
+    uint8_t rd = REG_NUM(dst);
+    uint8_t rs = REG_NUM(src);
+    uint8_t rex = (size == 8) ? REX_W : 0;
     emit_u8(V, 0x66);
-    uint8_t rex = 0;
-    if(regext(src) || (src >= RSP && src <= RDI)) rex |= REX_R;
-    if(regext(dst)) rex |= REX_B;
-    if(rex) emit_u8(V, rex);
-    emit_u8(V, 0x0F);
-    emit_u8(V, 0xBE);
-    emit_u8(V, MODRM(3, dst & 7, src & 7));
-}
-
-/* MOVSX reg32, reg8 */
-void emit_movsx_r32r8(VpState* V, X64Reg dst, X64Reg src)
-{
-    uint8_t rex = 0;
-    if(regext(src) || (src >= RSP && src <= RDI)) rex |= REX_R;
-    if(regext(dst)) rex |= REX_B;
-    if(rex) emit_u8(V, rex);
-    emit_u8(V, 0x0F);
-    emit_u8(V, 0xBE);
-    emit_u8(V, MODRM(3, dst & 7, src & 7));
-}
-
-/* MOVSX reg32, reg16 */
-void emit_movsx_r32r16(VpState* V, X64Reg dst, X64Reg src)
-{
-    uint8_t rex = 0;
-    if(regext(src)) rex |= REX_R;
-    if(regext(dst)) rex |= REX_B;
-    if(rex) emit_u8(V, rex);
-    emit_u8(V, 0x0F);
-    emit_u8(V, 0xBF);
-    emit_u8(V, MODRM(3, dst & 7, src & 7));
-}
-
-/* MOVSX reg64, reg8 */
-void emit_movsx_r64r8(VpState* V, X64Reg dst, X64Reg src)
-{
-    uint8_t rex = REX_W;
-    if(regext(src) || (src >= RSP && src <= RDI)) rex |= REX_R;
-    if(regext(dst)) rex |= REX_B;
-    emit_u8(V, rex);
-    emit_u8(V, 0x0F);
-    emit_u8(V, 0xBE);
-    emit_u8(V, MODRM(3, dst & 7, src & 7));
-}
-
-/* MOVSX reg64, reg16 */
-void emit_movsx_r64r16(VpState* V, X64Reg dst, X64Reg src)
-{
-    uint8_t rex = REX_W;
-    if(regext(src)) rex |= REX_R;
-    if(regext(dst)) rex |= REX_B;
-    emit_u8(V, rex);
-    emit_u8(V, 0x0F);
-    emit_u8(V, 0xBF);
-    emit_u8(V, MODRM(3, dst & 7, src & 7));
-}
-
-/* MOVSX reg64, reg32 */
-void emit_movsx_r64r32(VpState* V, X64Reg dst, X64Reg src)
-{
-    uint8_t rex = REX_W;
-    if(regext(src)) rex |= REX_R;
-    if(regext(dst)) rex |= REX_B;
-    emit_u8(V, rex);
-    emit_u8(V, 0x8B);
-    emit_u8(V, MODRM(3, dst & 7, src & 7));
-}
-
-/* -- MOVZX instructions -------------------------------------------- */
-
-/* MOVZX reg16, reg8 */
-void emit_movzx_r16r8(VpState* V, X64Reg dst, X64Reg src)
-{
-    emit_u8(V, 0x66);
-    uint8_t rex = 0;
-    if(regext(src) || (src >= RSP && src <= RDI)) rex |= REX_R;
-    if(regext(dst)) rex |= REX_B;
-    if(rex) emit_u8(V, rex);
-    emit_u8(V, 0x0F);
-    emit_u8(V, 0xB6);
-    emit_u8(V, MODRM(3, dst & 7, src & 7));
-}
-
-/* MOVZX reg32, reg8 */
-void emit_movzx_r32r8(VpState* V, X64Reg dst, X64Reg src)
-{
-    uint8_t rex = 0;
-    if(regext(src) || (src >= RSP && src <= RDI)) rex |= REX_R;
-    if(regext(dst)) rex |= REX_B;
-    if(rex) emit_u8(V, rex);
-    emit_u8(V, 0x0F);
-    emit_u8(V, 0xB6);
-    emit_u8(V, MODRM(3, dst & 7, src & 7));
-}
-
-/* MOVZX reg32, reg16 */
-void emit_movzx_r32r16(VpState* V, X64Reg dst, X64Reg src)
-{
-    uint8_t rex = 0;
-    if(regext(src)) rex |= REX_R;
-    if(regext(dst)) rex |= REX_B;
-    if(rex) emit_u8(V, rex);
-    emit_u8(V, 0x0F);
-    emit_u8(V, 0xB7);
-    emit_u8(V, MODRM(3, dst & 7, src & 7));
-}
-
-/* MOVZX reg64, reg8 */
-void emit_movzx_r64r8(VpState* V, X64Reg dst, X64Reg src)
-{
-    uint8_t rex = REX_W;
-    if(regext(src) || (src >= RSP && src <= RDI)) rex |= REX_R;
-    if(regext(dst)) rex |= REX_B;
-    emit_u8(V, rex);
-    emit_u8(V, 0x0F);
-    emit_u8(V, 0xB6);
-    emit_u8(V, MODRM(3, dst & 7, src & 7));
-}
-
-/* MOVZX reg64, reg16 */
-void emit_movzx_r64r16(VpState* V, X64Reg dst, X64Reg src)
-{
-    uint8_t rex = REX_W;
-    if(regext(src)) rex |= REX_R;
-    if(regext(dst)) rex |= REX_B;
-    emit_u8(V, rex);
-    emit_u8(V, 0x0F);
-    emit_u8(V, 0xB7);
-    emit_u8(V, MODRM(3, dst & 7, src & 7));
-}
-
-/* -- MOVQ/MOVD instructions ---------------------------------------- */
-
-/* MOVQ xmm, reg64 */
-void emit_movq_xr(VpState* V, X64Reg dst, X64Reg src)
-{
-    emit_u8(V, 0x66);
-    uint8_t rex = REX_W;
-    if(regext(dst)) rex |= REX_R;
-    if(regext(src)) rex |= REX_B;
-    emit_u8(V, rex);
-    emit_u8(V, 0x0F);
-    emit_u8(V, 0x6E); /* MOVQ opcode */
-    emit_u8(V, MODRM(3, dst & 7, src & 7));
-}
-
-/* MOVD xmm, reg32 */
-void emit_movd_xr(VpState* V, X64Reg dst_xmm, X64Reg src_gpr32)
-{
-    emit_u8(V, 0x66);
-    uint8_t rex = 0;
-    if(regext(dst_xmm)) rex |= REX_R;
-    if(regext(src_gpr32)) rex |= REX_B;
     if(rex) emit_u8(V, rex);
     emit_u8(V, 0x0F);
     emit_u8(V, 0x6E);
-    emit_u8(V, MODRM(3, dst_xmm & 7, src_gpr32 & 7));
+    emit_u8(V, MODRM(3, rd & 7, rs & 7));
 }
 
-/* -- LEA instructions ---------------------------------------------- */
-
-/* LEA reg64, [base + idx * scale + disp32] */
-void emit_lea64_rm(VpState* V, X64Reg dst, X64Mem mem)
+/* MOVQ xmm, gpr */
+void EMITX64(movqXR)(X64Reg dst, X64Reg src)
 {
-    X64Reg base, idx;
-    uint8_t scale;
-    int32_t disp;
-    mem_op(mem, &base, &idx, &scale, &disp);
+    EMITX64(movdXR)(dst, src);
+}
 
-    if(idx != NOREG)
-    {
-        vp_assertX(IS_POW2(scale) && scale <= 8, "bad scale (1/2/4/8)");
-    }
-
-    uint8_t rex = rex_mem(dst, base, idx, true);
+/* LEA gpr, [mem] */
+void EMITX64(leaRM)(X64Reg dst, X64Mem src)
+{
+    vp_assertX(REG_CLASS(dst) == RC_GPR, "dst != gpr");
+    uint8_t size = REG_SIZE(dst);
+    uint8_t rd = REG_NUM(dst);
+    uint8_t rex = rexM(rd, src, (size == 8) ? REX_W : 0);
     if(rex) emit_u8(V, rex);
-    emit_u8(V, 0x8D);   /* LEA opcode */
-
-    emit_modrm_sib_disp(V, dst, base, idx, scale, disp);
+    emit_u8(V, 0x8D);
+    emit_mem(V, REG_NUM(dst), src);
 }
 
-/* -- ADD instructions ---------------------------------------------- */
-
-/* ADD reg64, reg64 */
-void emit_add64_rr(VpState* V, X64Reg dst, X64Reg src)
+static VP_AINLINE void emit_aluRR(VpState* V, uint8_t op1, uint8_t op8, X64Reg dst, X64Reg src)
 {
-    uint8_t rex = REX_W;
-    if(regext(src)) rex |= REX_R;
-    if(regext(dst)) rex |= REX_B;
-    emit_u8(V, rex);
-    emit_u8(V, 0x01);
-    emit_u8(V, MODRM(3, src & 7, dst & 7));
-}
+    vp_assertX(REG_CLASS(dst) == RC_GPR, "dst != gpr");
+    vp_assertX(REG_CLASS(src) == RC_GPR, "src != gpr");
+    vp_assertX(REG_SIZE(dst) == REG_SIZE(src), "size mismatch");
+    uint8_t size = REG_SIZE(dst);
+    uint8_t rd = REG_NUM(dst);
+    uint8_t rs = REG_NUM(src);
 
-/* ADD reg32, reg32 */
-void emit_add32_rr(VpState* V, X64Reg dst, X64Reg src)
-{
-    uint8_t rex = 0;
-    if(regext(src)) rex |= REX_R;
-    if(regext(dst)) rex |= REX_B;
+    if(size == 2) emit_u8(V, 0x66);
+
+    uint8_t rex = rexRR(size, rd, rs);
     if(rex) emit_u8(V, rex);
-    emit_u8(V, 0x01);
-    emit_u8(V, MODRM(3, src & 7, dst & 7));
+
+    emit_u8(V, (size == 1) ? op8 : op1);
+    emit_u8(V, MODRM(3, rs & 7, rd & 7));
 }
 
-/* ADD reg16, reg16 */
-void emit_add16_rr(VpState* V, X64Reg dst, X64Reg src)
+/* ADD gpr, gpr */
+void EMITX64(addRR)(X64Reg dst, X64Reg src) { emit_aluRR(V, 0x01, 0x00, dst, src); }
+
+/* SUB gpr, gpr */
+void EMITX64(subRR)(X64Reg dst, X64Reg src) { emit_aluRR(V, 0x29, 0x28, dst, src); }
+
+/* AND gpr, gpr */
+void EMITX64(andRR)(X64Reg dst, X64Reg src) { emit_aluRR(V, 0x21, 0x20, dst, src); }
+
+/* OR gpr, gpr */
+void EMITX64(orRR)(X64Reg dst, X64Reg src)  { emit_aluRR(V, 0x09, 0x08, dst, src); }
+
+/* XOR gpr, gpr */
+void EMITX64(xorRR)(X64Reg dst, X64Reg src) { emit_aluRR(V, 0x31, 0x30, dst, src); }
+
+/* CMP gpr, gpr */
+void EMITX64(cmpRR)(X64Reg dst, X64Reg src) { emit_aluRR(V, 0x39, 0x38, dst, src); }
+
+/* TEST gpr, gpr */
+void EMITX64(testRR)(X64Reg dst, X64Reg src){ emit_aluRR(V, 0x85, 0x84, dst, src); }
+
+static void emit_aluRI(VpState* V, uint8_t modrmreg, uint8_t raxop, X64Reg dst, int64_t imm)
 {
-    emit_u8(V, 0x66);
-    uint8_t rex = 0;
-    if(regext(src)) rex |= REX_R;
-    if(regext(dst)) rex |= REX_B;
+    vp_assertX(REG_CLASS(dst) == RC_GPR, "dst != gpr");
+    uint8_t size = REG_SIZE(dst);
+    uint8_t rd = REG_NUM(dst);
+
+    if(size == 2) emit_u8(V, 0x66);
+
+    uint8_t rex = rexRR(size, rd, 0);
     if(rex) emit_u8(V, rex);
-    emit_u8(V, 0x01);
-    emit_u8(V, MODRM(3, src & 7, dst & 7));
-}
 
-/* ADD reg8, reg8 */
-void emit_add8_rr(VpState* V, X64Reg dst, X64Reg src)
-{
-    uint8_t rex = 0;
-    if(regext(src) || (src >= RSP && src <= RDI)) rex |= REX_R;
-    if(regext(dst) || (dst >= RSP && dst <= RDI)) rex |= REX_B;
-    if(rex) emit_u8(V, rex);
-    emit_u8(V, 0x00);
-    emit_u8(V, MODRM(3, src & 7, dst & 7));
-}
+    /* AL/AX/EAX/RAX with non-imm8 */
+    if(rd == 0 && (size == 1 || !vp_isimm8(imm)))
+    {
+        emit_u8(V, raxop);
+        goto emit_imm;
+    }
 
-/* ADD reg64, imm32 */
-void emit_add64_ri(VpState* V, X64Reg reg, int32_t imm)
-{
-    uint8_t rex = REX_W; /* REX.W is required for 64-bit operand size */
-    if(regext(reg)) rex |= REX_B; /* Set REX.B if reg is R8-R15 */
-    emit_u8(V, rex);
-    if(reg == RAX)
-    {
-        /* Special opcode for ADD RAX, imm32 (0x05) */
-        emit_u8(V, 0x05);
-        emit_im32(V, imm);
-    }
-    else if(vp_isimm8(imm))
-    {
-        /* Use opcode 0x83 for sign-extended 8-bit immediate */
-        emit_u8(V, 0x83);
-        emit_u8(V, MODRM(3, 0, reg & 7)); /* ModR/M byte with /0 extension for ADD */
-        emit_u8(V, (uint8_t)imm); /* 8-bit immediate */
-    }
-    else
-    {
-        /* Use opcode 0x81 for 32-bit immediate */
-        emit_u8(V, 0x81);
-        emit_u8(V, MODRM(3, 0, reg & 7)); /* ModR/M byte with /0 extension for ADD */
-        emit_im32(V, imm); /* 32-bit immediate */
-    }
-}
-
-/* ADD reg32, imm32 */
-void emit_add32_ri(VpState* V, X64Reg reg, int32_t imm)
-{
-    if(regext(reg)) emit_u8(V, REX_B);
-    if(reg == RAX)
-    {
-        /* RAX maps to EAX if REX.W is not set */
-        emit_u8(V, 0x05);
-        emit_im32(V, imm);
-    }
-    else if(vp_isimm8(imm))
+    /* Use imm8 encoding if possible */
+    if(size > 1 && vp_isimm8(imm))
     {
         emit_u8(V, 0x83);
-        emit_u8(V, MODRM(3, 0, reg & 7));   /* /0 extension for ADD */
+        emit_u8(V, MODRM(3, modrmreg, rd & 7));
         emit_u8(V, (uint8_t)imm);
+        return;
     }
-    else
+
+    emit_u8(V, (size == 1) ? 0x80 : 0x81);
+    emit_u8(V, MODRM(3, modrmreg, rd & 7));
+
+emit_imm:
+    switch(size)
     {
-        emit_u8(V, 0x81);
-        emit_u8(V, MODRM(3, 0, reg & 7));   /* /0 extension for ADD */
-        emit_im32(V, imm);
+    case 1: emit_u8(V, (uint8_t)imm); break;
+    case 2: emit_im16(V, (int16_t)imm); break;
+    default: emit_im32(V, (int32_t)imm); break;
     }
 }
 
-/* ADD reg16, imm16 */
-void emit_add16_ri(VpState* V, X64Reg reg, int16_t imm)
-{
-    emit_u8(V, 0x66);
-    if(regext(reg)) emit_u8(V, REX_B);
-    if(reg == RAX)
-    {
-        /* RAX maps to AX if REX.W is not set */
-        emit_u8(V, 0x05);
-        emit_im16(V, imm);
-    }
-    else if(vp_isimm8(imm))
-    {
-        emit_u8(V, 0x83); /* Use sign-extended 8-bit immediate for 16-bit */
-        emit_u8(V, MODRM(3, 0, reg & 7));
-        emit_u8(V, (uint8_t)imm);
-    }
-    else
-    {
-        emit_u8(V, 0x81);
-        emit_u8(V, MODRM(3, 0, reg & 7));
-        emit_im16(V, imm);
-    }
-}
+/* ADD gpr, imm */
+void EMITX64(addRI)(X64Reg dst, int64_t imm) { emit_aluRI(V, 0, 0x04, dst, imm); }
 
-/* ADD reg8, imm8 */
-void emit_add8_ri(VpState* V, X64Reg reg, int8_t imm)
-{
-    if(regext(reg) || (reg >= RSP && reg <= RDI)) emit_u8(V, REX_B);
-    if(reg == RAX)
-    {
-        emit_u8(V, 0x04);
-        emit_u8(V, (uint8_t)imm);
-    }
-    else
-    {
-        emit_u8(V, 0x80);
-        emit_u8(V, MODRM(3, 0, reg & 7));   /* /0 extension for ADD */
-        emit_u8(V, (uint8_t)imm);
-    }
-}
+/* OR gpr, imm */
+void EMITX64(orRI)(X64Reg dst, int64_t imm)  { emit_aluRI(V, 1, 0x0C, dst, imm); }
 
-/* -- SUB instructions ---------------------------------------------- */
+/* AND gpr, imm */
+void EMITX64(andRI)(X64Reg dst, int64_t imm) { emit_aluRI(V, 4, 0x24, dst, imm); }
 
-/* SUB reg64, imm32 (sign-extended) */
-void emit_sub_r64i32(VpState* V, X64Reg reg, int32_t imm)
-{
-    uint8_t rex = REX_W;
-    if(regext(reg)) rex |= REX_B;
-    emit_u8(V, rex);
-    if(vp_isimm8(imm))
-    {
-        emit_u8(V, 0x83);
-        emit_u8(V, MODRM(3, 5, reg & 7));
-        emit_u8(V, (uint8_t)imm);
-    }
-    else
-    {
-        emit_u8(V, 0x81);
-        emit_u8(V, MODRM(3, 5, reg & 7));
-        emit_im32(V, imm);
-    }
-}
+/* SUB gpr, imm */
+void EMITX64(subRI)(X64Reg dst, int64_t imm) { emit_aluRI(V, 5, 0x2C, dst, imm); }
 
-/* SUB reg32, imm32 */
-void emit_sub32_ri(VpState* V, X64Reg reg, int32_t imm)
-{
-    if(regext(reg)) emit_u8(V, REX_B);
-    if(reg == RAX)
-    {
-        emit_u8(V, 0x2D);
-        emit_im32(V, imm);
-    }
-    else if(vp_isimm8(imm))
-    {
-        emit_u8(V, 0x83);
-        emit_u8(V, MODRM(3, 5, reg & 7));
-        emit_u8(V, (uint8_t)imm);
-    }
-    else
-    {
-        emit_u8(V, 0x81);
-        emit_u8(V, MODRM(3, 5, reg & 7));
-        emit_im32(V, imm);
-    }
-}
+/* XOR gpr, imm */
+void EMITX64(xorRI)(X64Reg dst, int64_t imm) { emit_aluRI(V, 6, 0x34, dst, imm); }
 
-/* SUB reg16, imm16 */
-void emit_sub16_ri(VpState* V, X64Reg reg, int16_t imm)
-{
-    emit_u8(V, 0x66);
-    if(regext(reg)) emit_u8(V, REX_B);
-    if(reg == RAX)
-    {
-        emit_u8(V, 0x2D);
-        emit_im16(V, imm);
-    }
-    else if(vp_isimm8(imm))
-    {
-        emit_u8(V, 0x83);
-        emit_u8(V, MODRM(3, 5, reg & 7));
-        emit_u8(V, (uint8_t)imm);
-    }
-    else
-    {
-        emit_u8(V, 0x81);
-        emit_u8(V, MODRM(3, 5, reg & 7));
-        emit_im16(V, imm);
-    }
-}
+/* CMP gpr, imm */
+void EMITX64(cmpRI)(X64Reg dst, int64_t imm) { emit_aluRI(V, 7, 0x3C, dst, imm); }
 
-/* SUB reg8, imm8 */
-void emit_sub8_ri(VpState* V, X64Reg reg, int8_t imm)
+static VP_AINLINE void emit_unary(VpState* V, uint8_t op1, uint8_t op8, uint8_t modrm_reg, X64Reg reg)
 {
-    if(regext(reg) || (reg >= RSP && reg <= RDI)) emit_u8(V, REX_B);
-    if(reg == RAX)
-    {
-        emit_u8(V, 0x2C);
-        emit_u8(V, (uint8_t)imm);
-    }
-    else
-    {
-        emit_u8(V, 0x80);
-        emit_u8(V, MODRM(3, 5, reg & 7));
-        emit_u8(V, (uint8_t)imm);
-    }
-}
+    vp_assertX(REG_CLASS(reg) == RC_GPR, "reg != gpr");
+    uint8_t size = REG_SIZE(reg);
+    uint8_t rr = REG_NUM(reg);
 
-/* SUB reg64, reg64 */
-void emit_sub64_rr(VpState* V, X64Reg dst, X64Reg src)
-{
-    uint8_t rex = REX_W;
-    if(regext(src)) rex |= REX_R;
-    if(regext(dst)) rex |= REX_B;
-    emit_u8(V, rex);
-    emit_u8(V, 0x29);
-    emit_u8(V, MODRM(3, src & 7, dst & 7));
-}
+    if(size == 2) emit_u8(V, 0x66);
 
-/* SUB reg32, reg32 */
-void emit_sub32_rr(VpState* V, X64Reg dst, X64Reg src)
-{
-    uint8_t rex = 0;
-    if(regext(src)) rex |= REX_R;
-    if(regext(dst)) rex |= REX_B;
+    uint8_t rex = rexRR(size, rr, 0);
     if(rex) emit_u8(V, rex);
-    emit_u8(V, 0x29);
-    emit_u8(V, MODRM(3, src & 7, dst & 7));
+
+    emit_u8(V, (size == 1) ? op8 : op1);
+    emit_u8(V, MODRM(3, modrm_reg, rr & 7));
 }
 
-/* SUB reg16, reg16 */
-void emit_sub16_rr(VpState* V, X64Reg dst, X64Reg src)
+/* MUL gpr */
+void EMITX64(mulR)(X64Reg reg)  { emit_unary(V, 0xF7, 0xF6, 4, reg); }
+
+/* DIV gpr */
+void EMITX64(divR)(X64Reg reg)  { emit_unary(V, 0xF7, 0xF6, 6, reg); }
+
+/* IDIV gpr */
+void EMITX64(idivR)(X64Reg reg) { emit_unary(V, 0xF7, 0xF6, 7, reg); }
+
+/* NEG gpr */
+void EMITX64(negR)(X64Reg reg)  { emit_unary(V, 0xF7, 0xF6, 3, reg); }
+
+/* NOT gpr */
+void EMITX64(notR)(X64Reg reg)  { emit_unary(V, 0xF7, 0xF6, 2, reg); }
+
+/* INC gpr */
+void EMITX64(incR)(X64Reg reg)  { emit_unary(V, 0xFF, 0xFE, 0, reg); }
+
+/* DEC gpr */
+void EMITX64(decR)(X64Reg reg)  { emit_unary(V, 0xFF, 0xFE, 1, reg); }
+
+static VP_AINLINE void emit_shift(VpState* V, X64Reg reg, uint8_t modrm_reg, int64_t imm, bool cl)
 {
-    emit_u8(V, 0x66);
-    uint8_t rex = 0;
-    if(regext(src)) rex |= REX_R;
-    if(regext(dst)) rex |= REX_B;
+    vp_assertX(REG_CLASS(reg) == RC_GPR, "dst != gpr");
+    uint8_t size = REG_SIZE(reg);
+    uint8_t rr = REG_NUM(reg);
+
+    if(size == 2) emit_u8(V, 0x66);
+
+    uint8_t rex = rexRR(size, rr, 0);
     if(rex) emit_u8(V, rex);
-    emit_u8(V, 0x29);
-    emit_u8(V, MODRM(3, src & 7, dst & 7));
+
+    if(cl)
+    {
+        emit_u8(V, (size == 1) ? 0xD2 : 0xD3);
+    }
+    else if(imm == 1)
+    {
+        emit_u8(V, (size == 1) ? 0xD0 : 0xD1);
+    }
+    else
+    {
+        emit_u8(V, (size == 1) ? 0xC0 : 0xC1);
+    }
+
+    emit_u8(V, MODRM(3, modrm_reg, rr & 7));
+    if(!cl && imm != 1) emit_u8(V, (uint8_t)imm);
 }
 
-/* SUB reg8, reg8 */
-void emit_sub8_rr(VpState* V, X64Reg dst, X64Reg src)
+/* SHL gpr, imm */
+void EMITX64(shlRI)(X64Reg dst, int64_t imm) { emit_shift(V, dst, 4, imm, false); }
+
+/* SHL gpr, CL */
+void EMITX64(shlRCL)(X64Reg reg) { emit_shift(V, reg, 4, 0, true); }
+
+/* SHR gpr, imm */
+void EMITX64(shrRI)(X64Reg dst, int64_t imm) { emit_shift(V, dst, 5, imm, false); }
+
+/* SHR gpr, CL */
+void EMITX64(shrRCL)(X64Reg reg) { emit_shift(V, reg, 5, 0, true); }
+
+/* SAR gpr, imm */
+void EMITX64(sarRI)(X64Reg dst, int64_t imm) { emit_shift(V, dst, 7, imm, false); }
+
+/* SAR gpr, CL */
+void EMITX64(sarRCL)(X64Reg reg) { emit_shift(V, reg, 7, 0, true); }
+
+static VP_AINLINE void emit_cvt(VpState* V, uint8_t prefix, uint8_t op, X64Reg dst, X64Reg src)
 {
-    uint8_t rex = 0;
-    if(regext(src) || (src >= RSP && src <= RDI)) rex |= REX_R;
-    if(regext(dst) || (dst >= RSP && dst <= RDI)) rex |= REX_B;
+    uint8_t size = REG_SIZE(src);
+    uint8_t rd = REG_NUM(dst);
+    uint8_t rs = REG_NUM(src);
+
+    uint8_t rex = (size == 8) ? REX_W : 0;
+    if(regext(rd)) rex |= REX_R;
+    if(regext(rs)) rex |= REX_B;
+
+    if(prefix) emit_u8(V, prefix);
     if(rex) emit_u8(V, rex);
-    emit_u8(V, 0x28);
-    emit_u8(V, MODRM(3, src & 7, dst & 7));
+    emit_u8(V, 0x0F);
+    emit_u8(V, op);
+    emit_u8(V, MODRM(3, rd & 7, rs & 7));
 }
 
-/* -- CALL instructions --------------------------------------------- */
+/* CVTTSS2SI gpr, xmm */
+void EMITX64(cvttss2siRX)(X64Reg dst, X64Reg src) { emit_cvt(V, 0xF3, 0x2C, dst, src); }
 
-/* CALL reg64 */
-void emit_call64_r(VpState* V, X64Reg reg)
+/* CVTTSD2SI gpr, xmm */
+void EMITX64(cvttsd2siRX)(X64Reg dst, X64Reg src) { emit_cvt(V, 0xF2, 0x2C, dst, src); }
+
+/* CVTSI2SS xmm, gpr */
+void EMITX64(cvtsi2ssXR)(X64Reg dst, X64Reg src) { emit_cvt(V, 0xF3, 0x2A, dst, src); }
+
+/* CVTSI2SD xmm, gpr */
+void EMITX64(cvtsi2sdXR)(X64Reg dst, X64Reg src) { emit_cvt(V, 0xF2, 0x2A, dst, src); }
+
+/* CVTSD2SS xmm, xmm */
+void EMITX64(cvtsd2ssXX)(X64Reg dst, X64Reg src) { emit_cvt(V, 0xF2, 0x5A, dst, src); }
+
+/* CVTSS2SD xmm, xmm */
+void EMITX64(cvtss2sdXX)(X64Reg dst, X64Reg src) { emit_cvt(V, 0xF3, 0x5A, dst, src); }
+
+/* Emit common SSE/SSE2 instructions */
+static VP_AINLINE void emit_sseRR(VpState* V, uint8_t prefix, uint8_t op, X64Reg dst, X64Reg src)
 {
-    if(regext(reg)) emit_u8(V, REX_B);
+    vp_assertX(REG_CLASS(dst) == RC_XMM, "dst != xmm");
+    vp_assertX(REG_CLASS(src) == RC_XMM, "src != xmm");
+    uint8_t rd = REG_NUM(dst);
+    uint8_t rs = REG_NUM(src);
+    uint8_t rex = 0;
+    if(regext(rs)) rex |= REX_R;
+    if(regext(rd)) rex |= REX_B;
+    if(prefix) emit_u8(V, prefix);
+    if(rex) emit_u8(V, rex);
+    emit_u8(V, 0x0F);
+    emit_u8(V, op);
+    emit_u8(V, MODRM(3, rd & 7, rs & 7));
+}
+
+static VP_AINLINE void emit_sseM(VpState* V, uint8_t prefix, uint8_t op, uint8_t reg, X64Mem mem)
+{
+    uint8_t rex = rexM(reg, mem, 0);
+
+    if(prefix) emit_u8(V, prefix);
+    if(rex) emit_u8(V, rex);
+    emit_u8(V, 0x0F);
+    emit_u8(V, op);
+
+    emit_mem(V, reg, mem);
+}
+
+/* MOVSS [mem], gpr */
+void EMITX64(movssMX)(X64Mem dst, X64Reg src)
+{
+    vp_assertX(REG_CLASS(src) == RC_XMM, "src != xmm");
+    emit_sseM(V, 0xF3, 0x11, REG_NUM(src), dst);
+}
+
+/* MOVSS xmm, [mem] */
+void EMITX64(movssXM)(X64Reg dst, X64Mem src)
+{
+    vp_assertX(REG_CLASS(dst) == RC_XMM, "dst != xmm");
+    emit_sseM(V, 0xF3, 0x10, REG_NUM(dst), src);
+}
+
+/* MOVSD [mem], gpr */
+void EMITX64(movsdMX)(X64Mem dst, X64Reg src)
+{
+    vp_assertX(REG_CLASS(src) == RC_XMM, "src != xmm");
+    emit_sseM(V, 0xF2, 0x11, REG_NUM(src), dst);
+}
+
+/* MOVSD xmm, [mem] */
+void EMITX64(movsdXM)(X64Reg dst, X64Mem src)
+{
+    vp_assertX(REG_CLASS(dst) == RC_XMM, "dst != xmm");
+    emit_sseM(V, 0xF2, 0x10, REG_NUM(dst), src);
+}
+
+/* MOVSD xmm, xmm */
+void EMITX64(movsdXX)(X64Reg dst, X64Reg src) { emit_sseRR(V, 0xF2, 0x10, dst, src); }
+
+/* ADDSD xmm, xmm */
+void EMITX64(addsdXX)(X64Reg dst, X64Reg src) { emit_sseRR(V, 0xF2, 0x58, dst, src); }
+
+/* SUBSD xmm, xmm */
+void EMITX64(subsdXX)(X64Reg dst, X64Reg src) { emit_sseRR(V, 0xF2, 0x5C, dst, src); }
+
+/* MULSD xmm, xmm */
+void EMITX64(mulsdXX)(X64Reg dst, X64Reg src) { emit_sseRR(V, 0xF2, 0x59, dst, src); }
+
+/* DIVSD xmm, xmm */
+void EMITX64(divsdXX)(X64Reg dst, X64Reg src) { emit_sseRR(V, 0xF2, 0x5E, dst, src); }
+
+/* XORPD xmm, xmm */
+void EMITX64(xorpdXX)(X64Reg dst, X64Reg src) { emit_sseRR(V, 0x66, 0x57, dst, src); }
+
+/* COMISD xmm, xmm */
+void EMITX64(comisdXX)(X64Reg dst, X64Reg src) { emit_sseRR(V, 0x66, 0x2F, dst, src); }
+
+/* UCOMISD xmm, xmm */
+void EMITX64(ucomisdXX)(X64Reg dst, X64Reg src) { emit_sseRR(V, 0x66, 0x2E, dst, src); }
+
+/* MOVSS xmm, xmm */
+void EMITX64(movssXX)(X64Reg dst, X64Reg src) { emit_sseRR(V, 0xF3, 0x10, dst, src); }
+
+/* ADDSS xmm, xmm */
+void EMITX64(addssXX)(X64Reg dst, X64Reg src) { emit_sseRR(V, 0xF3, 0x58, dst, src); }
+
+/* SUBSS xmm, xmm */
+void EMITX64(subssXX)(X64Reg dst, X64Reg src) { emit_sseRR(V, 0xF3, 0x5C, dst, src); }
+
+/* MULSS xmm, xmm */
+void EMITX64(mulssXX)(X64Reg dst, X64Reg src) { emit_sseRR(V, 0xF3, 0x59, dst, src); }
+
+/* DIVSS xmm, xmm */
+void EMITX64(divssXX)(X64Reg dst, X64Reg src) { emit_sseRR(V, 0xF3, 0x5E, dst, src); }
+
+/* XORPS xmm, xmm */
+void EMITX64(xorpsXX)(X64Reg dst, X64Reg src) { emit_sseRR(V, 0x00, 0x57, dst, src); }
+
+/* COMISS xmm, xmm */
+void EMITX64(comissXX)(X64Reg dst, X64Reg src) { emit_sseRR(V, 0x00, 0x2F, dst, src); }
+
+/* UCOMISS xmm, xmm */
+void EMITX64(ucomissXX)(X64Reg dst, X64Reg src) { emit_sseRR(V, 0x00, 0x2E, dst, src); }
+
+/* PUSH gpr */
+void EMITX64(pushR)(X64Reg reg)
+{
+    vp_assertX(REG_CLASS(reg) == RC_GPR, "reg != gpr");
+    vp_assertX(REG_SIZE(reg) == 8, "reg must be 64 bit");
+    uint8_t rr = REG_NUM(reg);
+    if(regext(rr)) emit_u8(V, REX_W | REX_B);
+    emit_u8(V, 0x50 + (rr & 7));
+}
+
+/* POP gpr */
+void EMITX64(popR)(X64Reg reg)
+{
+    vp_assertX(REG_CLASS(reg) == RC_GPR, "reg != gpr");
+    vp_assertX(REG_SIZE(reg) == 8, "reg must be 64 bit");
+    uint8_t rr = REG_NUM(reg);
+    if(regext(rr)) emit_u8(V, REX_W | REX_B);
+    emit_u8(V, 0x58 + (rr & 7));
+}
+
+/* CALL gpr */
+void EMITX64(callR)(X64Reg reg)
+{
+    vp_assertX(REG_CLASS(reg) == RC_GPR, "reg != gpr");
+    uint8_t rr = REG_NUM(reg);
+    if(regext(rr)) emit_u8(V, REX_B);
     emit_u8(V, 0xFF);
-    emit_u8(V, MODRM(3, 2, reg & 7));
+    emit_u8(V, MODRM(3, 2, rr & 7));
 }
 
 /* CALL rel32 */
-void emit_call_rel32(VpState* V, int32_t rel)
+void EMITX64(callREL32)(int32_t rel)
 {
     emit_u8(V, 0xE8);
     emit_im32(V, rel);
 }
 
-/* CALL [rip + rel32] */
-void emit_call_rip_rel32(VpState* V, int32_t rel)
+/* CALL [mem] */
+void EMITX64(callRIP)(int32_t rel)
 {
     emit_u8(V, 0xFF);
     emit_u8(V, MODRM(0, 2, 5));
     emit_im32(V, rel);
 }
 
-/* -- INC instructions ---------------------------------------------- */
-
-/* INC reg64 */
-void emit_inc64_r(VpState* V, X64Reg reg)
-{
-    uint8_t rex = REX_W;
-    if(regext(reg)) rex |= REX_B;
-    emit_u8(V, rex);
-    emit_u8(V, 0xFF);
-    emit_u8(V, MODRM(3, 0, reg & 7));
-}
-
-/* INC reg32 */
-void emit_inc32_r(VpState* V, X64Reg reg)
-{
-    if(regext(reg)) emit_u8(V, REX_B);
-    emit_u8(V, 0xFF);
-    emit_u8(V, MODRM(3, 0, reg & 7));
-}
-
-/* INC reg16 */
-void emit_inc16_r(VpState* V, X64Reg reg)
-{
-    emit_u8(V, 0x66);
-    if(regext(reg)) emit_u8(V, REX_B);
-    emit_u8(V, 0xFF);
-    emit_u8(V, MODRM(3, 0, reg & 7));
-}
-
-/* INC reg8 */
-void emit_inc8_r(VpState* V, X64Reg reg)
-{
-    if(regext(reg) || (reg >= RSP && reg <= RDI)) emit_u8(V, REX_B);
-    emit_u8(V, 0xFE);
-    emit_u8(V, MODRM(3, 0, reg & 7));
-}
-
-/* -- DEC instructions ---------------------------------------------- */
-
-/* DEC reg64 */
-void emit_dec64_r(VpState* V, X64Reg reg)
-{
-    uint8_t rex = REX_W;
-    if(regext(reg)) rex |= REX_B;
-    emit_u8(V, rex);
-    emit_u8(V, 0xFF);
-    emit_u8(V, MODRM(3, 1, reg & 7));
-}
-
-/* DEC reg32 */
-void emit_dec32_r(VpState* V, X64Reg reg)
-{
-    if(regext(reg)) emit_u8(V, REX_B);
-    emit_u8(V, 0xFF);
-    emit_u8(V, MODRM(3, 1, reg & 7));
-}
-
-/* DEC reg16 */
-void emit_dec16_r(VpState* V, X64Reg reg)
-{
-    emit_u8(V, 0x66);
-    if(regext(reg)) emit_u8(V, REX_B);
-    emit_u8(V, 0xFF);
-    emit_u8(V, MODRM(3, 1, reg & 7));
-}
-
-/* DEC reg8 */
-void emit_dec8_r(VpState* V, X64Reg reg)
-{
-    if(regext(reg) || (reg >= RSP && reg <= RDI)) emit_u8(V, REX_B);
-    emit_u8(V, 0xFE);
-    emit_u8(V, MODRM(3, 1, reg & 7));
-}
-
-/* -- NEG instructions ---------------------------------------------- */
-
-/* NEG reg64 */
-void emit_neg64_r(VpState* V, X64Reg reg)
-{
-    uint8_t rex = REX_W;
-    if(regext(reg)) rex |= REX_B;
-    emit_u8(V, rex);
-    emit_u8(V, 0xF7);
-    emit_u8(V, MODRM(3, 2, reg & 7));
-}
-
-/* NEG reg32 */
-void emit_neg32_r(VpState* V, X64Reg reg)
-{
-    if(regext(reg)) emit_u8(V, REX_B);
-    emit_u8(V, 0xF7);
-    emit_u8(V, MODRM(3, 2, reg & 7));
-}
-
-/* NEG reg16 */
-void emit_neg16_r(VpState* V, X64Reg reg)
-{
-    emit_u8(V, 0x66);
-    if(regext(reg)) emit_u8(V, REX_B);
-    emit_u8(V, 0xF7);
-    emit_u8(V, MODRM(3, 2, reg & 7));
-}
-
-/* NEG reg8 */
-void emit_neg8_r(VpState* V, X64Reg reg)
-{
-    if(regext(reg) || (reg >= RSP && reg <= RDI)) emit_u8(V, REX_B);
-    emit_u8(V, 0xF6);
-    emit_u8(V, MODRM(3, 2, reg & 7));
-}
-
-/* -- NOT instructions ---------------------------------------------- */
-
-/* NOT reg64 */
-void emit_not64_r(VpState* V, X64Reg reg)
-{
-    uint8_t rex = REX_W;
-    if(regext(reg)) rex |= REX_B;
-    emit_u8(V, rex);
-    emit_u8(V, 0xF7);
-    emit_u8(V, MODRM(3, 2, reg & 7));
-}
-
-/* NOT reg32 */
-void emit_not32_r(VpState* V, X64Reg reg)
-{
-    if(regext(reg)) emit_u8(V, REX_B);
-    emit_u8(V, 0xF7);
-    emit_u8(V, MODRM(3, 2, reg & 7));
-}
-
-/* NOT reg16 */
-void emit_not16_r(VpState* V, X64Reg reg)
-{
-    emit_u8(V, 0x66);
-    if(regext(reg)) emit_u8(V, REX_B);
-    emit_u8(V, 0xF7);
-    emit_u8(V, MODRM(3, 2, reg & 7));
-}
-
-/* NOT reg8 */
-void emit_not8_r(VpState* V, X64Reg reg)
-{
-    if(regext(reg) || (reg >= RSP && reg <= RDI)) emit_u8(V, REX_B);
-    emit_u8(V, 0xF6);
-    emit_u8(V, MODRM(3, 2, reg & 7));
-}
-
-/* RET */
-void emit_ret(VpState* V)
-{
-    emit_u8(V, 0xC3);
-}
-
-/* -- PUSH instructions --------------------------------------------- */
-
-/* PUSH reg64 */
-void emit_push64_r(VpState* V, X64Reg reg)
-{
-    if(regext(reg)) emit_u8(V, REX_B);
-    emit_u8(V, 0x50 + (reg & 7));
-}
-
-/* -- POP instructions ---------------------------------------------- */
-
-/* POP reg64 */
-void emit_pop64_r(VpState* V, X64Reg reg)
-{
-    if(regext(reg)) emit_u8(V, REX_W | REX_B);
-    emit_u8(V, 0x58 + (reg & 7));
-}
-
-/* -- JMP instructions ---------------------------------------------- */
-
 /* JMP rel32 */
-void emit_jmp_rel32(VpState* V, int32_t rel)
+void EMITX64(jmpREL32)(int32_t rel)
 {
     emit_u8(V, 0xE9);
     emit_im32(V, rel);
 }
 
 /* Jcc rel32 */
-void emit_jcc_rel32(VpState* V, X64CC cc, int32_t rel)
+void EMITX64(jccREL32)(X64CC cc, int32_t rel)
 {
+    vp_assertX(cc >= CC_O && cc <= CC_G, "invalid cc");
     emit_u8(V, 0x0F);
     emit_u8(V, 0x80 + cc);
     emit_im32(V, rel);
 }
 
-/* -- SETcc instructions -------------------------------------------- */
-
 /* SETcc reg8 */
-void emit_setcc(VpState* V, X64CC cc, X64Reg reg)
+void EMITX64(setcc)(X64CC cc, X64Reg reg)
 {
-    if(regext(reg) || (reg >= RSP && reg <= RDI)) emit_u8(V, REX_B);
+    vp_assertX(cc >= CC_O && cc <= CC_G, "invalid cc");
+    if(regext(reg)) emit_u8(V, REX_B);
     emit_u8(V, 0x0F);
     emit_u8(V, 0x90 | (uint8_t)cc);
     emit_u8(V, MODRM(3, 0, reg & 7));
 }
 
-/* -- Sign-extension instructions ----------------------------------- */
-
 /* CWDE EAX, AX */
-void emit_cwde(VpState* V)
+void EMITX64(cwde)()
 {
     emit_u8(V, 0x98);
 }
 
 /* CDQ EDX:EAX, EAX */
-void emit_cdq(VpState* V)
+void EMITX64(cdq)()
 {
     emit_u8(V, 0x99);
 }
 
 /* CQO RDX:RAX, RAX */
-void emit_cqo(VpState* V)
+void EMITX64(cqo)()
 {
     emit_u8(V, REX_W);
     emit_u8(V, 0x99);
 }
 
-/* -- MUL instructions ---------------------------------------------- */
-
-/* MUL reg64 */
-void emit_mul64_r(VpState* V, X64Reg reg)
+/* RET */
+void EMITX64(ret)()
 {
-    uint8_t rex = REX_W;
-    if(regext(reg)) rex |= REX_B;
-    emit_u8(V, rex);
-    emit_u8(V, 0xF7);
-    emit_u8(V, MODRM(3, 4, reg & 7));
-}
-
-/* MUL reg32 */
-void emit_mul32_r(VpState* V, X64Reg reg)
-{
-    if(regext(reg)) emit_u8(V, REX_B);
-    emit_u8(V, 0xF7);
-    emit_u8(V, MODRM(3, 4, reg & 7));
-}
-
-/* MUL reg16 */
-void emit_mul16_r(VpState* V, X64Reg reg)
-{
-    emit_u8(V, 0x66);
-    if(regext(reg)) emit_u8(V, REX_B);
-    emit_u8(V, 0xF7);
-    emit_u8(V, MODRM(3, 4, reg & 7));
-}
-
-/* MUL reg8 */
-void emit_mul8_r(VpState* V, X64Reg reg)
-{
-    if(regext(reg) || (reg >= RSP && reg <= RDI)) emit_u8(V, REX_B);
-    emit_u8(V, 0xF6);
-    emit_u8(V, MODRM(3, 4, reg & 7));
-}
-
-/* -- DIV instructions ---------------------------------------------- */
-
-/* DIV reg64 */
-void emit_div64_r(VpState* V, X64Reg reg)
-{
-    uint8_t rex = REX_W;
-    if(regext(reg)) rex |= REX_B;
-    emit_u8(V, rex);
-    emit_u8(V, 0xF7);
-    emit_u8(V, MODRM(3, 6, reg & 7));
-}
-
-/* DIV reg32 */
-void emit_div32_r(VpState* V, X64Reg reg)
-{
-    if(regext(reg)) emit_u8(V, REX_B);
-    emit_u8(V, 0xF7);
-    emit_u8(V, MODRM(3, 6, reg & 7));
-}
-
-/* DIV reg16 */
-void emit_div16_r(VpState* V, X64Reg reg)
-{
-    emit_u8(V, 0x66);
-    if(regext(reg)) emit_u8(V, REX_B);
-    emit_u8(V, 0xF7);
-    emit_u8(V, MODRM(3, 6, reg & 7));
-}
-
-/* DIV reg8 */
-void emit_div8_r(VpState* V, X64Reg reg)
-{
-    if(regext(reg) || (reg >= RSP && reg <= RDI)) emit_u8(V, REX_B);
-    emit_u8(V, 0xF6);
-    emit_u8(V, MODRM(3, 6, reg & 7));
-}
-
-/* -- IDIV instructions --------------------------------------------- */
-
-/* IDIV reg64 */
-void emit_idiv64_r(VpState* V, X64Reg reg)
-{
-    uint8_t rex = REX_W;
-    if(regext(reg)) rex |= REX_B;
-    emit_u8(V, rex);
-    emit_u8(V, 0xF7);
-    emit_u8(V, MODRM(3, 7, reg & 7));
-}
-
-/* IDIV reg32 */
-void emit_idiv32_r(VpState* V, X64Reg reg)
-{
-    if(regext(reg)) emit_u8(V, REX_B);
-    emit_u8(V, 0xF7);
-    emit_u8(V, MODRM(3, 7, reg & 7));
-}
-
-/* IDIV reg16 */
-void emit_idiv16_r(VpState* V, X64Reg reg)
-{
-    emit_u8(V, 0x66);
-    if(regext(reg)) emit_u8(V, REX_B);
-    emit_u8(V, 0xF7);
-    emit_u8(V, MODRM(3, 7, reg & 7));
-}
-
-/* IDIV r/m8 */
-void emit_idiv8_r(VpState* V, X64Reg reg)
-{
-    /* For 8-bit, if reg is SPL, BPL, SIL, DIL or R8B-R15B, REX.B is needed */
-    if(regext(reg) || (reg >= RSP && reg <= RDI)) emit_u8(V, REX_B);
-    emit_u8(V, 0xF6);
-    emit_u8(V, MODRM(3, 7, reg & 7));
-}
-
-/* -- AND instructions ---------------------------------------------- */
-
-/* AND reg32, imm32 */
-void emit_and32_ri(VpState* V, X64Reg reg, int32_t imm)
-{
-    if(regext(reg)) emit_u8(V, REX_B);
-    if(reg == RAX)
-    {
-        emit_u8(V, 0x25); /* AND EAX, imm32 */
-        emit_im32(V, imm);
-    }
-    else if(vp_isimm8(imm))
-    {
-        emit_u8(V, 0x83);
-        emit_u8(V, MODRM(3, 4, reg & 7));
-        emit_u8(V, (uint8_t)imm);
-    }
-    else
-    {
-        emit_u8(V, 0x81);
-        emit_u8(V, MODRM(3, 4, reg & 7));
-        emit_im32(V, imm);
-    }
-}
-
-/* AND reg16, imm16 */
-void emit_and16_ri(VpState* V, X64Reg reg, int16_t imm)
-{
-    emit_u8(V, 0x66);
-    if(regext(reg)) emit_u8(V, REX_B);
-    if(reg == RAX)
-    {
-        emit_u8(V, 0x25); /* AND AX, imm16 */
-        emit_im16(V, imm);
-    }
-    else if(vp_isimm8(imm))
-    {
-        emit_u8(V, 0x83);
-        emit_u8(V, MODRM(3, 4, reg & 7));
-        emit_u8(V, (uint8_t)imm);
-    }
-    else
-    {
-        emit_u8(V, 0x81);
-        emit_u8(V, MODRM(3, 4, reg & 7));
-        emit_im16(V, imm);
-    }
-}
-
-/* AND reg8, imm8 */
-void emit_and8_ri(VpState* V, X64Reg reg, int8_t imm)
-{
-    if(regext(reg) || (reg >= RSP && reg <= RDI)) emit_u8(V, REX_B);
-    if(reg == RAX)
-    {
-        emit_u8(V, 0x24);
-        emit_u8(V, (uint8_t)imm);
-    }
-    else
-    {
-        emit_u8(V, 0x80);
-        emit_u8(V, MODRM(3, 4, reg & 7));
-        emit_u8(V, (uint8_t)imm);
-    }
-}
-
-/* AND reg64, reg64 */
-void emit_and64_rr(VpState* V, X64Reg dst, X64Reg src)
-{
-    uint8_t rex = REX_W;
-    if(regext(src)) rex |= REX_R;
-    if(regext(dst)) rex |= REX_B;
-    emit_u8(V, rex);
-    emit_u8(V, 0x21);
-    emit_u8(V, MODRM(3, src & 7, dst & 7));
-}
-
-/* AND reg32, reg32 */
-void emit_and32_rr(VpState* V, X64Reg dst, X64Reg src)
-{
-    uint8_t rex = 0;
-    if(regext(src)) rex |= REX_R;
-    if(regext(dst)) rex |= REX_B;
-    if (rex) emit_u8(V, rex);
-    emit_u8(V, 0x21);
-    emit_u8(V, MODRM(3, src & 7, dst & 7));
-}
-
-/* AND reg16, reg16 */
-void emit_and16_rr(VpState* V, X64Reg dst, X64Reg src)
-{
-    emit_u8(V, 0x66);
-    uint8_t rex = 0;
-    if(regext(src)) rex |= REX_R;
-    if(regext(dst)) rex |= REX_B;
-    if(rex) emit_u8(V, rex);
-    emit_u8(V, 0x21);
-    emit_u8(V, MODRM(3, src & 7, dst & 7));
-}
-
-/* AND reg8, reg8 */
-void emit_and8_rr(VpState* V, X64Reg dst, X64Reg src)
-{
-    uint8_t rex = 0;
-    if(regext(src) || (src >= RSP && src <= RDI)) rex |= REX_R;
-    if(regext(dst) || (dst >= RSP && dst <= RDI)) rex |= REX_B;
-    if(rex) emit_u8(V, rex);
-    emit_u8(V, 0x20);
-    emit_u8(V, MODRM(3, src & 7, dst & 7));
-}
-
-/* -- OR instructions ----------------------------------------------- */
-
-/* OR reg32, imm32 */
-void emit_or32_ri(VpState* V, X64Reg reg, int32_t imm)
-{
-    if(regext(reg)) emit_u8(V, REX_B);
-    if(reg == RAX)
-    {
-        emit_u8(V, 0x0D);
-        emit_im32(V, imm);
-    }
-    else if(vp_isimm8(imm))
-    {
-        emit_u8(V, 0x83);
-        emit_u8(V, MODRM(3, 1, reg & 7));
-        emit_u8(V, (uint8_t)imm);
-    }
-    else
-    {
-        emit_u8(V, 0x81);
-        emit_u8(V, MODRM(3, 1, reg & 7));
-        emit_im32(V, imm);
-    }
-}
-
-/* OR reg16, imm16 */
-void emit_or16_ri(VpState* V, X64Reg reg, int16_t imm)
-{
-    emit_u8(V, 0x66);
-    if(regext(reg)) emit_u8(V, REX_B);
-    if(reg == RAX)
-    {
-        emit_u8(V, 0x0D);
-        emit_im16(V, imm);
-    }
-    else if(vp_isimm8(imm))
-    {
-        emit_u8(V, 0x83);
-        emit_u8(V, MODRM(3, 1, reg & 7));
-        emit_u8(V, (uint8_t)imm);
-    }
-    else
-    {
-        emit_u8(V, 0x81);
-        emit_u8(V, MODRM(3, 1, reg & 7));
-        emit_im16(V, imm);
-    }
-}
-
-/* OR reg8, imm8 */
-void emit_or8_ri(VpState* V, X64Reg reg, int8_t imm)
-{
-    if(regext(reg) || (reg >= RSP && reg <= RDI)) emit_u8(V, REX_B);
-    if(reg == RAX)
-    {
-        emit_u8(V, 0x0C);
-        emit_u8(V, (uint8_t)imm);
-    }
-    else
-    {
-        emit_u8(V, 0x80);
-        emit_u8(V, MODRM(3, 1, reg & 7));
-        emit_u8(V, (uint8_t)imm);
-    }
-}
-
-/* OR reg64, reg64 */
-void emit_or64_rr(VpState* V, X64Reg dst, X64Reg src)
-{
-    uint8_t rex = REX_W;
-    if(regext(src)) rex |= REX_R;
-    if(regext(dst)) rex |= REX_B;
-    emit_u8(V, rex);
-    emit_u8(V, 0x09);
-    emit_u8(V, MODRM(3, src & 7, dst & 7));
-}
-
-/* OR reg32, reg32 */
-void emit_or32_rr(VpState* V, X64Reg dst, X64Reg src)
-{
-    uint8_t rex = 0;
-    if(regext(src)) rex |= REX_R;
-    if(regext(dst)) rex |= REX_B;
-    if(rex) emit_u8(V, rex);
-    emit_u8(V, 0x09);
-    emit_u8(V, MODRM(3, src & 7, dst & 7));
-}
-
-/* OR reg16, reg16 */
-void emit_or16_rr(VpState* V, X64Reg dst, X64Reg src)
-{
-    emit_u8(V, 0x66);
-    uint8_t rex = 0;
-    if(regext(src)) rex |= REX_R;
-    if(regext(dst)) rex |= REX_B;
-    if(rex) emit_u8(V, rex);
-    emit_u8(V, 0x09);
-    emit_u8(V, MODRM(3, src & 7, dst & 7));
-}
-
-/* OR reg8, reg8 */
-void emit_or8_rr(VpState* V, X64Reg dst, X64Reg src)
-{
-    uint8_t rex = 0;
-    if(regext(src) || (src >= RSP && src <= RDI)) rex |= REX_R;
-    if(regext(dst) || (dst >= RSP && dst <= RDI)) rex |= REX_B;
-    if(rex) emit_u8(V, rex);
-    emit_u8(V, 0x08);
-    emit_u8(V, MODRM(3, src & 7, dst & 7));
-}
-
-/* -- XOR instructions ---------------------------------------------- */
-
-/* XOR reg64, reg64 */
-void emit_xor64_rr(VpState* V, X64Reg dst, X64Reg src)
-{
-    uint8_t rex = REX_W;
-    if(regext(src)) rex |= REX_R;
-    if(regext(dst)) rex |= REX_B;
-    emit_u8(V, rex);
-    emit_u8(V, 0x31);
-    emit_u8(V, MODRM(3, src & 7, dst & 7));
-}
-
-/* XOR reg32, reg32 */
-void emit_xor32_rr(VpState* V, X64Reg dst, X64Reg src)
-{
-    uint8_t rex = 0;
-    if(regext(src)) rex |= REX_R;
-    if(regext(dst)) rex |= REX_B;
-    if(rex) emit_u8(V, rex);
-    emit_u8(V, 0x31);
-    emit_u8(V, MODRM(3, src & 7, dst & 7));
-}
-
-/* XOR reg16, reg16 */
-void emit_xor16_rr(VpState* V, X64Reg dst, X64Reg src)
-{
-    emit_u8(V, 0x66);
-    uint8_t rex = 0;
-    if(regext(src)) rex |= REX_R;
-    if(regext(dst)) rex |= REX_B;
-    if(rex) emit_u8(V, rex);
-    emit_u8(V, 0x31);
-    emit_u8(V, MODRM(3, src & 7, dst & 7));
-}
-
-/* XOR reg8, reg8 */
-void emit_xor8_rr(VpState* V, X64Reg dst, X64Reg src)
-{
-    uint8_t rex = 0;
-    if(regext(src) || (src >= RSP && src <= RDI)) rex |= REX_R;
-    if(regext(dst) || (dst >= RSP && dst <= RDI)) rex |= REX_B;
-    if(rex) emit_u8(V, rex);
-    emit_u8(V, 0x30);
-    emit_u8(V, MODRM(3, src & 7, dst & 7));
-}
-
-/* XOR reg32, imm32 */
-void emit_xor32_ri(VpState* V, X64Reg reg, int32_t imm)
-{
-    if(regext(reg)) emit_u8(V, REX_B);
-    if(reg == RAX)
-    {
-        emit_u8(V, 0x35); /* XOR EAX, imm32 */
-        emit_im32(V, imm);
-    }
-    else if(vp_isimm8(imm))
-    {
-        emit_u8(V, 0x83); /* XOR Ev, Ib (sign-extended 8-bit immediate) */
-        emit_u8(V, MODRM(3, 6, reg & 7));   /* /6 extension for XOR */
-        emit_u8(V, (uint8_t)imm);
-    }
-    else
-    {
-        emit_u8(V, 0x81); /* XOR Ev, Iz */
-        emit_u8(V, MODRM(3, 6, reg & 7));   /* /6 extension for XOR */
-        emit_im32(V, imm);
-    }
-}
-
-/* XOR reg16, imm16 */
-void emit_xor16_ri(VpState* V, X64Reg reg, int16_t imm)
-{
-    emit_u8(V, 0x66); /* Operand size prefix for 16-bit */
-    if(regext(reg)) emit_u8(V, REX_B);
-    if(reg == RAX)
-    {
-        /* RAX maps to AX if REX.W is not set */
-        emit_u8(V, 0x35); /* XOR AX, imm16 */
-        emit_im16(V, imm);
-    }
-    else if(vp_isimm8(imm))
-    {
-        emit_u8(V, 0x83); /* XOR Gw, Ib (sign-extended 8-bit immediate) */
-        emit_u8(V, MODRM(3, 6, reg & 7));
-        emit_u8(V, (uint8_t)imm);
-    }
-    else
-    {
-        emit_u8(V, 0x81); /* XOR Gw, Iw */
-        emit_u8(V, MODRM(3, 6, reg & 7));
-        emit_im16(V, imm);
-    }
-}
-
-/* XOR reg8, imm8 */
-void emit_xor8_ri(VpState* V, X64Reg reg, int8_t imm)
-{
-    if(regext(reg) || (reg >= RSP && reg <= RDI)) emit_u8(V, REX_B);
-    if(reg == RAX)
-    {
-        emit_u8(V, 0x34); /* XOR AL, imm8 */
-        emit_u8(V, (uint8_t)imm);
-    }
-    else
-    {
-        emit_u8(V, 0x80); /* XOR Gb, Ib */
-        emit_u8(V, MODRM(3, 6, reg & 7));   /* /6 extension for XOR */
-        emit_u8(V, (uint8_t)imm);
-    }
-}
-
-/* -- SHL instructions ---------------------------------------------- */
-
-/* SHL reg64, imm8 */
-void emit_shl_r64i8(VpState* V, X64Reg reg, uint8_t imm)
-{
-    uint8_t rex = REX_W;
-    if(regext(reg)) rex |= REX_B;
-    emit_u8(V, rex);
-    if(imm == 1)
-    {
-        emit_u8(V, 0xD1);
-        emit_u8(V, MODRM(3, 4, reg & 7));
-    }
-    else
-    {
-        emit_u8(V, 0xC1);
-        emit_u8(V, MODRM(3, 4, reg & 7));
-        emit_u8(V, imm);
-    }
-}
-
-/* SHL reg32, imm8 */
-void emit_shl_r32i8(VpState* V, X64Reg reg, uint8_t imm)
-{
-    if(regext(reg)) emit_u8(V, REX_B);
-    if(imm == 1)
-    {
-        emit_u8(V, 0xD1);
-        emit_u8(V, MODRM(3, 4, reg & 7));
-    }
-    else
-    {
-        emit_u8(V, 0xC1);
-        emit_u8(V, MODRM(3, 4, reg & 7));
-        emit_u8(V, imm);
-    }
-}
-
-/* SHL reg16, imm8 */
-void emit_shl_r16i8(VpState* V, X64Reg reg, uint8_t imm)
-{
-    emit_u8(V, 0x66);
-    if(regext(reg)) emit_u8(V, REX_B);
-    if(imm == 1)
-    {
-        emit_u8(V, 0xD1);
-        emit_u8(V, MODRM(3, 4, reg & 7));
-    }
-    else
-    {
-        emit_u8(V, 0xC1);
-        emit_u8(V, MODRM(3, 4, reg & 7));
-        emit_u8(V, imm);
-    }
-}
-
-/* SHL reg8, imm8 */
-void emit_shl_r8i8(VpState* V, X64Reg reg, uint8_t imm)
-{
-    if(regext(reg) || (reg >= RSP && reg <= RDI)) emit_u8(V, REX_B);
-    if(imm == 1)
-    {
-        emit_u8(V, 0xD0);
-        emit_u8(V, MODRM(3, 4, reg & 7));
-    }
-    else
-    {
-        emit_u8(V, 0xC0);
-        emit_u8(V, MODRM(3, 4, reg & 7));
-        emit_u8(V, imm);
-    }
-}
-
-/* SHL reg64, CL */
-void emit_shl_r64cl(VpState* V, X64Reg reg)
-{
-    uint8_t rex = REX_W;
-    if(regext(reg)) rex |= REX_B;
-    emit_u8(V, rex);
-    emit_u8(V, 0xD3);
-    emit_u8(V, MODRM(3, 4, reg & 7));
-}
-
-/* SHL reg32, CL */
-void emit_shl_r32cl(VpState* V, X64Reg reg)
-{
-    if(regext(reg)) emit_u8(V, REX_B);
-    emit_u8(V, 0xD3);
-    emit_u8(V, MODRM(3, 4, reg & 7));
-}
-
-/* SHL reg16, CL */
-void emit_shl_r16cl(VpState* V, X64Reg reg)
-{
-    emit_u8(V, 0x66);
-    if(regext(reg)) emit_u8(V, REX_B);
-    emit_u8(V, 0xD3);
-    emit_u8(V, MODRM(3, 4, reg & 7));
-}
-
-/* SHL reg8, CL */
-void emit_shl_r8cl(VpState* V, X64Reg reg)
-{
-    if(regext(reg) || (reg >= RSP && reg <= RDI)) emit_u8(V, REX_B);
-    emit_u8(V, 0xD2);
-    emit_u8(V, MODRM(3, 4, reg & 7));
-}
-
-/* -- SHR instructions ---------------------------------------------- */
-
-/* SHR reg64, imm8 */
-void emit_shr_r64i8(VpState* V, X64Reg reg, uint8_t imm)
-{
-    uint8_t rex = REX_W;
-    if(regext(reg)) rex |= REX_B;
-    emit_u8(V, rex);
-    emit_u8(V, 0xC1);
-    emit_u8(V, MODRM(3, 5, reg & 7));
-    emit_u8(V, imm);
-}
-
-/* SHR reg32, imm8 */
-void emit_shr_r32i8(VpState* V, X64Reg reg, uint8_t imm)
-{
-    if(regext(reg)) emit_u8(V, REX_B);
-    emit_u8(V, 0xC1);
-    emit_u8(V, MODRM(3, 5, reg & 7));
-    emit_u8(V, imm);
-}
-
-/* SHR reg16, imm8 */
-void emit_shr_r16i8(VpState* V, X64Reg reg, uint8_t imm)
-{
-    emit_u8(V, 0x66);
-    if(regext(reg)) emit_u8(V, REX_B);
-    emit_u8(V, 0xC1);
-    emit_u8(V, MODRM(3, 5, reg & 7));
-    emit_u8(V, imm);
-}
-
-/* SHR reg8, imm8 */
-void emit_shr8_ri(VpState* V, X64Reg reg, uint8_t imm)
-{
-    if(regext(reg) || (reg >= RSP && reg <= RDI)) emit_u8(V, REX_B);
-    emit_u8(V, 0xC0);
-    emit_u8(V, MODRM(3, 5, reg & 7));
-    emit_u8(V, imm);
-}
-
-/* SHR reg64, CL */
-void emit_shr_r64cl(VpState* V, X64Reg reg)
-{
-    uint8_t rex = REX_W;
-    if(regext(reg)) rex |= REX_B;
-    emit_u8(V, rex);
-    emit_u8(V, 0xD3);
-    emit_u8(V, MODRM(3, 5, reg & 7));
-}
-
-/* SHR reg32, CL */
-void emit_shr_r32cl(VpState* V, X64Reg reg)
-{
-    if(regext(reg)) emit_u8(V, REX_B);
-    emit_u8(V, 0xD3);
-    emit_u8(V, MODRM(3, 5, reg & 7));
-}
-
-/* SHR reg16, CL */
-void emit_shr_r16cl(VpState* V, X64Reg reg)
-{
-    emit_u8(V, 0x66);
-    if(regext(reg)) emit_u8(V, REX_B);
-    emit_u8(V, 0xD3);
-    emit_u8(V, MODRM(3, 5, reg & 7));
-}
-
-/* SHR reg8, CL */
-void emit_shr_r8cl(VpState* V, X64Reg reg)
-{
-    if(regext(reg) || (reg >= RSP && reg <= RDI)) emit_u8(V, REX_B);
-    emit_u8(V, 0xD2);
-    emit_u8(V, MODRM(3, 5, reg & 7));
-}
-
-/* -- SAR instructions ---------------------------------------------- */
-
-/* SAR reg64, imm8 */
-void emit_sar_r64i8(VpState* V, X64Reg reg, uint8_t imm)
-{
-    uint8_t rex = REX_W;
-    if(regext(reg)) rex |= REX_B;
-    emit_u8(V, rex);
-    if(imm == 1)
-    {
-        emit_u8(V, 0xD1);
-        emit_u8(V, MODRM(3, 7, reg & 7));
-    }
-    else
-    {
-        emit_u8(V, 0xC1);
-        emit_u8(V, MODRM(3, 7, reg & 7));
-        emit_u8(V, (uint8_t)imm);
-    }
-}
-
-/* SAR reg32, imm8 */
-void emit_sar_r32i8(VpState* V, X64Reg reg, uint8_t imm)
-{
-    if(regext(reg)) emit_u8(V, REX_B);
-    if(imm == 1)
-    {
-        emit_u8(V, 0xD1);
-        emit_u8(V, MODRM(3, 7, reg & 7));
-    }
-    else
-    {
-        emit_u8(V, 0xC1);
-        emit_u8(V, MODRM(3, 7, reg & 7));
-        emit_u8(V, imm);
-    }
-}
-
-/* SAR reg16, imm8 */
-void emit_sar_r16i8(VpState* V, X64Reg reg, uint8_t imm)
-{
-    emit_u8(V, 0x66);
-    if(regext(reg)) emit_u8(V, REX_B);
-    if(imm == 1)
-    {
-        emit_u8(V, 0xD1);
-        emit_u8(V, MODRM(3, 7, reg & 7));
-    }
-    else
-    {
-        emit_u8(V, 0xC1);
-        emit_u8(V, MODRM(3, 7, reg & 7));
-        emit_u8(V, imm);
-    }
-}
-
-/* SAR reg8, imm8 */
-void emit_sar_r8i8(VpState* V, X64Reg reg, uint8_t imm)
-{
-    if(regext(reg) || (reg >= RSP && reg <= RDI)) emit_u8(V, REX_B);
-    if(imm == 1)
-    {
-        emit_u8(V, 0xD0);
-        emit_u8(V, MODRM(3, 7, reg & 7));
-    }
-    else
-    {
-        emit_u8(V, 0xC0);
-        emit_u8(V, MODRM(3, 7, reg & 7));
-        emit_u8(V, imm);
-    }
-}
-
-/* SAR reg64, CL */
-void emit_sar_r64cl(VpState* V, X64Reg reg)
-{
-    uint8_t rex = REX_W;
-    if(regext(reg)) rex |= REX_B;
-    emit_u8(V, rex);
-    emit_u8(V, 0xD3);
-    emit_u8(V, MODRM(3, 7, reg & 7));
-}
-
-/* SAR reg32, CL */
-void emit_sar_r32cl(VpState* V, X64Reg reg)
-{
-    if(regext(reg)) emit_u8(V, REX_B);
-    emit_u8(V, 0xD3);
-    emit_u8(V, MODRM(3, 7, reg & 7));
-}
-
-/* SAR reg16, CL */
-void emit_sar_r16cl(VpState* V, X64Reg reg)
-{
-    emit_u8(V, 0x66);
-    if(regext(reg)) emit_u8(V, REX_B);
-    emit_u8(V, 0xD3);
-    emit_u8(V, MODRM(3, 7, reg & 7));
-}
-
-/* SAR reg8, CL */
-void emit_sar_r8cl(VpState* V, X64Reg reg)
-{
-    if(regext(reg) || (reg >= RSP && reg <= RDI)) emit_u8(V, REX_B);
-    emit_u8(V, 0xD2);
-    emit_u8(V, MODRM(3, 7, reg & 7));
-}
-
-/* -- TEST instructions --------------------------------------------- */
-
-/* TEST reg64, reg64 */
-void emit_test64_rr(VpState* V, X64Reg dst, X64Reg src)
-{
-    uint8_t rex = REX_W;
-    if(regext(src)) rex |= REX_R;
-    if(regext(dst)) rex |= REX_B;
-    emit_u8(V, rex);
-    emit_u8(V, 0x85);
-    emit_u8(V, MODRM(3, src & 7, dst & 7));
-}
-
-/* TEST reg32, reg32 */
-void emit_test32_rr(VpState* V, X64Reg dst, X64Reg src)
-{
-    uint8_t rex = 0;
-    if(regext(src)) rex |= REX_R;
-    if(regext(dst)) rex |= REX_B;
-    if (rex) emit_u8(V, rex);
-    emit_u8(V, 0x85);
-    emit_u8(V, MODRM(3, src & 7, dst & 7));
-}
-
-/* TEST reg16, reg16 */
-void emit_test16_rr(VpState* V, X64Reg dst, X64Reg src)
-{
-    emit_u8(V, 0x66);
-    uint8_t rex = 0;
-    if(regext(src)) rex |= REX_R;
-    if(regext(dst)) rex |= REX_B;
-    if(rex) emit_u8(V, rex);
-    emit_u8(V, 0x85);
-    emit_u8(V, MODRM(3, src & 7, dst & 7));
-}
-
-/* TEST reg8, reg8 */
-void emit_test8_rr(VpState* V, X64Reg dst, X64Reg src)
-{
-    uint8_t rex = 0;
-    if(regext(src) || (src >= RSP && src <= RDI)) rex |= REX_R;
-    if(regext(dst) || (dst >= RSP && dst <= RDI)) rex |= REX_B;
-    if(rex) emit_u8(V, rex);
-    emit_u8(V, 0x84);
-    emit_u8(V, MODRM(3, src & 7, dst & 7));
-}
-
-/* -- CMP instructions ---------------------------------------------- */
-
-/* CMP reg32, imm32 */
-void emit_cmp32_ri(VpState* V, X64Reg reg, int32_t imm)
-{
-    if(regext(reg)) emit_u8(V, REX_B);
-    if(reg == RAX)
-    {
-        emit_u8(V, 0x3D);
-        emit_im32(V, imm);
-    }
-    else if(vp_isimm8(imm))
-    {
-        emit_u8(V, 0x83);
-        emit_u8(V, MODRM(3, 7, reg & 7));
-        emit_u8(V, (uint8_t)imm);
-    }
-    else
-    {
-        emit_u8(V, 0x81);
-        emit_u8(V, MODRM(3, 7, reg & 7));
-        emit_im32(V, imm);
-    }
-}
-
-/* CMP reg16, imm16 */
-void emit_cmp16_ri(VpState* V, X64Reg reg, int16_t imm)
-{
-    emit_u8(V, 0x66);
-    if(regext(reg)) emit_u8(V, REX_B);
-    if(reg == RAX)
-    {
-        emit_u8(V, 0x3D);
-        emit_im16(V, imm);
-    }
-    else if(vp_isimm8(imm))
-    {
-        emit_u8(V, 0x83);
-        emit_u8(V, MODRM(3, 7, reg & 7));
-        emit_u8(V, (uint8_t)imm);
-    }
-    else
-    {
-        emit_u8(V, 0x81);
-        emit_u8(V, MODRM(3, 7, reg & 7));
-        emit_im16(V, imm);
-    }
-}
-
-/* CMP reg8, imm8 */
-void emit_cmp8_ri(VpState* V, X64Reg reg, int8_t imm)
-{
-    if(regext(reg) || (reg >= RSP && reg <= RDI)) emit_u8(V, REX_B);
-    if(reg == RAX)
-    {
-        emit_u8(V, 0x3C);
-        emit_u8(V, (uint8_t)imm);
-    }
-    else
-    {
-        emit_u8(V, 0x80);
-        emit_u8(V, MODRM(3, 7, reg & 7));
-        emit_u8(V, (uint8_t)imm);
-    }
-}
-
-/* CMP reg64, reg64 */
-void emit_cmp64_rr(VpState* V, X64Reg dst, X64Reg src)
-{
-    uint8_t rex = REX_W;
-    if(regext(src)) rex |= REX_R;
-    if(regext(dst)) rex |= REX_B;
-    emit_u8(V, rex);
-    emit_u8(V, 0x39);
-    emit_u8(V, MODRM(3, src & 7, dst & 7));
-}
-
-/* CMP reg32, reg32 */
-void emit_cmp32_rr(VpState* V, X64Reg dst, X64Reg src)
-{
-    uint8_t rex = 0;
-    if(regext(src)) rex |= REX_R;
-    if(regext(dst)) rex |= REX_B;
-    if (rex) emit_u8(V, rex);
-    emit_u8(V, 0x39);
-    emit_u8(V, MODRM(3, src & 7, dst & 7));
-}
-
-/* CMP reg16, reg16 */
-void emit_cmp16_rr(VpState* V, X64Reg dst, X64Reg src)
-{
-    emit_u8(V, 0x66);
-    uint8_t rex = 0;
-    if(regext(src)) rex |= REX_R;
-    if(regext(dst)) rex |= REX_B;
-    if(rex) emit_u8(V, rex);
-    emit_u8(V, 0x39);
-    emit_u8(V, MODRM(3, src & 7, dst & 7));
-}
-
-/* CMP reg8, reg8 */
-void emit_cmp8_rr(VpState* V, X64Reg dst, X64Reg src)
-{
-    uint8_t rex = 0;
-    if(regext(src) || (src >= RSP && src <= RDI)) rex |= REX_R;
-    if(regext(dst) || (dst >= RSP && dst <= RDI)) rex |= REX_B;
-    if(rex) emit_u8(V, rex);
-    emit_u8(V, 0x38);
-    emit_u8(V, MODRM(3, src & 7, dst & 7));
-}
-
-/* Emit common SSE/SSE2 rr instructions */
-static VP_AINLINE void emit_sse_rr(VpState* V, uint8_t prefix, uint8_t op, X64Reg dst, X64Reg src)
-{
-    uint8_t rex = 0;
-    if(regext(src)) rex |= REX_R;
-    if(regext(dst)) rex |= REX_B;
-    if(prefix) emit_u8(V, prefix);
-    if(rex) emit_u8(V, rex);
-    emit_u8(V, 0x0F);
-    emit_u8(V, op);
-    emit_u8(V, MODRM(3, dst & 7, src & 7));
-}
-
-/* MOVSD xmm, xmm */
-void emit_movsd_rr(VpState* V, X64Reg dst, X64Reg src)
-{
-    emit_sse_rr(V, 0xF2, 0x10, dst, src);
-}
-
-/* ADDSD xmm, xmm */
-void emit_addsd_rr(VpState* V, X64Reg dst, X64Reg src)
-{
-    emit_sse_rr(V, 0xF2, 0x58, dst, src);
-}
-
-/* SUBSD xmm, xmm */
-void emit_subsd_rr(VpState* V, X64Reg dst, X64Reg src)
-{
-    emit_sse_rr(V, 0xF2, 0x5C, dst, src);
-}
-
-/* MULSD xmm, xmm */
-void emit_mulsd_rr(VpState* V, X64Reg dst, X64Reg src)
-{
-    emit_sse_rr(V, 0xF2, 0x59, dst, src);
-}
-
-/* DIVSD xmm, xmm */
-void emit_divsd_rr(VpState* V, X64Reg dst, X64Reg src)
-{
-    emit_sse_rr(V, 0xF2, 0x5E, dst, src);
-}
-
-/* XORPD xmm, xmm */
-void emit_xorpd_rr(VpState* V, X64Reg dst, X64Reg src)
-{
-    emit_sse_rr(V, 0x66, 0x57, dst, src);
-}
-
-/* COMISD xmm, xmm */
-void emit_comisd_rr(VpState* V, X64Reg dst, X64Reg src)
-{
-    emit_sse_rr(V, 0x66, 0x2F, dst, src);
-}
-
-/* UCOMISD xmm, xmm */
-void emit_ucomisd_rr(VpState* V, X64Reg dst, X64Reg src)
-{
-    emit_sse_rr(V, 0x66, 0x2E, dst, src);
-}
-
-/* MOVSS xmm, xmm */
-void emit_movss_rr(VpState* V, X64Reg dst, X64Reg src)
-{
-    emit_sse_rr(V, 0xF3, 0x10, dst, src);
-}
-
-/* ADDSS xmm, xmm */
-void emit_addss_rr(VpState* V, X64Reg dst, X64Reg src)
-{
-    emit_sse_rr(V, 0xF3, 0x58, dst, src);
-}
-
-/* SUBSS xmm, xmm */
-void emit_subss_rr(VpState* V, X64Reg dst, X64Reg src)
-{
-    emit_sse_rr(V, 0xF3, 0x5C, dst, src);
-}
-
-/* MULSS xmm, xmm */
-void emit_mulss_rr(VpState* V, X64Reg dst, X64Reg src)
-{
-    emit_sse_rr(V, 0xF3, 0x59, dst, src);
-}
-
-/* DIVSS xmm, xmm */
-void emit_divss_rr(VpState* V, X64Reg dst, X64Reg src)
-{
-    emit_sse_rr(V, 0xF3, 0x5E, dst, src);
-}
-
-/* XORPS xmm, xmm */
-void emit_xorps_rr(VpState* V, X64Reg dst, X64Reg src)
-{
-    emit_sse_rr(V, 0x00, 0x57, dst, src);
-}
-
-/* COMISS xmm, xmm */
-void emit_comiss_rr(VpState* V, X64Reg dst, X64Reg src)
-{
-    emit_sse_rr(V, 0x00, 0x2F, dst, src);
-}
-
-/* UCOMISS xmm, xmm */
-void emit_ucomiss_rr(VpState* V, X64Reg dst, X64Reg src)
-{
-    emit_sse_rr(V, 0x00, 0x2E, dst, src);
-}
-
-/* Emit common SSE/SSE2 instructions with memory operand (load/store) */
-static void emit_sse_mem(VpState* V, uint8_t prefix, uint8_t op, X64Reg reg, X64Mem mem)
-{
-    X64Reg base, idx;
-    uint8_t scale;
-    int32_t disp;
-    mem_op(mem, &base, &idx, &scale, &disp);
-
-    if(idx != NOREG)
-    {
-        vp_assertX(IS_POW2(scale) && scale <= 8, "bad scale (1/2/4/8)");
-    }
-
-    if(prefix) emit_u8(V, prefix);
-
-    uint8_t rex = rex_mem(reg, base, idx, false);
-    if(rex) emit_u8(V, rex);
-    emit_u8(V, 0x0F);
-    emit_u8(V, op);
-
-    emit_modrm_sib_disp(V, reg, base, idx, scale, disp);
-}
-
-/* MOVSS xmm, [base + index*scale + disp32] */
-void emit_movss_rm(VpState* V, X64Reg dst, X64Mem mem)
-{
-    emit_sse_mem(V, 0xF3, 0x10, dst, mem);
-}
-
-/* MOVSS [base + index*scale + disp32], xmm */
-void emit_movss_mr(VpState* V, X64Mem mem, X64Reg src)
-{
-    emit_sse_mem(V, 0xF3, 0x11, src, mem);
-}
-
-/* MOVSD xmm, [base + index*scale + disp32] */
-void emit_movsd_rm(VpState* V, X64Reg dst, X64Mem mem)
-{
-    emit_sse_mem(V, 0xF2, 0x10, dst, mem);
-}
-
-/* MOVSD [base + index*scale + disp32], xmm */
-void emit_movsd_mr(VpState* V, X64Mem mem, X64Reg src)
-{
-    emit_sse_mem(V, 0xF2, 0x11, src, mem);
-}
-
-/* CVTSD2SS xmm, xmm */
-void emit_cvtsd2ss_rr(VpState* V, X64Reg dst, X64Reg src)
-{
-    uint8_t rex = 0;
-    if(regext(dst)) rex |= REX_R;
-    if(regext(src)) rex |= REX_B;
-
-    emit_u8(V, 0xF2); /* CVTSD2SS prefix */
-    if(rex) emit_u8(V, rex);
-    emit_u8(V, 0x0F);
-    emit_u8(V, 0x5A);
-    emit_u8(V, MODRM(3, dst & 7, src & 7));
-}
-
-/* CVTSS2SD xmm, xmm */
-void emit_cvtss2sd_rr(VpState* V, X64Reg dst, X64Reg src)
-{
-    uint8_t rex = 0;
-    if(regext(dst)) rex |= REX_R;
-    if(regext(src)) rex |= REX_B;
-
-    emit_u8(V, 0xF3); /* CVTSS2SD prefix */
-    if(rex) emit_u8(V, rex);
-    emit_u8(V, 0x0F);
-    emit_u8(V, 0x5A);
-    emit_u8(V, MODRM(3, dst & 7, src & 7));
-}
-
-/* CVTTSS2SI r32, xmm */
-void emit_cvttss2si_r32x(VpState* V, X64Reg dst, X64Reg src)
-{
-    uint8_t rex = 0;
-    if(regext(dst)) rex |= REX_R;
-    if(regext(src)) rex |= REX_B;
-
-    emit_u8(V, 0xF3); /* F3 prefix for SSE */
-    if(rex) emit_u8(V, rex);
-    emit_u8(V, 0x0F);
-    emit_u8(V, 0x2C); /* CVTTSS2SI opcode */
-    emit_u8(V, MODRM(3, dst & 7, src & 7));
-}
-
-/* CVTTSS2SI r64, xmm */
-void emit_cvttss2si_r64x(VpState* V, X64Reg dst, X64Reg src)
-{
-    uint8_t rex = REX_W;
-    if(regext(dst)) rex |= REX_R;
-    if(regext(src)) rex |= REX_B;
-
-    emit_u8(V, 0xF3); /* F3 prefix for SSE */
-    if(rex) emit_u8(V, rex);
-    emit_u8(V, 0x0F);
-    emit_u8(V, 0x2C); /* CVTTSS2SI opcode */
-    emit_u8(V, MODRM(3, dst & 7, src & 7));
-}
-
-/* CVTTSD2SI r32, xmm */
-void emit_cvttsd2si_r32x(VpState* V, X64Reg dst, X64Reg src)
-{
-    uint8_t rex = 0;
-    if(regext(dst)) rex |= REX_R;
-    if(regext(src)) rex |= REX_B;
-
-    emit_u8(V, 0xF2); /* F2 prefix for SSE */
-    if(rex) emit_u8(V, rex);
-    emit_u8(V, 0x0F);
-    emit_u8(V, 0x2C); /* CVTTSD2SI opcode */
-    emit_u8(V, MODRM(3, dst & 7, src & 7));
-}
-
-/* CVTTSD2SI r64, xmm */
-void emit_cvttsd2si_r64x(VpState* V, X64Reg dst, X64Reg src)
-{
-    uint8_t rex = REX_W;
-    if(regext(dst)) rex |= REX_R;
-    if(regext(src)) rex |= REX_B;
-
-    emit_u8(V, 0xF2); /* F2 prefix for SSE */
-    if(rex) emit_u8(V, rex);
-    emit_u8(V, 0x0F);
-    emit_u8(V, 0x2C); /* CVTTSD2SI opcode */
-    emit_u8(V, MODRM(3, dst & 7, src & 7));
-}
-
-/* CVTSI2SS xmm, reg32 */
-void emit_cvtsi2ss_xr32(VpState* V, X64Reg dst, X64Reg src)
-{
-    uint8_t rex = 0;
-    if(regext(src)) rex |= REX_B;
-    if(regext(dst)) rex |= REX_R;
-    if(rex) emit_u8(V, rex);
-    emit_u8(V, 0xF3); /* F3 prefix */
-    emit_u8(V, 0x0F);
-    emit_u8(V, 0x2A); /* CVTSI2SS opcode */
-    emit_u8(V, MODRM(3, dst & 7, src & 7));
-}
-
-/* CVTSI2SS xmm, reg64 */
-void emit_cvtsi2ss_xr64(VpState* V, X64Reg dst, X64Reg src)
-{
-    uint8_t rex = REX_W;
-    if(regext(src)) rex |= REX_B;
-    if(regext(dst)) rex |= REX_R;
-    emit_u8(V, rex);
-    emit_u8(V, 0xF3); /* F3 prefix */
-    emit_u8(V, 0x0F);
-    emit_u8(V, 0x2A); /* CVTSI2SS opcode */
-    emit_u8(V, MODRM(3, dst & 7, src & 7));
-}
-
-/* CVTSI2SD xmm, reg32 */
-void emit_cvtsi2sd_xr32(VpState* V, X64Reg dst, X64Reg src)
-{
-    uint8_t rex = 0;
-    if(regext(src)) rex |= REX_B;
-    if(regext(dst)) rex |= REX_R;
-    if(rex) emit_u8(V, rex);
-    emit_u8(V, 0xF2); /* F2 prefix */
-    emit_u8(V, 0x0F);
-    emit_u8(V, 0x2A); /* CVTSI2SD opcode */
-    emit_u8(V, MODRM(3, dst & 7, src & 7));
-}
-
-/* CVTSI2SD xmm, reg64 */
-void emit_cvtsi2sd_xr64(VpState* V, X64Reg dst, X64Reg src)
-{
-    uint8_t rex = REX_W;
-    if(regext(src)) rex |= REX_B;
-    if(regext(dst)) rex |= REX_R;
-    emit_u8(V, rex);
-    emit_u8(V, 0xF2); /* F2 prefix */
-    emit_u8(V, 0x0F);
-    emit_u8(V, 0x2A); /* CVTSI2SD opcode */
-    emit_u8(V, MODRM(3, dst & 7, src & 7));
+    emit_u8(V, 0xC3);
 }
 
 /* RDTSC */
-void emit_rdtsc(VpState* V)
+void EMITX64(rdtsc)()
 {
     emit_u8(V, 0x0f);
     emit_u8(V, 0x31);
 }
 
 /* CPUID */
-void emit_cpuid(VpState* V)
+void EMITX64(cpuid)()
 {
     emit_u8(V, 0x0f);
     emit_u8(V, 0xa2);
-}
-
-void emit_mov_rr(VRSize p, uint32_t r1, uint32_t r2)
-{
-    switch(p)
-    {
-    case VRSize1: emit_mov8_rr(V, r1, r2); break;
-    case VRSize2: emit_mov16_rr(V, r1, r2); break;
-    case VRSize4: emit_mov32_rr(V, r1, r2); break;
-    case VRSize8: emit_mov64_rr(V, r1, r2); break;
-    }
-}
-
-void emit_mov_ri(VRSize p, uint32_t r, int64_t i)
-{
-    switch(p)
-    {
-    case VRSize1: emit_mov8_ri(V, r, i); break;
-    case VRSize2: emit_mov16_ri(V, r, i); break;
-    case VRSize4: emit_mov32_ri(V, r, i); break;
-    case VRSize8: emit_mov64_ri(V, r, i); break;
-    }
-}
-
-void emit_add_rr(VRSize p, uint32_t r1, uint32_t r2)
-{
-    switch(p)
-    {
-    case VRSize1: emit_add8_rr(V, r1, r2); break;
-    case VRSize2: emit_add16_rr(V, r1, r2); break;
-    case VRSize4: emit_add32_rr(V, r1, r2); break;
-    case VRSize8: emit_add64_rr(V, r1, r2); break;
-    }
-}
-
-void emit_add_ri(VRSize p, uint32_t r, int64_t i)
-{
-    switch(p)
-    {
-    case VRSize1: emit_add8_ri(V, r, i); break;
-    case VRSize2: emit_add16_ri(V, r, i); break;
-    case VRSize4: emit_add32_ri(V, r, i); break;
-    case VRSize8: emit_add64_ri(V, r, i); break;
-    }
-}
-
-void emit_sub_rr(VRSize p, uint32_t r1, uint32_t r2)
-{
-    switch(p)
-    {
-    case VRSize1: emit_sub8_rr(V, r1, r2); break;
-    case VRSize2: emit_sub16_rr(V, r1, r2); break;
-    case VRSize4: emit_sub32_rr(V, r1, r2); break;
-    case VRSize8: emit_sub64_rr(V, r1, r2); break;
-    }
-}
-
-void emit_sub_ri(VRSize p, uint32_t r, int64_t i)
-{
-    switch(p)
-    {
-    case VRSize1: emit_sub8_ri(V, r, i); break;
-    case VRSize2: emit_sub16_ri(V, r, i); break;
-    case VRSize4: emit_sub32_ri(V, r, i); break;
-    case VRSize8: vp_assertX(0, "?"); break;
-    }
-}
-
-void emit_mul_r(VRSize p, uint32_t r)
-{
-    switch(p)
-    {
-    case VRSize1: emit_mul8_r(V, r); break;
-    case VRSize2: emit_mul16_r(V, r); break;
-    case VRSize4: emit_mul32_r(V, r); break;
-    case VRSize8: emit_mul64_r(V, r); break;
-    }
-}
-
-void emit_div_r(VRSize p, uint32_t r)
-{
-    switch(p)
-    {
-    case VRSize1: emit_div8_r(V, r); break;
-    case VRSize2: emit_div16_r(V, r); break;
-    case VRSize4: emit_div32_r(V, r); break;
-    case VRSize8: emit_div64_r(V, r); break;
-    }
-}
-
-void emit_idiv_r(VRSize p, uint32_t r)
-{
-    switch(p)
-    {
-    case VRSize1: emit_idiv8_r(V, r); break;
-    case VRSize2: emit_idiv16_r(V, r); break;
-    case VRSize4: emit_idiv32_r(V, r); break;
-    case VRSize8: emit_idiv64_r(V, r); break;
-    }
-}
-
-void emit_and_rr(VRSize p, uint32_t r1, uint32_t r2)
-{
-    switch(p)
-    {
-    case VRSize1: emit_and8_rr(V, r1, r2); break;
-    case VRSize2: emit_and16_rr(V, r1, r2); break;
-    case VRSize4: emit_and32_rr(V, r1, r2); break;
-    case VRSize8: emit_and64_rr(V, r1, r2); break;
-    }
-}
-
-void emit_and_ri(VRSize p, uint32_t r, int64_t i)
-{
-    switch(p)
-    {
-    case VRSize1: emit_and8_ri(V, r, i); break;
-    case VRSize2: emit_and16_ri(V, r, i); break;
-    case VRSize4: emit_and32_ri(V, r, i); break;
-    case VRSize8: vp_assertX(0, "?"); break;
-    }
-}
-
-void emit_or_rr(VRSize p, uint32_t r1, uint32_t r2)
-{
-    switch(p)
-    {
-    case VRSize1: emit_or8_rr(V, r1, r2); break;
-    case VRSize2: emit_or16_rr(V, r1, r2); break;
-    case VRSize4: emit_or32_rr(V, r1, r2); break;
-    case VRSize8: emit_or64_rr(V, r1, r2); break;
-    }
-}
-
-void emit_or_ri(VRSize p, uint32_t r, int64_t i)
-{
-    switch(p)
-    {
-    case VRSize1: emit_or8_ri(V, r, i); break;
-    case VRSize2: emit_or16_ri(V, r, i); break;
-    case VRSize4: emit_or32_ri(V, r, i); break;
-    case VRSize8: vp_assertX(0, "?"); break;
-    }
-}
-
-void emit_xor_rr(VRSize p, uint32_t r1, uint32_t r2)
-{
-    switch(p)
-    {
-    case VRSize1: emit_xor8_rr(V, r1, r2); break;
-    case VRSize2: emit_xor16_rr(V, r1, r2); break;
-    case VRSize4: emit_xor32_rr(V, r1, r2); break;
-    case VRSize8: emit_xor64_rr(V, r1, r2); break;
-    }
-}
-
-void emit_xor_ri(VRSize p, uint32_t r, int64_t i)
-{
-    switch(p)
-    {
-    case VRSize1: emit_xor8_ri(V, r, i); break;
-    case VRSize2: emit_xor16_ri(V, r, i); break;
-    case VRSize4: emit_xor32_ri(V, r, i); break;
-    case VRSize8: vp_assertX(0, "?"); break;
-    }
-}
-
-void emit_shl_ri(VRSize p, uint32_t r, uint8_t i)
-{
-    switch(p)
-    {
-    case VRSize1: emit_shl_r8i8(V, r, i); break;
-    case VRSize2: emit_shl_r16i8(V, r, i); break;
-    case VRSize4: emit_shl_r32i8(V, r, i); break;
-    case VRSize8: emit_shl_r64i8(V, r, i); break;
-    }
-}
-
-void emit_shl_rcl(VRSize p, uint32_t r)
-{
-    switch(p)
-    {
-    case VRSize1: emit_shl_r8cl(V, r); break;
-    case VRSize2: emit_shl_r16cl(V, r); break;
-    case VRSize4: emit_shl_r32cl(V, r); break;
-    case VRSize8: emit_shl_r64cl(V, r); break;
-    }
-}
-
-void emit_shr_ri(VRSize p, uint32_t r, uint8_t i)
-{
-    switch(p)
-    {
-    case VRSize1: emit_shr8_ri(V, r, i); break;
-    case VRSize2: emit_shr_r16i8(V, r, i); break;
-    case VRSize4: emit_shr_r32i8(V, r, i); break;
-    case VRSize8: emit_shr_r64i8(V, r, i); break;
-    }
-}
-
-void emit_shr_rcl(VRSize p, uint32_t r)
-{
-    switch(p)
-    {
-    case VRSize1: emit_shr_r8cl(V, r); break;
-    case VRSize2: emit_shr_r16cl(V, r); break;
-    case VRSize4: emit_shr_r32cl(V, r); break;
-    case VRSize8: emit_shr_r64cl(V, r); break;
-    }
-}
-
-void emit_sar_ri(VRSize p, uint32_t r, uint8_t i)
-{
-    switch(p)
-    {
-    case VRSize1: emit_sar_r8i8(V, r, i); break;
-    case VRSize2: emit_sar_r16i8(V, r, i); break;
-    case VRSize4: emit_sar_r32i8(V, r, i); break;
-    case VRSize8: emit_sar_r64i8(V, r, i); break;
-    }
-}
-
-void emit_sar_rcl(VRSize p, uint32_t r)
-{
-    switch(p)
-    {
-    case VRSize1: emit_sar_r8cl(V, r); break;
-    case VRSize2: emit_sar_r16cl(V, r); break;
-    case VRSize4: emit_sar_r32cl(V, r); break;
-    case VRSize8: emit_sar_r64cl(V, r); break;
-    }
-}
-
-void emit_inc_r(VRSize p, uint32_t r)
-{
-    switch(p)
-    {
-    case VRSize1: emit_inc8_r(V, r); break;
-    case VRSize2: emit_inc16_r(V, r); break;
-    case VRSize4: emit_inc32_r(V, r); break;
-    case VRSize8: emit_inc64_r(V, r); break;
-    }
-}
-
-void emit_dec_r(VRSize p, uint32_t r)
-{
-    switch(p)
-    {
-    case VRSize1: emit_dec8_r(V, r); break;
-    case VRSize2: emit_dec16_r(V, r); break;
-    case VRSize4: emit_dec32_r(V, r); break;
-    case VRSize8: emit_dec64_r(V, r); break;
-    }
-}
-
-void emit_neg_r(VRSize p, uint32_t r)
-{
-    switch(p)
-    {
-    case VRSize1: emit_neg8_r(V, r); break;
-    case VRSize2: emit_neg16_r(V, r); break;
-    case VRSize4: emit_neg32_r(V, r); break;
-    case VRSize8: emit_neg64_r(V, r); break;
-    }
-}
-
-void emit_not_r(VRSize p, uint32_t r)
-{
-    switch(p)
-    {
-    case VRSize1: emit_not8_r(V, r); break;
-    case VRSize2: emit_not16_r(V, r); break;
-    case VRSize4: emit_not32_r(V, r); break;
-    case VRSize8: emit_not64_r(V, r); break;
-    }
-}
-
-void emit_test_r(VRSize p, uint32_t r1, uint32_t r2)
-{
-    switch(p)
-    {
-    case VRSize1: emit_test8_rr(V, r1, r2); break;
-    case VRSize2: emit_test16_rr(V, r1, r2); break;
-    case VRSize4: emit_test32_rr(V, r1, r2); break;
-    case VRSize8: emit_test64_rr(V, r1, r2); break;
-    }
-}
-
-void emit_cmp_ri(VRSize p, uint32_t r, int64_t i)
-{
-    switch(p)
-    {
-    case VRSize1: emit_cmp8_ri(V, r, i); break;
-    case VRSize2: emit_cmp16_ri(V, r, i); break;
-    case VRSize4: emit_cmp32_ri(V, r, i); break;
-    case VRSize8: vp_assertX(0, "?"); break;
-    }
-}
-
-void emit_cmp_rr(VRSize p, uint32_t r1, uint32_t r2)
-{
-    switch(p)
-    {
-    case VRSize1: emit_cmp8_rr(V, r1, r2); break;
-    case VRSize2: emit_cmp16_rr(V, r1, r2); break;
-    case VRSize4: emit_cmp32_rr(V, r1, r2); break;
-    case VRSize8: emit_cmp64_rr(V, r1, r2); break;
-    }
-}
-
-void emit_movsx_rr(VRSize pd, VRSize ps, X64Reg dst, X64Reg src)
-{
-    switch(pd)
-    {
-        case VRSize8:
-            switch(ps)
-            {
-                case VRSize4: emit_movsx_r64r32(V, dst, src); break;
-                case VRSize2: emit_movsx_r64r16(V, dst, src); break;
-                case VRSize1: emit_movsx_r64r8(V, dst, src); break;
-                default: vp_assertX(0, "?"); break;
-            }
-            break;
-        case VRSize4:
-            switch(ps)
-            {
-                case VRSize2: emit_movsx_r32r16(V, dst, src); break;
-                case VRSize1: emit_movsx_r32r8(V, dst, src); break;
-                default: vp_assertX(0, "?"); break;
-            }
-            break;
-        case VRSize2:
-            switch(ps)
-            {
-                case VRSize1: emit_movsx_r16r8(V, dst, src); break;
-                default: vp_assertX(0, "?"); break;
-            }
-            break;
-        default:
-            vp_assertX(0, "?");
-            break;
-    }
-}
-
-void emit_movzx_rr(VRSize pd, VRSize ps, uint32_t r1, uint32_t r2)
-{
-    switch(pd)
-    {
-    case VRSize2:
-        vp_assertX(ps == VRSize1, "invalid size combination");
-        emit_movzx_r16r8(V, r1, r2);
-        break;
-    case VRSize4:
-        switch(ps)
-        {
-        case VRSize1: emit_movzx_r32r8(V, r1, r2); break;
-        case VRSize2: emit_movzx_r32r16(V, r1, r2); break;
-        default: vp_assertX(0, "?"); break;
-        }
-        break;
-    case VRSize8:
-        switch(ps)
-        {
-        case VRSize1: emit_movzx_r64r8(V, r1, r2); break;
-        case VRSize2: emit_movzx_r64r16(V, r1, r2); break;
-        default: vp_assertX(0, "?"); break;
-        }
-        break;
-    default:
-        vp_assertX(0, "?");
-        break;
-    }
-}
-
-void emit_cvttss2si_rx(VRSize p, uint32_t r1, uint32_t r2)
-{
-    switch(p)
-    {
-    case VRSize4: emit_cvttss2si_r32x(V, r1, r2); break;
-    case VRSize8: emit_cvttss2si_r64x(V, r1, r2); break;
-    default: vp_assertX(0, "?"); break;
-    }
-}
-
-void emit_cvttsd2si_rx(VRSize p, uint32_t r1, uint32_t r2)
-{
-    switch(p)
-    {
-    case VRSize4: emit_cvttsd2si_r32x(V, r1, r2); break;
-    case VRSize8: emit_cvttsd2si_r64x(V, r1, r2); break;
-    default: vp_assertX(0, "?"); break;
-    }
-}
-
-void emit_cvtsi2ss_xr(VRSize p, uint32_t r1, uint32_t r2)
-{
-    switch(p)
-    {
-        case VRSize4: emit_cvtsi2ss_xr64(V, r1, r2); break;
-        case VRSize8: emit_cvtsi2ss_xr32(V, r1, r2); break;
-        default: vp_assertX(0, "?"); break;
-    }
-}
-
-void emit_cvtsi2sd_xr(VRSize p, uint32_t r1, uint32_t r2)
-{
-    switch(p)
-    {
-        case VRSize4: emit_cvtsi2sd_xr64(V, r1, r2); break;
-        case VRSize8: emit_cvtsi2sd_xr32(V, r1, r2); break;
-        default: vp_assertX(0, "?"); break;
-    }
 }

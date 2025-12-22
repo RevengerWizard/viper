@@ -9,6 +9,7 @@
 #include "vp_emit_x64.h"
 #include "vp_codegen.h"
 #include "vp_ir.h"
+#include "vp_target_x64.h"
 
 typedef struct RegParam
 {
@@ -78,16 +79,18 @@ static void params_assign(RegAlloc* ra, Code* code)
         VReg* vr = rp->vr;
         uint32_t size = vp_type_sizeof(rp->ty);
         VRSize p = vp_msb(size);
-        uint32_t src = ra->set->imap[rp->idx];
+        uint32_t idx = ra->set->imap[rp->idx];
         if(vrf_spill(vr))
         {
             uint32_t ofs = vr->fi.ofs;
             vp_assertX(ofs, "0 offset");
-            emit_mov64_mr(V, MEM(RBP, NOREG, 1, ofs), src);
+            EMITX64(movMR)(MEM_MAKE(RN_BP, NOREG, 1, ofs, 8), REG_MAKE(idx, RC_GPR, 8, SUB_LO));
         }
-        else if(src != vr->phys)
+        else if(idx != vr->phys)
         {
-            emit_mov_rr(p, vr->phys, src);
+            X64Reg dst = REG_MAKE(vr->phys, RC_GPR, p, SUB_LO);
+            X64Reg src = REG_MAKE(idx, RC_GPR, p, SUB_LO);
+            EMITX64(movRR)(dst, src);
         }
     }
 
@@ -96,26 +99,27 @@ static void params_assign(RegAlloc* ra, Code* code)
     {
         RegParam* rp = &fparams[i];
         VReg* vr = rp->vr;
-        uint32_t src = ra->set->imap[rp->idx];
+        uint32_t idx = ra->set->fmap[rp->idx];
+        X64Reg src = REG_MAKE(idx, RC_XMM, 16, SUB_LO);
         if(vrf_spill(vr))
         {
             uint32_t ofs = vr->fi.ofs;
             vp_assertX(ofs, "0 offset");
             switch(vr->vsize)
             {
-                case VRSize4: emit_movss_mr(V, MEM(RBP, NOREG, 1, ofs), src); break;
-                case VRSize8: emit_movsd_mr(V, MEM(RBP, NOREG, 1, ofs), src); break;
-                default: vp_assertX(0, "?");
+            case VRSize4: EMITX64(movssMX)(MEM_MAKE(RN_BP, NOREG, 1, ofs, 8), src); break;
+            case VRSize8: EMITX64(movsdMX)(MEM_MAKE(RN_BP, NOREG, 1, ofs, 8), src); break;
+            default: vp_assertX(0, "?");
             }
         }
-        else if(src != vr->phys)
+        else if(idx != vr->phys)
         {
-            uint32_t dst = vr->phys;
+            X64Reg dst = REG_MAKE(vr->phys, RC_XMM, 16, SUB_LO);
             switch(vr->vsize)
             {
-                case VRSize4: emit_movss_rr(V, dst, src); break;
-                case VRSize8: emit_movsd_rr(V, dst, src); break;
-                default: vp_assertX(0, "?");
+            case VRSize4: EMITX64(movssXX)(dst, src); break;
+            case VRSize8: EMITX64(movsdXX)(dst, src); break;
+            default: vp_assertX(0, "?");
             }
         }
     }
@@ -184,11 +188,11 @@ void push_caller_save(vec_t(RegSave) saves, uint32_t total)
         ofs -= TARGET_PTR_SIZE;
         if(rs->flo)
         {
-            emit_movsd_mr(V, MEM(RSP, NOREG, 1, ofs), rs->reg);
+            EMITX64(movsdMX)(MEM_MAKE(RN_SP, NOREG, 1, ofs, 8), REG_MAKE(rs->reg, RC_XMM, 16, SUB_LO));
         }
         else
         {
-            emit_mov64_mr(V, MEM(RSP, NOREG, 1, ofs), rs->reg);
+            EMITX64(movMR)(MEM_MAKE(RN_SP, NOREG, 1, ofs, 8), REG_MAKE(rs->reg, RC_GPR, 8, SUB_LO));
         }
     }
 }
@@ -200,11 +204,11 @@ void pop_caller_save(vec_t(RegSave) saves, uint32_t ofs)
         RegSave* rs = &saves[i];
         if(rs->flo)
         {
-            emit_movsd_mr(V, rs->reg, MEM(RSP, NOREG, 1, ofs));
+            EMITX64(movsdXM)(REG_MAKE(rs->reg, RC_XMM, 16, SUB_LO), MEM_MAKE(RN_SP, NOREG, 1, ofs, 8));
         }
         else
         {
-            emit_mov64_rm(V, rs->reg, MEM(RSP, NOREG, 1, ofs));
+            EMITX64(movRM)(REG_MAKE(rs->reg, RC_GPR, 8, SUB_LO), MEM_MAKE(RN_SP, NOREG, 1, ofs, 8));
         }
         ofs += TARGET_PTR_SIZE;
     }
@@ -217,7 +221,8 @@ static uint32_t push_callee_save(RegAlloc* ra, RegSet iused)
     {
         if((ra->set->itemp & (1ULL << i)) && (iused & (1ULL << i)))
         {
-            emit_push64_r(V, i);
+            X64Reg reg = REG_MAKE(i, RC_GPR, 8, SUB_LO);
+            EMITX64(pushR)(reg);
             inum++;
         }
     }
@@ -230,7 +235,8 @@ static void pop_callee_save(RegAlloc* ra, RegSet iused)
     {
         if((ra->set->itemp & (1ULL << i)) && (iused & (1ULL << i)))
         {
-            emit_pop64_r(V, i);
+            X64Reg reg = REG_MAKE(i, RC_GPR, 8, SUB_LO);
+            EMITX64(popR)(reg);
         }
     }
 }
@@ -254,8 +260,8 @@ static void emit_body(Code* code)
         numcallee = push_callee_save(ra, ra->iregbits);
         if(code->framesize > 0 || raf_stackframe(ra))
         {
-            emit_push64_r(V, RBP);
-            emit_mov64_rr(V, RBP, RSP);
+            EMITX64(pushR)(RBP);
+            EMITX64(movRR)(RBP, RSP);
             saverbp = true;
             /* RBP pushed, 16 bytes align becomes 0 */
             frameofs = 0;
@@ -272,7 +278,7 @@ static void emit_body(Code* code)
 
         if(framesize > 0)
         {
-            emit_sub_r64i32(V, RSP, framesize);
+            EMITX64(subRI)(RSP, framesize);
         }
         params_assign(ra, code);
     }
@@ -293,15 +299,15 @@ static void emit_body(Code* code)
     {
         if(framesize > 0)
         {
-            emit_add64_ri(V, RSP, framesize);
+            EMITX64(addRI)(RSP, framesize);
         }
         if(saverbp)
         {
-            emit_mov64_rr(V, RSP, RBP);
-            emit_pop64_r(V, RBP);
+            EMITX64(movRR)(RSP, RBP);
+            EMITX64(popR)(RBP);
         }
         pop_callee_save(ra, ra->iregbits);
-        emit_ret(V);
+        EMITX64(ret)();
     }
 }
 

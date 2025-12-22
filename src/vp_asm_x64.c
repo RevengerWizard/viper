@@ -7,62 +7,102 @@
 #include "vp_err.h"
 #include "vp_lex.h"
 #include "vp_str.h"
+#include "vp_target_x64.h"
 
 typedef enum RawOpCode
 {
     R_NONE,
-    R_MOV,
-    R_OR,
-    R_SHL,
-    R_RDTSC,
-    R_CPUID,
-    R_RET,
+    R_MOV, R_MOVSX, R_MOVZX, R_LEA,
+    R_PUSH, R_POP,
+    R_CWDE, R_CDQ, R_CQO,
+    R_ADD, R_SUB, R_MUL, R_DIV, R_IDIV,
+    R_INC, R_DEC, R_NEG,
+    R_AND, R_OR, R_XOR, R_NOT,
+    R_TEST, R_CMP,
+    R_SHL, R_SHR, R_SAR,
+    /* SSE */
+    R_MOVSS, R_MOVSD,
+    R_ADDSS, R_ADDSD, R_SUBSS, R_SUBSD,
+    R_MULSS, R_MULSD, R_DIVSS, R_DIVSD,
+    R_XORPS, R_XORPD,
+    R_COMISS, R_COMISD, R_UCOMISS, R_UCOMISD,
+    R_CVTTSS2SI, R_CVTTSD2SI,
+    R_CVTSI2SS, R_CVTSI2SD,
+    R_CVTSS2SD, R_CVTSD2SS,
+    R_RDTSC, R_CPUID, R_RET,
 } RawOpCode;
 
 const char* opcode[] = {
-    "mov",
-    "or",
-    "shl",
-    "rdtsc",
-    "cpuid",
-    "ret",
+    "mov", "movsx", "movzx", "lea",
+    "push", "pop",
+    "cwde", "cdq", "cqo",
+    "add", "sub", "mul", "div", "idiv",
+    "inc", "dec", "neg",
+    "and", "or", "xor", "not",
+    "test", "cmp",
+    "shl", "shr", "sar",
+    /* SSE */
+    "movss", "movsd",
+    "addss", "addsd", "subss", "subsd",
+    "mulss", "mulsd", "divss", "divsd",
+    "xorps", "xorpd",
+    "comiss", "comisd", "ucomiss", "ucomisd",
+    "cvttss2si", "cvttsd2si",
+    "cvtsi2ss", "cvtsi2sd",
+    "cvtss2sd", "cvtsd2ss",
+    "rdtsc", "cpuid", "ret"
 };
 
 const RegInfo regs[] = {
     /* 8-bit */
-    { "al", AL }, { "cl", CL }, { "dl", DL }, { "bl", BL },
-    { "ah", AH }, { "ch", CH }, { "dh", DH }, { "bh", BH },
-    { "r8b", R8B }, { "r9b", R9B }, { "r10b", R10B }, { "r11b", R11B },
-    { "r12b", R12B }, { "r13b", R13B }, { "r14b", R14B }, { "r15b", R15B },
-    { "spl", SPL }, { "bpl", BPL }, { "sil", SIL }, { "dil", DIL },
+    {"al", AL}, {"cl", CL}, {"dl", DL}, {"bl", BL},
+    {"ah", AH}, {"ch", CH}, {"dh", DH}, {"bh", BH},
+    {"r8b", R8B}, {"r9b", R9B}, {"r10b", R10B}, { "r11b", R11B},
+    {"r12b", R12B}, {"r13b", R13B}, {"r14b", R14B}, {"r15b", R15B},
+    {"spl", SPL }, {"bpl", BPL}, {"sil", SIL}, {"dil", DIL},
 
     /* 16-bit */
-    { "ax", AX }, { "cx", CX }, { "dx", DX }, { "bx", BX },
-    { "sp", SP }, { "bp", BP }, { "si", SI }, { "di", DI },
-    { "r8w", R8W }, { "r9w", R9W }, { "r10w", R10W }, { "r11w", R11W },
-    { "r12w", R12W }, { "r13w", R13W }, { "r14w", R14W }, { "r15w", R15W },
+    {"ax", AX}, {"cx", CX}, {"dx", DX}, {"bx", BX},
+    {"sp", SP}, {"bp", BP}, {"si", SI}, { "di", DI},
+    {"r8w", R8W}, {"r9w", R9W}, {"r10w", R10W}, {"r11w", R11W},
+    {"r12w", R12W}, {"r13w", R13W}, {"r14w", R14W}, {"r15w", R15W},
 
     /* 32-bit */
-    { "eax", EAX }, { "ecx", ECX }, { "edx",EDX }, { "ebx", EBX },
-    { "esp", ESP }, { "ebp", EBP }, { "esi", ESI }, { "edi", EDI },
-    { "r8d", R8D }, { "r9d", R9D }, { "r10d", R10D }, { "r11d", R11D },
-    { "r12d", R12D }, { "r13d", R13D }, { "r14d", R14D }, { "r15d", R15D },
+    {"eax", EAX}, {"ecx", ECX}, {"edx",EDX}, {"ebx", EBX},
+    {"esp", ESP}, {"ebp", EBP}, {"esi", ESI}, {"edi", EDI},
+    {"r8d", R8D}, {"r9d", R9D}, {"r10d", R10D}, { "r11d", R11D},
+    {"r12d", R12D}, {"r13d", R13D}, {"r14d", R14D}, {"r15d", R15D},
 
     /* 64-bit */
-    { "rax", xRAX }, { "rcx", xRCX }, { "rdx", xRDX }, { "rbx", xRBX },
-    { "rsp", xRSP }, { "rbp", xRBP }, { "rsi", xRSI }, { "rdi", xRDI },
-    { "r8", xR8 }, { "r9", xR9 }, { "r10", xR10 }, { "r11", xR11 },
-    { "r12", xR12 }, { "r13", xR13 }, { "r14", xR14 }, { "r15", xR15 },
+    {"rax", RAX}, {"rcx", RCX}, {"rdx", RDX}, {"rbx", RBX},
+    {"rsp", RSP}, {"rbp", RBP}, {"rsi", RSI}, {"rdi", RDI},
+    {"r8", R8}, {"r9", R9}, {"r10", R10}, {"r11", R11},
+    {"r12", R12}, {"r13", R13}, {"r14", R14}, {"r15", R15},
 
-    { "rip", xRIP },
+    {"rip", RIP},
 };
 
-#define R8 (1 << 0)
-#define R16 (1 << 1)
-#define R32 (1 << 2)
-#define R64 (1 << 3)
-#define IMM (1 << 4)    /* Immediate */
-#define IND (1 << 5)    /* Indirect */
+static RegInfo xregs[] = {
+    /* 128-bit */
+    {"xmm0", XMM0}, {"xmm1", XMM1}, {"xmm2", XMM2}, {"xmm3", XMM3},
+    {"xmm4", XMM4}, {"xmm5", XMM5}, {"xmm6", XMM6}, {"xmm7", XMM7},
+    {"xmm8", XMM8}, {"xmm9", XMM9}, {"xmm10", XMM10}, {"xmm11", XMM11},
+    {"xmm12", XMM12}, {"xmm13", XMM13}, {"xmm14", XMM14}, {"xmm15", XMM15}
+};
+
+/* Flags */
+enum
+{
+    F_R8 = 1 << 0,
+    F_R16 = 1 << 1,
+    F_R32 = 1 << 2,
+    F_R64 = 1 << 3,
+    F_IMM = 1 << 4,    /* Immediate */
+    F_IND = 1 << 5,    /* Indirect */
+    F_XMM = 1 << 6,
+};
+
+#define F_GP (F_R8 | F_R16 | F_R32 | F_R64)
 
 typedef struct
 {
@@ -78,35 +118,116 @@ typedef struct
 
 const InstTable insttab[] = {
     [R_MOV] = {6, (const OpArray*[]){
-        &(OpArray){MOV_RR, {R8, R8}},    /* mov reg8, reg8 */
-        &(OpArray){MOV_RR, {R16, R16}},  /* mov reg16, reg16 */
-        &(OpArray){MOV_RR, {R32, R32}},  /* mov reg32, reg32 */
-        &(OpArray){MOV_RR, {R64, R64}},  /* mov reg64, reg64 */
-        &(OpArray){MOV_RI, {R8 | R16 | R32 | R64, IMM}},  /* mov reg, imm */
-        &(OpArray){MOV_RM, {R8 | R16 | R32 | R64, IND}},  /* mov reg, [mem] */
-        &(OpArray){MOV_MR, {IND, R8 | R16 | R32 | R64}},  /* mov [mem], reg */
+        &(OpArray){MOV_RR, {F_R8, F_R8}},    /* mov r8, r8 */
+        &(OpArray){MOV_RR, {F_R16, F_R16}},  /* mov r16, r16 */
+        &(OpArray){MOV_RR, {F_R32, F_R32}},  /* mov r32, r32 */
+        &(OpArray){MOV_RR, {F_R64, F_R64}},  /* mov r64, r64 */
+        &(OpArray){MOV_RI, {F_GP, F_IMM}},  /* mov reg, imm */
+        &(OpArray){MOV_RM, {F_GP, F_IND}},  /* mov reg, [mem] */
+        &(OpArray){MOV_MR, {F_GP}},  /* mov [mem], gpr */
         }
     },
-    [R_OR] = { 1, (const OpArray*[]){
-        &(OpArray){OR_RR, {R64, R64}},  /* or reg64, reg64 */
+    [R_MOVSX] = {1, (const OpArray*[]){
+        &(OpArray){MOVSX_RR, {F_GP, F_GP}}  /* movsx gpr, gpr */
         }
     },
-    [R_SHL] = { 1, (const OpArray*[]){
-        &(OpArray){SHL_RI, {R64, IMM}},  /* shl reg, imm */
+    [R_MOVZX] = {1, (const OpArray*[]){
+        &(OpArray){MOVZX_RR, {F_GP, F_GP}}  /* movzx gpr, gpr */
         }
     },
-    [R_RDTSC] = { 1, (const OpArray*[]){
-        &(OpArray){RDTSC, {}},  /* rdtsc */
+    [R_LEA] = {1, (const OpArray*[]){
+        &(OpArray){LEA_RM, {F_R64, F_IND}}  /* lea r64, [gpr] */
         }
     },
-    [R_CPUID] = { 1, (const OpArray*[]){
-        &(OpArray){CPUID, {}},  /* cpuid */
+    [R_PUSH] = {1, (const OpArray*[]){
+        &(OpArray){PUSH_R, {F_R64}}     /* push r64 */
         }
     },
-    [R_RET] = { 1, (const OpArray*[]){
-        &(OpArray){RET, {}},  /* ret */
+    [R_POP] = {1, (const OpArray*[]){
+        &(OpArray){POP_R, {F_R64}}  /* pop r64 */
         }
     },
+    [R_CWDE] = {1, (const OpArray*[]){ &(OpArray){CWDE, {}} }},
+    [R_CDQ] = {1, (const OpArray*[]){ &(OpArray){CDQ, {}} }},
+    [R_CQO] = {1, (const OpArray*[]){ &(OpArray){CQO, {}} }},
+    [R_ADD] = {2, (const OpArray*[]){
+        &(OpArray){ADD_RR, {F_R8, F_R8}},   /* add r8, r8 */
+        &(OpArray){ADD_RR, {F_R16, F_R16}},   /* add r16, r16 */
+        &(OpArray){ADD_RR, {F_R32, F_R32}},   /* add r32, r32 */
+        &(OpArray){ADD_RR, {F_R64, F_R64}},   /* add r64, r64 */
+        &(OpArray){ADD_RI, {F_GP, F_IMM}},  /* add gpr, imm */
+    }},
+    [R_SUB] = {2, (const OpArray*[]){
+        &(OpArray){SUB_RR, {F_R8, F_R8}},   /* sub r8, r8 */
+        &(OpArray){SUB_RR, {F_R16, F_R16}},   /* sub r16, r16 */
+        &(OpArray){SUB_RR, {F_R32, F_R32}},   /* sub r32, r32 */
+        &(OpArray){SUB_RR, {F_R64, F_R64}},   /* sub r64, r64 */
+        &(OpArray){SUB_RI, {F_GP, F_IMM}},  /* sub gpr, imm */
+    }},
+    [R_MUL] = {1, (const OpArray*[]){ &(OpArray){MUL_R, {F_GP}} }},
+    [R_DIV] = {1, (const OpArray*[]){ &(OpArray){DIV_R, {F_GP}} }},
+    [R_IDIV] = {1, (const OpArray*[]){ &(OpArray){IDIV_R, {F_GP}} }},
+    [R_INC] = {1, (const OpArray*[]){ &(OpArray){INC_R, {F_GP}} }},
+    [R_DEC] = {1, (const OpArray*[]){ &(OpArray){DEC_R, {F_GP}} }},
+    [R_NEG] = {1, (const OpArray*[]){ &(OpArray){NEG_R, {F_GP}} }},
+    [R_AND] = {2, (const OpArray*[]){
+        &(OpArray){AND_RR, {F_GP, F_GP}},
+        &(OpArray){AND_RI, {F_GP, F_IMM}},
+    }},
+    [R_OR] = {2, (const OpArray*[]){
+        &(OpArray){OR_RR, {F_GP, F_GP}},
+        &(OpArray){OR_RI, {F_GP, F_IMM}},
+    }},
+    [R_XOR] = {2, (const OpArray*[]){
+        &(OpArray){XOR_RR, {F_GP, F_GP}},
+        &(OpArray){XOR_RI, {F_GP, F_IMM}},
+    }},
+    [R_NOT] = {1, (const OpArray*[]){ &(OpArray){NOT_R, {F_GP}} }},
+    [R_TEST] = {1, (const OpArray*[]){ &(OpArray){TEST_RR, {F_GP, F_GP}} }},
+    [R_CMP] = {2, (const OpArray*[]){
+        &(OpArray){CMP_RR, {F_GP, F_GP}},
+        &(OpArray){CMP_RI, {F_GP, F_IMM}},
+    }},
+    [R_SHL] = {2, (const OpArray*[]){
+        &(OpArray){SHL_RI, {F_GP, F_IMM}},
+        &(OpArray){SHL_RR, {F_GP, F_R8}},
+    }},
+    [R_SHR] = {1, (const OpArray*[]){ &(OpArray){SHR_RI, {F_GP, F_IMM}} }},
+    [R_SAR] = {1, (const OpArray*[]){ &(OpArray){SAR_RI, {F_GP, F_IMM}} }},
+    /* SSE */
+    [R_MOVSS] = {3, (const OpArray*[]){
+        &(OpArray){MOVSS_XX, {F_XMM, F_XMM}},
+        &(OpArray){MOVSS_XM, {F_XMM, F_IND}},
+        &(OpArray){MOVSS_MX, {F_IND, F_XMM}},
+    }},
+    [R_MOVSD] = {3, (const OpArray*[]){
+        &(OpArray){MOVSD_XX, {F_XMM, F_XMM}},
+        &(OpArray){MOVSD_XM, {F_XMM, F_IND}},
+        &(OpArray){MOVSD_MX, {F_IND, F_XMM}},
+    }},
+    [R_ADDSS] = {1, (const OpArray*[]){ &(OpArray){ADDSS_XX, {F_XMM, F_XMM}} }},
+    [R_ADDSD] = {1, (const OpArray*[]){ &(OpArray){ADDSD_XX, {F_XMM, F_XMM}} }},
+    [R_SUBSS] = {1, (const OpArray*[]){ &(OpArray){SUBSS_XX, {F_XMM, F_XMM}} }},
+    [R_SUBSD] = {1, (const OpArray*[]){ &(OpArray){SUBSD_XX, {F_XMM, F_XMM}} }},
+    [R_MULSS] = {1, (const OpArray*[]){ &(OpArray){MULSS_XX, {F_XMM, F_XMM}} }},
+    [R_MULSD] = {1, (const OpArray*[]){ &(OpArray){MULSD_XX, {F_XMM, F_XMM}} }},
+    [R_DIVSS] = {1, (const OpArray*[]){ &(OpArray){DIVSS_XX, {F_XMM, F_XMM}} }},
+    [R_DIVSD] = {1, (const OpArray*[]){ &(OpArray){DIVSD_XX, {F_XMM, F_XMM}} }},
+    [R_XORPS] = {1, (const OpArray*[]){ &(OpArray){XORPS_XX, {F_XMM, F_XMM}} }},
+    [R_XORPD] = {1, (const OpArray*[]){ &(OpArray){XORPD_XX, {F_XMM, F_XMM}} }},
+    [R_COMISS] = {1, (const OpArray*[]){ &(OpArray){COMISS_XX, {F_XMM, F_XMM}} }},
+    [R_COMISD] = {1, (const OpArray*[]){ &(OpArray){COMISD_XX, {F_XMM, F_XMM}} }},
+    [R_UCOMISS] = {1, (const OpArray*[]){ &(OpArray){UCOMISS_XX, {F_XMM, F_XMM}} }},
+    [R_UCOMISD] = {1, (const OpArray*[]){ &(OpArray){UCOMISD_XX, {F_XMM, F_XMM}} }},
+    [R_CVTTSS2SI] = {1, (const OpArray*[]){ &(OpArray){CVTTSS2SI_RX, {F_GP, F_XMM}} }},
+    [R_CVTTSD2SI] = {1, (const OpArray*[]){ &(OpArray){CVTTSD2SI_RX, {F_GP, F_XMM}} }},
+    [R_CVTSI2SS] = {1, (const OpArray*[]){ &(OpArray){CVTSI2SS_XR, {F_XMM, F_GP}} }},
+    [R_CVTSI2SD] = {1, (const OpArray*[]){ &(OpArray){CVTSI2SD_XR, {F_XMM, F_GP}} }},
+    [R_CVTSS2SD] = {1, (const OpArray*[]){ &(OpArray){CVTSS2SD_XX, {F_XMM, F_XMM}} }},
+    [R_CVTSD2SS] = {1, (const OpArray*[]){ &(OpArray){CVTSD2SS_XX, {F_XMM, F_XMM}} }},
+    [R_RDTSC] = {1, (const OpArray*[]){ &(OpArray){RDTSC, {}} }},
+    [R_CPUID] = {1, (const OpArray*[]){ &(OpArray){CPUID, {}} }},
+    [R_RET] = {1, (const OpArray*[]){ &(OpArray){RET, {}} }},
 };
 
 /* Allocate new asm instruction */
@@ -122,13 +243,15 @@ static Inst* inst_new(OpCode op, AsmOperand* oprs, uint32_t count)
 /* Get register size from register type */
 static uint32_t reg_flags(RegType reg)
 {
-    if(reg >= AL && reg <= DIL) return R8;
-    if(reg >= AX && reg <= R15W) return R16;
-    if(reg >= EAX && reg <= R15D) return R32;
-    if(reg >= xRAX && reg <= xR15) return R64;
-    if(reg == xRIP) return R64;
-    vp_assertX(0, "?");
-    return 0;
+    switch(REG_SIZE(reg))
+    {
+    case 1: return F_R8;
+    case 2: return F_R16;
+    case 4: return F_R32;
+    case 8: return F_R64;
+    case 16: return F_XMM;
+    default: vp_assertX(0, "?"); return 0;
+    }
 }
 
 /* Find register by name */
@@ -196,7 +319,7 @@ static void asm_mem(LexState* ls, AsmOperand* opr)
     uint8_t idx = (uint8_t)-1;
     uint8_t scale = 1;
     int32_t disp = 0;
-    
+
     vp_lex_next(ls);    /* Skip '[' */
     if(lex_check(ls, TK_name))
     {
@@ -208,14 +331,14 @@ static void asm_mem(LexState* ls, AsmOperand* opr)
         }
 
         /* Only 64-bit and 32-bit registers for addressing */
-        if(!((reg >= xRAX && reg <= xR15) || (reg >= EAX && reg <= R15D)))
+        if(!((REG_SIZE(reg) == 8) && (REG_SIZE(reg) == 4)))
         {
             vp_err_error(lex_srcloc(ls), "register '%s' cannot be used for addressing", str_data(name));
         }
 
         base = (uint8_t)reg;
 
-        if(reg == xRIP)
+        if(reg == RIP)
         {
             /* Parse displacement */
             if(lex_match(ls, '+') || lex_match(ls, '-'))
@@ -242,13 +365,13 @@ static void asm_mem(LexState* ls, AsmOperand* opr)
                 }
 
                 /* Only 64-bit and 32-bit registers for addressing */
-                if(!((ireg >= xRAX && ireg <= xR15) || (ireg >= EAX && ireg <= R15D)))
+                if(!((REG_SIZE(reg) == 8) && (REG_SIZE(reg) == 4)))
                 {
                     vp_err_error(lex_srcloc(ls), "register '%s' cannot be used for addressing", str_data(name));
                 }
 
                 /* Cannot use RSP as index register */
-                if(ireg == xRSP || ireg == ESP)
+                if(ireg == RSP || ireg == ESP)
                 {
                     vp_err_error(lex_srcloc(ls), "RSP/ESP cannot be used as index register");
                 }
@@ -326,14 +449,14 @@ static void asm_opr(LexState* ls, AsmOperand* opr, uint32_t* flags)
             /* Immediate value */
             opr->type = ASM_IMM;
             opr->imm = ls->val.i64;
-            *flags = IMM;
+            *flags = F_IMM;
             break;
         }
         case '[':
         {
             /* Memory operand */
             asm_mem(ls, opr);
-            *flags = IND;
+            *flags = F_IND;
             break;
         }
         default:
@@ -360,7 +483,7 @@ static RawOpCode asm_opcode(Str* s)
 
 static Str* asm_consume(LexState* ls)
 {
-    if(!lex_check(ls, TK_name) && 
+    if(!lex_check(ls, TK_name) &&
         !lex_check(ls, TK_and) && !lex_check(ls, TK_or))
     {
         vp_lex_error(ls, "'<name>' expected");

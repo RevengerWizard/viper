@@ -234,7 +234,7 @@ static void dump_ir(IR* ir)
         {
             int64_t ofs = ir->sofs.ofs;
             dump_vreg(ir->dst);
-            printf(" = &[rsp] %c %lli]", ofs >= 0 ? '+' : '-', ofs > 0 ? ofs : -ofs);
+            printf(" = &[rsp %c %lli]", ofs >= 0 ? '+' : '-', ofs > 0 ? ofs : -ofs);
             break;
         }
         case IR_MOV:

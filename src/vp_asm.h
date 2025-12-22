@@ -12,43 +12,45 @@ typedef enum OpCode
 {
     NONE,
     MOV_RR, MOV_RI, MOV_RM, MOV_MR,
-    OR_RR,
+    MOVSX_RR, MOVZX_RR,
+    LEA_RM,
+    PUSH_R, POP_R,
+    CWDE, CDQ, CQO,
+
+    ADD_RR, ADD_RI,
+    SUB_RR, SUB_RI,
+    MUL_R, DIV_R, IDIV_R,
+    INC_R, DEC_R, NEG_R,
+
+    AND_RR, AND_RI,
+    OR_RR, OR_RI,
+    XOR_RR, XOR_RI,
+    NOT_R,
+    TEST_RR,
+    CMP_RR, CMP_RI,
     SHL_RR, SHL_RI,
-    RDTSC,
-    CPUID,
-    RET,
+    SHR_RI, SAR_RI,
+
+    MOVSS_MX, MOVSS_XM, MOVSS_XX,
+    MOVSD_MX, MOVSD_XM, MOVSD_XX,
+
+    ADDSS_XX, ADDSD_XX,
+    SUBSS_XX, SUBSD_XX,
+    MULSS_XX, MULSD_XX,
+    DIVSS_XX, DIVSD_XX,
+    XORPS_XX, XORPD_XX,
+
+    COMISS_XX, COMISD_XX,
+    UCOMISS_XX, UCOMISD_XX,
+
+    CVTTSS2SI_RX, CVTTSD2SI_RX,
+    CVTSI2SS_XR, CVTSI2SD_XR,
+    CVTSS2SD_XX, CVTSD2SS_XX,
+
+    RDTSC, CPUID, RET,
 } OpCode;
 
-typedef enum
-{
-    /* 8-bit (low) */
-    AL, CL, DL, BL,
-
-    /* 8-bit (high) */
-    AH, CH, DH, BH,
-
-    /* 8-bit */
-    R8B, R9B, R10B, R11B,
-    R12B, R13B, R14B, R15B,
-
-    /* 8-bit */
-    SPL = R15B + 1 + 4,
-    BPL, SIL, DIL,
-
-    /* 16-bit */
-    AX, CX, DX, BX, SP, BP, SI, DI,
-    R8W, R9W, R10W, R11W, R12W, R13W, R14W, R15W,
-
-    /* 32-bit */
-    EAX, ECX, EDX, EBX, ESP, EBP, ESI, EDI,
-    R8D, R9D, R10D, R11D, R12D, R13D, R14D, R15D,
-
-    /* 64-bit */
-    xRAX, xRCX, xRDX, xRBX, xRSP, xRBP, xRSI, xRDI,
-    xR8, xR9, xR10, xR11, xR12, xR13, xR14, xR15,
-
-    xRIP
-} RegType;
+typedef uint64_t RegType;
 
 typedef struct
 {

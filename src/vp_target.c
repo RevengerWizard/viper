@@ -14,70 +14,70 @@
 
 /* Int parameters */
 static const uint32_t winx64_imap[] = {
-    RCX, RDX, R8, R9
+    RN_CX, RN_DX, RN_8, RN_9
 };
 
 /* Float parameters */
 static const uint32_t winx64_fmap[] = {
-    XMM0, XMM1, XMM2, XMM3
+    XN_0, XN_1, XN_2, XN_3
 };
 
 /* Caller-save registers */
 const uint32_t winx64_icaller[] = {
-    RAX, RCX, RDX, R8, R9, R10, R11
+    RN_AX, RN_CX, RN_DX, RN_8, RN_9, RN_10, RN_11
 };
 
 /* Caller-save registers */
 const uint32_t winx64_fcaller[] = {
-    XMM0, XMM1, XMM2, XMM3
+    XN_0, XN_1, XN_2, XN_3
 };
 
 /* Callee-save int registers */
 #define WINX64_ICALLEE \
-    ((1ULL << RBX) | (1ULL << RSI) | (1ULL << RDI) | \
-    (1ULL << R12) | (1ULL << R13) | (1ULL << R14) | (1ULL << R15))
+    ((1ULL << RN_BX) | (1ULL << RN_SI) | (1ULL << RN_DI) | \
+    (1ULL << RN_12) | (1ULL << RN_13) | (1ULL << RN_14) | (1ULL << RN_15))
 
 /* Callee-save float registers */
 #define WINX64_FCALLEE \
-    ((1ULL << XMM0) | (1ULL << XMM1) | (1ULL << XMM2) | \
-    (1ULL << XMM3) | (1ULL << XMM4) | (1ULL << XMM5))
+    ((1ULL << XN_0) | (1ULL << XN_1) | (1ULL << XN_2) | \
+    (1ULL << XN_3) | (1ULL << XN_4) | (1ULL << XN_5))
 
 /* -- System V x64 ABI ---------------------------------------------- */
 
 /* Int parameters */
 static const uint32_t sysvx64_imap[] = {
-    RDI, RSI, RDX, RCX, R8, R9
+    RN_DI, RN_SI, RN_DX, RN_CX, RN_8, RN_9
 };
 
 /* Float parameters */
 static const uint32_t sysvx64_fmap[] = {
-    XMM0, XMM1, XMM2, XMM3, XMM4, XMM5, XMM6, XMM7
+    XN_0, XN_1, XN_2, XN_3, XN_4, XN_5, XN_6, XN_7
 };
 
 /* Caller-save registers */
 static const uint32_t sysvx64_icaller[] = {
-    RAX, RCX, RDX, RSI,
-    RDI, R8, R9, R10, R11
+    RN_AX, RN_CX, RN_DX, RN_SI,
+    RN_DI, RN_8, RN_9, RN_10, RN_11
 };
 
 /* Caller-save registers */
 static const uint32_t sysvx64_fcaller[] = {
-    XMM0, XMM1, XMM2, XMM3,
-    XMM4, XMM5, XMM6, XMM7,
-    XMM8, XMM9, XMM10, XMM11,
-    XMM12, XMM13, XMM14, XMM15
+    XN_0, XN_1, XN_2, XN_3,
+    XN_4, XN_5, XN_6, XN_7,
+    XN_8, XN_9, XN_10, XN_11,
+    XN_12, XN_13, XN_14, XN_15
 };
 
 /* Callee-save int registers */
 #define SYSV_X64_ICALLEE \
-    ((1ULL << RBX) | (1ULL << RBP) | (1ULL << R12) | \
-    (1ULL << R13) | (1ULL << R14) | (1ULL << R15))
+    ((1ULL << RN_BX) | (1ULL << RN_BP) | (1ULL << RN_12) | \
+    (1ULL << RN_13) | (1ULL << RN_14) | (1ULL << RN_15))
 
 /* Callee-save float registers */
 #define SYSV_X64_FCALLEE \
-    ((1ULL << XMM8) | (1ULL << XMM9) | (1ULL << XMM10) | \
-    (1ULL << XMM11) | (1ULL << XMM12) | (1ULL << XMM13) | \
-    (1ULL << XMM14) | (1ULL << XMM15))
+    ((1ULL << XN_8) | (1ULL << XN_9) | (1ULL << XN_10) | \
+    (1ULL << XN_11) | (1ULL << XN_12) | (1ULL << XN_13) | \
+    (1ULL << XN_14) | (1ULL << XN_15))
 
 /* Archs */
 static const ArchInfo archs[] = {

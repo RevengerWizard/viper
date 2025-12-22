@@ -8,48 +8,220 @@
 
 #include "vp_def.h"
 
-/* REX prefix bits */
-#define REX_W 0x48  /* 64 bit operand size */
-#define REX_R 0x44  /* Extension of ModR/M reg field */
-#define REX_X 0x42  /* Extension of SIB index field */
-#define REX_B 0x41  /* Extension of ModR/M r/m, SIB base, or opcode reg */
+/* Register encoding
+**
+** uint64_t: [reserved:48][sub:4][size:4][class:4][num:4]
+**           63        16  15  12 11   8  7     4  3    0
+*/
 
-/* ModR/M encoding */
-#define MODRM(mod, reg, rm) ((((mod) & 3) << 6) | (((reg) & 7) << 3) | ((rm) & 7))
+#define REG_NUM(r) ((r) & 0xF)
+#define REG_CLASS(r) ((r >> 4) & 0XF)
+#define REG_SIZE(r) ((r >> 8) & 0XF)
+#define REG_SUB(r) ((r >> 12) & 0XF)
 
-#define RM_SIB 4    /* R/M = 4; SIB byte follows */
+#define REG_MAKE(num, cls, size, sub) \
+    ((uint64_t)(num) | ((uint64_t)(cls) << 4) | \
+    ((uint64_t)(size) << 8) | ((uint64_t)(sub) << 12))
 
-/* SIB encoding */
-#define SIB(scale, idx, base) ((((scale) & 3) << 6) | (((idx) & 7) << 3) | ((base) & 7))
+/* Register class */
+enum
+{
+    RC_GPR, /* General purpose register */
+    RC_IP,  /* Instruction pointer */
+    RC_XMM, /* SSE */
+    RC_YMM, /* AVX */
+    RC_ZMM, /* AVX-512 */
+    RC_SEG, /* Segment register */
+};
 
-/* Check for R8-R15 registers (needs REX extension) */
-#define regext(r) ((r) & R8)
+/* Subregister */
+enum
+{
+    SUB_LO,
+    SUB_HI,
+};
 
-/* Register encoding */
+/* 8-bit low */
+#define AL REG_MAKE(0, RC_GPR, 1, SUB_LO)
+#define CL REG_MAKE(1, RC_GPR, 1, SUB_LO)
+#define DL REG_MAKE(2, RC_GPR, 1, SUB_LO)
+#define BL REG_MAKE(3, RC_GPR, 1, SUB_LO)
+#define SPL REG_MAKE(4, RC_GPR, 1, SUB_LO)
+#define BPL REG_MAKE(5, RC_GPR, 1, SUB_LO)
+#define SIL REG_MAKE(6, RC_GPR, 1, SUB_LO)
+#define DIL REG_MAKE(7, RC_GPR, 1, SUB_LO)
+#define R8B REG_MAKE(8, RC_GPR, 1, SUB_LO)
+#define R9B REG_MAKE(9, RC_GPR, 1, SUB_LO)
+#define R10B REG_MAKE(10, RC_GPR, 1, SUB_LO)
+#define R11B REG_MAKE(11, RC_GPR, 1, SUB_LO)
+#define R12B REG_MAKE(12, RC_GPR, 1, SUB_LO)
+#define R13B REG_MAKE(13, RC_GPR, 1, SUB_LO)
+#define R14B REG_MAKE(14, RC_GPR, 1, SUB_LO)
+#define R15B REG_MAKE(15, RC_GPR, 1, SUB_LO)
+
+/* 8-bit high */
+#define AH REG_MAKE(0, RC_GPR, 1, SUB_HI)
+#define CH REG_MAKE(1, RC_GPR, 1, SUB_HI)
+#define DH REG_MAKE(2, RC_GPR, 1, SUB_HI)
+#define BH REG_MAKE(3, RC_GPR, 1, SUB_HI)
+
+/* 16-bit */
+#define AX REG_MAKE(0, RC_GPR, 2, SUB_LO)
+#define CX REG_MAKE(1, RC_GPR, 2, SUB_LO)
+#define DX REG_MAKE(2, RC_GPR, 2, SUB_LO)
+#define BX REG_MAKE(3, RC_GPR, 2, SUB_LO)
+#define SP REG_MAKE(4, RC_GPR, 2, SUB_LO)
+#define BP REG_MAKE(5, RC_GPR, 2, SUB_LO)
+#define SI REG_MAKE(6, RC_GPR, 2, SUB_LO)
+#define DI REG_MAKE(7, RC_GPR, 2, SUB_LO)
+#define R8W REG_MAKE(8, RC_GPR, 2, SUB_LO)
+#define R9W REG_MAKE(9, RC_GPR, 2, SUB_LO)
+#define R10W REG_MAKE(10, RC_GPR, 2, SUB_LO)
+#define R11W REG_MAKE(11, RC_GPR, 2, SUB_LO)
+#define R12W REG_MAKE(12, RC_GPR, 2, SUB_LO)
+#define R13W REG_MAKE(13, RC_GPR, 2, SUB_LO)
+#define R14W REG_MAKE(14, RC_GPR, 2, SUB_LO)
+#define R15W REG_MAKE(15, RC_GPR, 2, SUB_LO)
+
+/* 32-bit */
+#define EAX REG_MAKE(0, RC_GPR, 4, SUB_LO)
+#define ECX REG_MAKE(1, RC_GPR, 4, SUB_LO)
+#define EDX REG_MAKE(2, RC_GPR, 4, SUB_LO)
+#define EBX REG_MAKE(3, RC_GPR, 4, SUB_LO)
+#define ESP REG_MAKE(4, RC_GPR, 4, SUB_LO)
+#define EBP REG_MAKE(5, RC_GPR, 4, SUB_LO)
+#define ESI REG_MAKE(6, RC_GPR, 4, SUB_LO)
+#define EDI REG_MAKE(7, RC_GPR, 4, SUB_LO)
+#define R8D REG_MAKE(8, RC_GPR, 4, SUB_LO)
+#define R9D REG_MAKE(9, RC_GPR, 4, SUB_LO)
+#define R10D REG_MAKE(10, RC_GPR, 4, SUB_LO)
+#define R11D REG_MAKE(11, RC_GPR, 4, SUB_LO)
+#define R12D REG_MAKE(12, RC_GPR, 4, SUB_LO)
+#define R13D REG_MAKE(13, RC_GPR, 4, SUB_LO)
+#define R14D REG_MAKE(14, RC_GPR, 4, SUB_LO)
+#define R15D REG_MAKE(15, RC_GPR, 4, SUB_LO)
+
+/* 64-bit */
+#define RAX REG_MAKE(0, RC_GPR, 8, SUB_LO)
+#define RCX REG_MAKE(1, RC_GPR, 8, SUB_LO)
+#define RDX REG_MAKE(2, RC_GPR, 8, SUB_LO)
+#define RBX REG_MAKE(3, RC_GPR, 8, SUB_LO)
+#define RSP REG_MAKE(4, RC_GPR, 8, SUB_LO)
+#define RBP REG_MAKE(5, RC_GPR, 8, SUB_LO)
+#define RSI REG_MAKE(6, RC_GPR, 8, SUB_LO)
+#define RDI REG_MAKE(7, RC_GPR, 8, SUB_LO)
+#define R8 REG_MAKE(8, RC_GPR, 8, SUB_LO)
+#define R9 REG_MAKE(9, RC_GPR, 8, SUB_LO)
+#define R10 REG_MAKE(10, RC_GPR, 8, SUB_LO)
+#define R11 REG_MAKE(11, RC_GPR, 8, SUB_LO)
+#define R12 REG_MAKE(12, RC_GPR, 8, SUB_LO)
+#define R13 REG_MAKE(13, RC_GPR, 8, SUB_LO)
+#define R14 REG_MAKE(14, RC_GPR, 8, SUB_LO)
+#define R15 REG_MAKE(15, RC_GPR, 8, SUB_LO)
+
+/* 128-bit */
+#define XMM0 REG_MAKE(0, RC_XMM, 16, SUB_LO)
+#define XMM1 REG_MAKE(1, RC_XMM, 16, SUB_LO)
+#define XMM2 REG_MAKE(2, RC_XMM, 16, SUB_LO)
+#define XMM3 REG_MAKE(3, RC_XMM, 16, SUB_LO)
+#define XMM4 REG_MAKE(4, RC_XMM, 16, SUB_LO)
+#define XMM5 REG_MAKE(5, RC_XMM, 16, SUB_LO)
+#define XMM6 REG_MAKE(6, RC_XMM, 16, SUB_LO)
+#define XMM7 REG_MAKE(7, RC_XMM, 16, SUB_LO)
+#define XMM8 REG_MAKE(8, RC_XMM, 16, SUB_LO)
+#define XMM9 REG_MAKE(9, RC_XMM, 16, SUB_LO)
+#define XMM10 REG_MAKE(10, RC_XMM, 16, SUB_LO)
+#define XMM11 REG_MAKE(11, RC_XMM, 16, SUB_LO)
+#define XMM12 REG_MAKE(12, RC_XMM, 16, SUB_LO)
+#define XMM13 REG_MAKE(13, RC_XMM, 16, SUB_LO)
+#define XMM14 REG_MAKE(14, RC_XMM, 16, SUB_LO)
+#define XMM15 REG_MAKE(15, RC_XMM, 16, SUB_LO)
+
+#define RIP REG_MAKE(0, RC_IP, 8, SUB_LO)
+
+typedef uint64_t X64Reg;
+typedef uint64_t X64Mem;
+
+/* Register indices */
+enum
+{
+    RN_AX,
+    RN_CX,
+    RN_DX,
+    RN_BX,
+    RN_SP,
+    RN_BP,
+    RN_SI,
+    RN_DI,
+    RN_8,
+    RN_9,
+    RN_10,
+    RN_11,
+    RN_12,
+    RN_13,
+    RN_14,
+    RN_15
+};
+
+enum
+{
+    XN_0,
+    XN_1,
+    XN_2,
+    XN_3,
+    XN_4,
+    XN_5,
+    XN_6,
+    XN_7,
+    XN_8,
+    XN_9,
+    XN_10,
+    XN_11,
+    XN_12,
+    XN_13,
+    XN_14,
+    XN_15
+};
+
+/* Memory addressing encoding
+**
+** uint64_t: [reserved:13][rip:1][size:4][seg:4][disp:32][scale:2][index:4][base:4]
+**           63         51    50   49  46 45  42 41    10  9     8  7     4  3    0
+*/
+
+/* Segment override */
 typedef enum
 {
-    RAX = 0, RCX = 1, RDX = 2, RBX = 3,
-    RSP = 4, RBP = 5, RSI = 6, RDI = 7,
-    R8 = 8, R9 = 9, R10 = 10, R11 = 11,
-    R12 = 12, R13 = 13, R14 = 14, R15 = 15,
+    SEG_NONE,
+    SEG_ES,
+    SEG_CS,
+    SEG_SS,
+    SEG_DS,
+    SEG_FS,
+    SEG_GS,
+} X64Seg;
 
-    XMM0 = 0, XMM1 = 1, XMM2 = 2, XMM3 = 3,
-    XMM4 = 4, XMM5 = 5, XMM6 = 6, XMM7 = 7,
-    XMM8 = 8, XMM9 = 9, XMM10 = 10, XMM11 = 11,
-    XMM12 = 12, XMM13 = 13, XMM14 = 14, XMM15 = 15,
+#define NOREG (RN_SP)
 
-    RIP = 0xFFF
-} X64Reg;
+#define MEM_MAKE(base, idx, scale, disp, size) \
+    ((uint64_t)(base) | ((uint64_t)(idx) << 4) | \
+    ((uint64_t)(__builtin_ctz(scale)) << 8) | \
+    ((uint64_t)((uint32_t)(disp)) << 10) | \
+    ((uint64_t)(size) << 46))
 
-#define X64_IREG (16)
-#define X64_FREG (16)
+#define MEM_MAKE_RIP(disp, size) \
+    (MEM_MAKE(NOREG, NOREG, 1, disp, size) | (1ULL << 50))
 
-typedef int64_t X64Mem;
+#define MAKE_MEM_SEG(base, idx, scale, disp, size, seg) \
+    (MEM_MAKE(base, idx, scale, disp, size) | ((uint64_t)(seg) << 42))
 
-#define NOREG (0)
-
-#define MEM(base, idx, scale, off) \
-    (INT64_MIN | ((int64_t) ((base) & 0xfff) << 32) | ((int64_t) ((idx) & 0xfff) << 44) | ((int64_t) ((scale) & 0xf) << 56) | ((off) & 0xffffffff))
+#define MEM_BASE(m)  ((m) & 0xF)
+#define MEM_INDEX(m) (((m) >> 4) & 0xF)
+#define MEM_SCALE(m) (1u << (((m) >> 8) & 0x3))
+#define MEM_DISP(m)  ((int32_t)(((m) >> 10) & 0xFFFFFFFF))
+#define MEM_SIZE(m)  (((m) >> 46) & 0xF)
+#define MEM_SEG(m)   (((m) >> 42) & 0xF)
+#define MEM_ISRIP(m) (((m) >> 50) & 1)
 
 /* Condition codes */
 typedef enum
@@ -71,5 +243,8 @@ typedef enum
     CC_LE,  /* Less or Equal (ZF=1 or SF != OF) */
     CC_G    /* Greater (ZF=0 and SF=OF) */
 } X64CC;
+
+#define X64_IREG (16)
+#define X64_FREG (16)
 
 #endif
