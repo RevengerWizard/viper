@@ -392,7 +392,7 @@ void vp_dump_bbs(Code* code)
 {
     printf("fn %s\n", str_data(code->name));
     printf("params and locals:\n");
-    vec_t(VarInfo*) stackvars = NULL;
+    vec_t(VarInfo*) stackvars = vec_init(VarInfo*);
     for(uint32_t i = 0; i < vec_len(code->scopes); i++)
     {
         Scope* scope = code->scopes[i];
@@ -1232,8 +1232,7 @@ void vp_dump_decl(Decl* d)
         }
         case DECL_FN:
         {
-            uint32_t attrsnum = vec_len(d->fn.attrs);
-            if(attrsnum)
+            if(d->fn.attrs)
             {
                 for (uint32_t i = 0; i < vec_len(d->fn.attrs); i++)
                 {

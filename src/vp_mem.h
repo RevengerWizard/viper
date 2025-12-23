@@ -8,14 +8,20 @@
 
 #include "vp_vec.h"
 
+typedef struct ArenaBlock
+{
+    struct ArenaBlock* next;
+} ArenaBlock;
+
 typedef struct Arena
 {
     char* p;
     char* end;
-    vec_t(char*) blocks;
+    ArenaBlock* blocks;
 } Arena;
 
 /* Arena allocator */
+void vp_arena_init(Arena* arena);
 void vp_arena_grow(Arena* arena, size_t minsize);
 void* vp_arena_alloc(Arena* arena, size_t size);
 void vp_arena_free(Arena* arena);

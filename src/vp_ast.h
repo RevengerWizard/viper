@@ -288,7 +288,7 @@ typedef enum AggregateKind
 typedef struct Aggregate
 {
     AggregateKind kind;
-    AggregateItem* items;
+    vec_t(AggregateItem) items;
 } Aggregate;
 
 typedef struct EnumItem
@@ -310,7 +310,7 @@ typedef struct Note
 {
     SrcLoc loc;
     Str* name;
-    NoteArg* args;
+    vec_t(NoteArg) args;
 } Note;
 
 typedef struct AttrArg

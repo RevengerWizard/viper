@@ -224,6 +224,8 @@ static void coff_strtab(SBuf* sb, uint32_t* ofs, uint32_t start)
 
 void vp_emit_coff(VpState* V, SBuf* sb)
 {
+    relocs = vec_init(COFFReloc);
+    syms = vec_init(COFFSym);
     Layout* L = &V->L;
     uint32_t nsecs = vec_len(L->secs);
 

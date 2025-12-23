@@ -231,7 +231,7 @@ static VReg* gen_str(Expr* e)
         vp_assertX(vec_len(V->strs) == vec_len(V->strofs), "non-matching lens");
 
         uint32_t ofs = 0;
-        if(V->strofs)
+        if(vec_len(V->strofs))
         {
             Str* last = V->strs[vec_len(V->strs) - 1];
             ofs = V->strofs[vec_len(V->strofs) - 1] + (last->len + 1);
@@ -429,7 +429,7 @@ static VReg* gen_call(Expr* e)
         bool flo;   /* Is a float argument */
     } ArgInfo;
 
-    vec_t(ArgInfo) arginfos = NULL;
+    vec_t(ArgInfo) arginfos = vec_init(ArgInfo);
     uint32_t argstart = (fi != NULL) ? 1 : 0;
     uint32_t offset = 0;
     uint32_t regargs = 0;
@@ -688,7 +688,7 @@ static VReg* gen_complit(Expr* e)
 
     gen_memzero(e->ty, base);
 
-    FlatField* flat_fields = NULL;
+    vec_t(FlatField) flat_fields = vec_init(FlatField);
     flatten_complit(e, 0, &flat_fields);
 
     /* Generate stores for all flattened fields */
@@ -1357,6 +1357,9 @@ static Code* gen_fn(Decl* d)
 
     Code* code = vp_mem_calloc(1, sizeof(*code));
     code->name = d->name;
+    code->bbs = vec_init(BB*);
+    code->calls = vec_init(IR*);
+    code->slots = vec_init(Slot);
     code->numparams = vec_len(d->fn.params);
     code->scopes = d->fn.scopes;
     vp_tab_set(&V->funcs, code->name, code);
@@ -1404,7 +1407,7 @@ static Code* gen_fn(Decl* d)
 /* Generate code IR for all declarations */
 vec_t(Code*) vp_codegen(vec_t(Decl*) decls)
 {
-    vec_t(Code*) codes = NULL;
+    vec_t(Code*) codes = vec_init(Code*);
     for(uint32_t i = 0; i < vec_len(decls); i++)
     {
         Decl* d = decls[i];

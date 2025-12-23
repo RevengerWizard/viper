@@ -14,6 +14,9 @@ static Module* mod_new(Str* path)
 {
     Module* mod = vp_mem_calloc(1, sizeof(*mod));
     mod->path = path;
+    mod->syms = vec_init(Sym*);
+    mod->decls = vec_init(Decl*);
+    mod->sorted = vec_init(Decl*);
     vp_tab_set(&V->modules, path, mod);
     vec_push(V->mods, mod);
     return mod;

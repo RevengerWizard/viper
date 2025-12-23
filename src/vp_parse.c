@@ -120,12 +120,12 @@ static Expr* expr_cast(LexState* ls, SrcLoc loc)
     ExprKind kind = EX__MAX;
     switch(tok)
     {
-        case TK_cast: kind = EX_CAST; break;
-        case TK_bitcast: kind = EX_BITCAST; break;
-        case TK_intcast: kind = EX_INTCAST; break;
-        case TK_floatcast: kind = EX_FLOATCAST; break;
-        case TK_ptrcast: kind = EX_PTRCAST; break;
-        default: vp_assertX(0, "?");
+    case TK_cast: kind = EX_CAST; break;
+    case TK_bitcast: kind = EX_BITCAST; break;
+    case TK_intcast: kind = EX_INTCAST; break;
+    case TK_floatcast: kind = EX_FLOATCAST; break;
+    case TK_ptrcast: kind = EX_PTRCAST; break;
+    default: vp_assertX(0, "?");
     }
     return vp_expr_cast(loc, kind, spec, e);
 }
@@ -162,7 +162,7 @@ static Expr* expr_offsetof(LexState* ls, SrcLoc loc)
 /* Parse call expression */
 static Expr* expr_call(LexState* ls, Expr* lhs, SrcLoc loc)
 {
-    vec_t(Expr*) args = NULL;
+    vec_t(Expr*) args = vec_init(Expr*);
     if(!lex_check(ls, ')'))
     {
         do
@@ -203,10 +203,7 @@ static Expr* expr_unary(LexState* ls, SrcLoc loc)
         case '*': kind = EX_DEREF; break;
         case '-': kind = EX_NEG; break;
         case '~': kind = EX_BNOT; break;
-        case '!':
-        case TK_not:
-            kind = EX_NOT;
-            break;
+        case '!': case TK_not: kind = EX_NOT; break;
         default:
             vp_assertX(false, "unknown unary op");
             break;
@@ -279,7 +276,7 @@ static Field expr_field(LexState* ls)
 static Expr* expr_comp_type(LexState* ls, TypeSpec* spec)
 {
     SrcLoc loc = lex_srcloc(ls);
-    vec_t(Field) fields = NULL;
+    vec_t(Field) fields = vec_init(Field);
     while(!lex_check(ls, '}'))
     {
         Field c = expr_field(ls);
@@ -495,7 +492,7 @@ static TypeSpec* parse_type_fn(LexState* ls);
 static TypeSpec* parse_type_fnarr(LexState* ls)
 {
     SrcLoc loc = lex_srcloc(ls);
-    vec_t(TypeSpec*) arrdims = NULL;
+    vec_t(TypeSpec*) arrdims = vec_init(TypeSpec*);
     while(lex_check(ls, '['))
     {
         vp_lex_consume(ls, '[');
@@ -523,7 +520,7 @@ static TypeSpec* parse_type_fnarr(LexState* ls)
 static TypeSpec* parse_type_fn(LexState* ls)
 {
     SrcLoc loc = lex_srcloc(ls);
-    vec_t(TypeSpec*) args = NULL;
+    vec_t(TypeSpec*) args = vec_init(TypeSpec*);
     vp_lex_consume(ls, '(');
     if(!lex_check(ls, ')'))
     {
@@ -636,7 +633,7 @@ static Decl* parse_from(LexState* ls)
     Str* path = ls->val.name;
     vp_lex_consume(ls, TK_import);
     bool wildcard = false;
-    vec_t(ImportItem) items = NULL;
+    vec_t(ImportItem) items = vec_init(ImportItem);
     if(lex_match(ls, '*'))
     {
         wildcard = true;
@@ -677,7 +674,7 @@ static Decl* parse_note(LexState* ls)
     SrcLoc loc = lex_srcloc(ls);
     vp_lex_next(ls);    /* Skip #note */
     Str* name = ls->val.name;
-    vec_t(NoteArg) args = NULL;
+    vec_t(NoteArg) args = vec_init(NoteArg);
     if(lex_match(ls, '('))
     {
         while(!lex_check(ls, ')'))
@@ -697,7 +694,7 @@ static Decl* parse_note(LexState* ls)
 /* Parse code block {} */
 static Stmt* parse_block(LexState* ls)
 {
-    vec_t(Stmt*) stmts = NULL;
+    vec_t(Stmt*) stmts = vec_init(Stmt*);
     vp_lex_consume(ls, '{');
     SrcLoc loc = lex_srcloc(ls);
     while(!lex_check(ls, '}') && !lex_check(ls, TK_eof))
@@ -793,7 +790,7 @@ static Stmt* parse_asm(LexState* ls)
 /* Parse fn parameters */
 static vec_t(Param) parse_params(LexState* ls)
 {
-    vec_t(Param) params = NULL;
+    vec_t(Param) params = vec_init(Param);
     vp_lex_consume(ls, '(');
     if(!lex_check(ls, ')'))
     {
@@ -857,7 +854,7 @@ static AggregateItem parse_aggr_item(LexState* ls)
     else
     {
         SrcLoc loc = lex_srcloc(ls);
-        vec_t(Str*) names = NULL;
+        vec_t(Str*) names = vec_init(Str*);
         do
         {
             Str* name = lex_name(ls);
@@ -881,7 +878,7 @@ static Aggregate* parse_aggr(LexState* ls, AggregateKind kind)
 {
     vp_lex_consume(ls, '{');
     SrcLoc loc = lex_srcloc(ls);
-    vec_t(AggregateItem) items = NULL;
+    vec_t(AggregateItem) items = vec_init(AggregateItem);
     while(!lex_check(ls, '}') && !lex_check(ls, TK_eof))
     {
         AggregateItem item = parse_aggr_item(ls);
@@ -931,7 +928,7 @@ static Decl* parse_enum(LexState* ls, uint32_t flags)
         spec = parse_type(ls);
     }
     vp_lex_consume(ls, '{');
-    vec_t(EnumItem) items = NULL;
+    vec_t(EnumItem) items = vec_init(EnumItem);
     while(!lex_check(ls, '}') && !lex_check(ls, TK_eof))
     {
         EnumItem item = parse_enum_item(ls);
@@ -982,13 +979,13 @@ static Decl* parse_attr(LexState* ls)
     vp_lex_next(ls);    /* Skip '[[' */
 
     uint32_t flags = 0;
-    vec_t(Attr) attrs = NULL;
+    vec_t(Attr) attrs = vec_init(Attr);
     do
     {
         Attr at = {};
         do
         {
-            vec_t(AttrArg) args = NULL;
+            vec_t(AttrArg) args = vec_init(AttrArg);
             SrcLoc loc = lex_srcloc(ls);
             Str* name = lex_name(ls);
             if(lex_match(ls, '('))
@@ -1185,7 +1182,7 @@ vec_t(Decl*) vp_parse(VpState* V, LexState* ls)
     UNUSED(V);
     vp_lex_next(ls);    /* Read the first token into ls->curr */
 
-    vec_t(Decl*) decls = NULL;
+    vec_t(Decl*) decls = vec_init(Decl*);
     while(!lex_match(ls, TK_eof))
     {
         Decl* d = parse_decl(ls);

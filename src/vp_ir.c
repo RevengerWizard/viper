@@ -439,12 +439,12 @@ BB* vp_bb_new()
     BB* bb = vp_arena_alloc(&V->irarena, sizeof(*bb));
     bb->label = vp_label_new();
     bb->next = NULL;
-    bb->irs = NULL;
+    bb->irs = vec_init(IR*);
     bb->ofs = 0;
-    bb->frombbs = NULL;
-    bb->inregs = NULL;
-    bb->outregs = NULL;
-    bb->assignregs = NULL;
+    bb->frombbs = vec_init(BB*);
+    bb->inregs = vec_init(VReg*);
+    bb->outregs = vec_init(VReg*);
+    bb->assignregs = vec_init(VReg*);
     return bb;
 }
 
@@ -476,7 +476,7 @@ void vp_bb_detect(vec_t(BB*) bbs)
 
     Tab checked;
     vp_tab_init(&checked);
-    vec_t(BB*) unchecked = NULL;
+    vec_t(BB*) unchecked = vec_init(BB*);
     vec_push(unchecked, bbs[0]);
 
     do
@@ -579,7 +579,7 @@ void vp_bb_analyze(vec_t(BB*) bbs)
     }
 
     /* Propagate inregs to outregs to frombbs recursively */
-    vec_t(BB*) dstbbs = NULL;
+    vec_t(BB*) dstbbs = vec_init(BB*);
     for(uint32_t i = vec_len(bbs); i-- > 0;)
     {
         BB* bb = bbs[i];

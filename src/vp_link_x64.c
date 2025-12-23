@@ -98,7 +98,7 @@ static Section* sec_find(Layout* L, SectionKind kind)
     return NULL;
 }
 
-void vp_layout_init(Layout *L)
+void vp_layout_init(Layout* L)
 {
     uint32_t csize = sbuf_len(&V->code);
     uint32_t isize = calc_idata_size();

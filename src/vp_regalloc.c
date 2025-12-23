@@ -176,8 +176,8 @@ static void live_spill(RegAlloc* ra, LiveInterval** active, uint32_t len, LiveIn
 /* Detect occupied registers and flags */
 static void live_detect(RegAlloc* ra, BB** bbs, uint32_t vreglen, LiveInterval** sorted)
 {
-    vec_t(LiveInterval*) inactives = NULL;
-    vec_t(LiveInterval*) actives = NULL;
+    vec_t(LiveInterval*) inactives = vec_init(LiveInterval*);
+    vec_t(LiveInterval*) actives = vec_init(LiveInterval*);
 
     /* Initialize active/inactive intervals */
     for(uint32_t i = 0; i < vreglen; i++)
@@ -600,8 +600,8 @@ RegAlloc* vp_ra_new(const RASettings* set)
 {
     RegAlloc* ra = vp_arena_alloc(&V->irarena, sizeof(*ra));
     ra->set = set;
-    ra->vconsts = NULL;
-    ra->vregs = NULL;
+    ra->vconsts = vec_init(VReg*);
+    ra->vregs = vec_init(VReg*);
     ra->intervals = NULL;
     ra->sorted = NULL;
     ra->iregbits = 0;

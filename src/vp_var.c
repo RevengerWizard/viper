@@ -16,7 +16,7 @@ Scope* vp_scope_new(Scope* parent)
 {
     Scope* scope = vp_arena_alloc(&V->astarena, sizeof(*scope));
     scope->parent = parent;
-    scope->vars = NULL;
+    scope->vars = vec_init(VarInfo*);
     return scope;
 }
 
@@ -77,7 +77,7 @@ VarInfo* vp_var_new(Str* name, Type* ty)
     return vi;
 }
 
-VarInfo* vp_var_find(VarInfo** vars, Str* name)
+VarInfo* vp_var_find(vec_t(VarInfo*) vars, Str* name)
 {
     for(uint32_t i = 0; i < vec_len(vars); i++)
     {

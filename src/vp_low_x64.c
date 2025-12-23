@@ -133,7 +133,7 @@ typedef struct RegSave
 
 static vec_t(RegSave) collect_caller_save(RegSet iliving, RegSet fliving)
 {
-    vec_t(RegSave) saves = NULL;
+    vec_t(RegSave) saves = vec_init(RegSave);
 
     for(uint32_t i = 0; i < V->target->abiinfo->icallersize; i++)
     {

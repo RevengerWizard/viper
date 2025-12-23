@@ -173,7 +173,7 @@ static void sym_complete(Type* ty)
     ty->kind = TY_name;
     vp_assertX(d->kind == DECL_STRUCT || d->kind == DECL_UNION, "struct/union");
 
-    vec_t(TypeField) fields = NULL;
+    vec_t(TypeField) fields = vec_init(TypeField);
     for(uint32_t i = 0; i < vec_len(d->agr->items); i++)
     {
         AggregateItem* item = &d->agr->items[i];
@@ -1680,7 +1680,7 @@ static Type* sema_typespec(TypeSpec* spec)
         }
         case SPEC_FUNC:
         {
-            vec_t(Type*) args = NULL;
+            vec_t(Type*) args = vec_init(Type*);
             for(uint32_t i = 0; i < vec_len(spec->fn.args); i++)
             {
                 Type* targ = sema_typespec(spec->fn.args[i]);
@@ -1742,7 +1742,7 @@ static void sema_attrs(vec_t(Attr) attrs, Str* funcname)
             /* If DLL doesn't exist, create it */
             if(!dll)
             {
-                ImportDLL new_dll = {.name = lib, .funcs = NULL};
+                ImportDLL new_dll = {.name = lib, .funcs = vec_init(ImportFunc)};
                 vec_push(V->imports, new_dll);
                 dll = &V->imports[vec_len(V->imports) - 1];
             }
@@ -1780,7 +1780,7 @@ static Type* sema_fn(Decl* d)
     vp_assertX(d->kind == DECL_FN, "fn declaration");
 
     vec_push(V->mod->sorted, d);
-    vec_t(Type*) params = NULL;
+    vec_t(Type*) params = vec_init(Type*);
     for(uint32_t i = 0; i < vec_len(d->fn.params); i++)
     {
         Type* typaram = sema_typespec(d->fn.params[i].spec);
@@ -2276,6 +2276,8 @@ void vp_sema_decls(vec_t(Decl*) decls)
 
 vec_t(Decl*) vp_sema(Str* name)
 {
+    S.syms = vec_init(Sym*);
+    S.localsyms = vec_init(Sym*);
     Module* root = vp_mod_get((SrcLoc){0}, name);
     S.root = root;
 

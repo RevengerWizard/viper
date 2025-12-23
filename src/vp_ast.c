@@ -10,6 +10,7 @@
 #include "vp_mem.h"
 #include "vp_str.h"
 #include "vp_type.h"
+#include "vp_var.h"
 
 const char* const vp_ast_binop[] = {
     "+", "-", "*", "/", "%", "&", "|", "^", "<<", ">>", "==", "!=", "<", "<=", ">", ">=", "and", "or"
@@ -319,7 +320,7 @@ Decl* vp_decl_fn(SrcLoc loc, uint32_t flags, vec_t(Attr) attrs, TypeSpec* ret, S
     d->fn.ret = ret;
     d->fn.params = params;
     d->fn.body = body;
-    d->fn.scopes = NULL;
+    d->fn.scopes = vec_init(Scope*);
     return d;
 }
 

@@ -536,7 +536,7 @@ static Inst* asm_inst(LexState* ls)
 
 vec_t(Inst*) vp_asm_x64(LexState* ls)
 {
-    vec_t(Inst*) vec = NULL;
+    vec_t(Inst*) vec = vec_init(Inst*);
     while(!lex_check(ls, '}') && !lex_check(ls, TK_eof))
     {
         Inst* inst = asm_inst(ls);

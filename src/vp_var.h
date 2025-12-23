@@ -56,6 +56,6 @@ static VP_AINLINE bool vp_scope_isglob(Scope* scope)
 
 /* Variables */
 VarInfo* vp_var_new(Str* name, Type* ty);
-VarInfo* vp_var_find(VarInfo** vars, Str* name);
+VarInfo* vp_var_find(vec_t(VarInfo*) vars, Str* name);
 
 #endif

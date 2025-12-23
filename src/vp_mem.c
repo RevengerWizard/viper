@@ -63,13 +63,25 @@ void* vp_mem_dup(void* src, size_t size)
 #define ARENA_ALIGNMENT 8
 #define ARENA_BLOCK_SIZE (1024 * 1024)
 
+void vp_arena_init(Arena* arena)
+{
+    arena->p = NULL;
+    arena->end = NULL;
+    arena->blocks = NULL;
+}
+
 void vp_arena_grow(Arena* arena, size_t minsize)
 {
     size_t size = ALIGN_UP(CLAMP_MIN(minsize, ARENA_BLOCK_SIZE), ARENA_ALIGNMENT);
-    arena->p = vp_mem_alloc(size);
+    char* block = vp_mem_alloc(size);
     vp_assertX(arena->p == ALIGN_DOWN_PTR(arena->p, ARENA_ALIGNMENT), "unaligned arena pointer after grow");
-    arena->end = arena->p + size;
-    vec_push(arena->blocks, arena->p);
+    /* Link new block into chain */
+    ArenaBlock* head = (ArenaBlock*)block;
+    head->next = arena->blocks;
+    arena->blocks = head;
+    /* Set up allocation pointers after header */
+    arena->p = block + ALIGN_UP(sizeof(ArenaBlock), ARENA_ALIGNMENT);
+    arena->end = block + size;
 }
 
 void* vp_arena_alloc(Arena* arena, size_t size)
@@ -88,9 +100,14 @@ void* vp_arena_alloc(Arena* arena, size_t size)
 
 void vp_arena_free(Arena* arena)
 {
-    for(char** b = arena->blocks; b != vec_end(arena->blocks); b++)
+    ArenaBlock* block = arena->blocks;
+    while(block)
     {
-        vp_mem_free(*b);
+        ArenaBlock* next = block->next;
+        vp_mem_free(block);
+        block = next;
     }
-    vec_free(arena->blocks);
+    arena->blocks = NULL;
+    arena->p = NULL;
+    arena->end = NULL;
 }
