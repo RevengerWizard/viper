@@ -2,7 +2,7 @@
 
 - [ ] `union` handling
 
-- [ ] `import`
+- [X] `import`, `from`, `as`
 
 - [ ] intrinsics
 
@@ -26,11 +26,11 @@
 
 - [ ] globals emission
 
-- [ ] strings emission
+- [X] strings emission
 
 - [ ] macros?
 
-- [ ] stronger types?
+- [ ] stronger types? `type` vs `alias`
 
 - [ ] default constant values for `struct`/`union` fields?
 
@@ -39,6 +39,8 @@
 - [x] enums
 
 - [x] incomplete struct/union declarations `struct tea_State;`
+
+- [ ] support output of .dot files
 
 ### integer literals
 
@@ -60,15 +62,15 @@
 
 `float32` `float64`
 
-`float16` `float80` ?
-
-`ptrdiff` `intptr` `uintptr` ?
-
 `bool`
 
 `nil`
 
-~~`char`~~ ~~`uchar`~~
+`float16` `float80` ?
+
+`ptrdiff` `intptr` `uintptr` ?
+
+~~`char`~~ ~~`uchar`~~ ?
 
 ---
 
