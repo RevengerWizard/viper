@@ -1124,13 +1124,14 @@ static Decl* parse_decl(LexState* ls)
 {
     uint32_t flags = 0;
     Decl* d = NULL;
+    SrcLoc loc = lex_srcloc(ls);
     if(lex_match(ls, TK_pub))
     {
         flags |= DECL_FLAG_PUB;
         if(lex_check(ls, TK_import) || lex_check(ls, TK_from) || lex_check(ls, TK_note) || lex_check(ls, TK_dbleft))
         {
             const char* tokstr = vp_lex_tok2str(ls, ls->curr);
-            vp_err_error(d->loc, "'pub' cannot be applied to '%s'", tokstr);
+            vp_err_error(loc, "'pub' cannot be applied to '%s'", tokstr);
         }
     }
     switch(ls->curr)
@@ -1172,6 +1173,7 @@ static Decl* parse_decl(LexState* ls)
             d = parse_enum(ls, flags);
             break;
         default:
+            vp_err_error(loc, "invalid declaration");
             break;
     }
     return d;

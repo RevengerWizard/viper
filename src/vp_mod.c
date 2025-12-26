@@ -86,9 +86,9 @@ Module* vp_mod_get(SrcLoc loc, Str* name)
     if(!mod)
     {
         mod = mod_new(path);
+        Module* old = vp_mod_enter(mod);
         vec_t(Decl*) decls = vp_load_file(V, str_data(mod->path));
         mod->decls = decls;
-        Module* old = vp_mod_enter(mod);
         {
             vp_sema_decls(decls);
             vp_sema_imports(decls);
