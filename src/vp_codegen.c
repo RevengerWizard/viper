@@ -192,7 +192,7 @@ static VReg* gen_str(Expr* e)
 
     Str* str = e->str;
 
-    if(e->ty->kind == TY_array)
+    if(ty_isarr(e->ty))
     {
         vp_assertX(e->ty->p == tyuint8, "bad str array type");
 
@@ -227,7 +227,7 @@ static VReg* gen_str(Expr* e)
     }
     else if(ty_isptr(e->ty))
     {
-        vp_assertX(e->ty->p == tyuint8, "bad str ptr type");
+        vp_assertX(e->ty->p && e->ty->p->kind == TY_uint8, "bad str ptr type");
         vp_assertX(vec_len(V->strs) == vec_len(V->strofs), "non-matching lens");
 
         uint32_t ofs = 0;
@@ -267,7 +267,7 @@ static VReg* gen_name(Expr* e)
         VReg* dst = vp_ir_load(src, vp_vsize(ty), vp_vflag(ty), ir_flag(ty))->dst;
         return dst;
     }
-    else if(ty->kind == TY_array || ty->kind == TY_struct || ty->kind == TY_union)
+    else if(ty_isarr(ty) || ty_isaggr(ty))
     {
         return gen_lval(e);
     }
@@ -512,7 +512,7 @@ static VReg* gen_call(Expr* e)
     {
         VarInfo* vi = vp_scope_find(e->call.expr->scope, e->call.expr->name, NULL);
         vp_assertX(vi, "'%s' not found", str_data(e->call.expr->name));
-        labelcall = vi->type->kind == TY_func && (vi->storage & VS_FN);
+        labelcall = ty_isfunc(vi->type) && (vi->storage & VS_FN);
     }
 
     Str* label = NULL;
@@ -550,7 +550,7 @@ static VReg* gen_call(Expr* e)
 /* Generate cast expression */
 static VReg* gen_cast(Expr* e)
 {
-    vp_assertX(e->kind == EX_CAST || e->kind == EX_PTRCAST || e->kind == EX_INTCAST, "not a cast expression");
+    vp_assertX(e->kind == EX_CAST || e->kind == EX_INTCAST || e->kind == EX_FLOATCAST || e->kind == EX_PTRCAST, "not a cast expression");
 
     Type* dstty = e->ty;
     Type* srcty = e->cast.expr->ty;

@@ -82,8 +82,6 @@ Module* vp_mod_get(SrcLoc loc, Str* name)
         vp_err_error(loc, "cannot resolve path '%s'", str_data(path));
     }
 
-    printf("MODULE PATH %s\n", str_data(path));
-
     Module* mod = vp_tab_get(&V->modules, path);
     if(!mod)
     {

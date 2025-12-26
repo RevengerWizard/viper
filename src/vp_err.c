@@ -47,6 +47,18 @@ static void err_line(LexLine line, LexOffset ofs)
     fclose(ftxt);
 }
 
+/* Note */
+void vp_err_note(SrcLoc loc, const char* msg, ...)
+{
+    va_list args;
+    va_start(args, msg);
+    fprintf(stderr, "%s:%d note: ", loc.name, loc.line);
+    vfprintf(stderr, msg, args);
+    fputc('\n', stderr);
+    va_end(args);
+    err_line(loc.line, loc.ofs);
+}
+
 /* Warning */
 void vp_err_warn(SrcLoc loc, const char* msg, ...)
 {

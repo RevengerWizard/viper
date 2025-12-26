@@ -8,7 +8,6 @@
 #include <string.h>
 
 #include "vp_mem.h"
-#include "vp_vec.h"
 
 /* -- Memory Allocation --------------------------------------------- */
 

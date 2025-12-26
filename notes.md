@@ -1,12 +1,12 @@
 ### todo
 
-- [ ] `union` handling
+- [X] `union` handling
 
 - [X] `import`, `from`, `as`
 
 - [ ] intrinsics
 
-- [ ] `asm` blocks
+- [X] `asm` blocks
 
 - [x] `def` declarations
 
@@ -14,9 +14,9 @@
 
 - [ ] fix casts, conversions
 
-- [ ] fix `const` types
+- [X] fix `const` types
 
-- [ ] object files
+- [X] object files
 
 - [ ] linker?
 
@@ -34,11 +34,13 @@
 
 - [ ] default constant values for `struct`/`union` fields?
 
-- [ ] non nil-able ptr types `uint8*?`
+- [ ] nil-able types `uint8*?`
 
 - [x] enums
 
 - [x] incomplete struct/union declarations `struct tea_State;`
+
+- [ ] local `alias`/`type`/`struct`/`union` declarations
 
 - [ ] support output of .dot files
 
@@ -330,13 +332,13 @@ int16 <- int8 | uint8 | bool
 int32 <- int16 | uint16 | int8 | uint8 | bool
 int64 <- int32 | uint32 | int16 | uint16 | int8 | uint8 | bool
 
-| Cast Type   | Source Types           | Target Types          | Safety Level                                     |
-|-----------  | ---------------------- | --------------------- | ------------------------------------------------ |
-| `cast`      | Numeric, bool, void*   | Numeric, bool, typed* | **Safe** - No data loss or well-defined behavior |
-| `intcast`   | Numeric                | Integer only          | **Unsafe** - Potential data loss, wrap-around    |
-| `floatcast` | Numeric                | Float only            | **Unsafe** - Truncation, precision loss          |
-| `bitcast`   | Any                    | Same-size type        | **Unsafe** - Raw reinterpretation                |
-| `ptrcast`   | Pointer, integer       | Pointer, integer      | **Unsafe** - Memory safety concerns              |
+| Cast Type  | Target Types          | Source Types           | Safety Level                                     |
+|----------- | --------------------- | ---------------------- | ------------------------------------------------ |
+| `cast`     | Numeric, bool, typed* | Numeric, bool, void*   | **Safe** - No data loss or well-defined behavior |
+| `intcast`  | Integer only          | Numeric                | **Unsafe** - Potential data loss, wrap-around    |
+| `floatcast`| Float only            | Numeric                | **Unsafe** - Truncation, precision loss          |
+| `bitcast`  | Same-size type        | Same size type         | **Unsafe** - Raw reinterpretation                |
+| `ptrcast`  | Pointer, integer      | Pointer, integer       | **Unsafe** - Memory safety concerns              |
 
 ### ir
 
@@ -430,6 +432,12 @@ MessageBoxA(
     MB_OKCANCEL | MB_ICONWARNING
 );
 ```
+
+---
+
+### linker
+
+`ld out.obj -o out.exe -L. -lkernel32 -ltea00 --subsystem=console -e main`
 
 ---
 

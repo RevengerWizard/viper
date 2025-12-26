@@ -51,7 +51,7 @@ typedef const char* (*VpReader)(void* ud, size_t* size);
 typedef struct VpState
 {
     SBuf code;
-    Map cacheconst;
+    Map cachequal;
     Map cacheptr;
     vec_t(Type*) cachefunc;
     vec_t(Type*) cachearr;

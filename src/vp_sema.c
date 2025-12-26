@@ -464,7 +464,7 @@ static void opr_conv(SrcLoc loc, Operand* opr, Type* ty)
 {
     if(!vp_type_isconv(ty, opr->ty))
     {
-        vp_err_error(loc, "implicit %s to %s", type_name(opr->ty), type_name(ty));
+        vp_err_error(loc, "implicit '%s' to '%s'", type_str(opr->ty), type_str(ty));
     }
     opr_cast(opr, ty);
     opr->islval = false;
@@ -499,7 +499,7 @@ static Val val_fromtype(SrcLoc loc, Type* ret, uint64_t u64)
     {
         if(val_overflow(u64, ret))
         {
-            vp_err_error(loc, "literal out of range for '%s'", type_name(ret));
+            vp_err_error(loc, "literal out of range for '%s'", type_str(ret));
         }
         if(ty_isunsigned(ret))
         {
@@ -616,7 +616,7 @@ static Val val_unary(Expr* e, Type* ty, Val val)
     {
         if(op == EX_NEG)
         {
-            vp_err_error(e->loc, "cannot apply '-' to type '%s'", type_name(ty));
+            vp_err_error(e->loc, "cannot apply '-' to type '%s'", type_str(ty));
         }
         res.val.u64 = fold_unary_u64(op, res.val.u64);
     }
@@ -1057,12 +1057,12 @@ static Operand sema_expr_name(Expr* e)
 static Operand sema_init(Type* ty, Expr* e)
 {
     Operand opr = sema_expr(e, ty);
-    if(ty_isarrempty(ty))
+    if(ty_isarr0(ty))
     {
-        if(opr.ty->kind == TY_array && ty->p == opr.ty->p)
+        if(ty_isarr(opr.ty) && ty->p == opr.ty->p)
         {
             /* Empty array, infer size from initializer expression type */
-            ty->len = opr.ty->len;
+            ty = vp_type_arr(ty->p, opr.ty->len);
             return opr_rval(ty);
         }
         else if(ty_isptr(opr.ty) && ty->p == opr.ty->p)
@@ -1125,7 +1125,7 @@ static Operand sema_expr_complit(Expr* e, Type* ret)
             idx++;
         }
     }
-    else if(ty->kind == TY_array)
+    else if(ty_isarr(ty))
     {
         int32_t idx = 0, maxidx = 0;
         for(uint32_t i = 0; i < numfields; i++)
@@ -1157,8 +1157,9 @@ static Operand sema_expr_complit(Expr* e, Type* ret)
             {
                 vp_err_error(field->loc, "field init in array compound literal out of range");
             }
-            Operand res = sema_init(ty->p, field->init);
-            opr_conv(field->loc, &res, ty->p);
+            Type* elemty = ty->p;
+            Operand res = sema_init(elemty, field->init);
+            opr_conv(field->loc, &res, elemty);
             opr_fold(field->loc, &field->init, res);
             maxidx = MAX(maxidx, idx);
             idx++;
@@ -1171,7 +1172,7 @@ static Operand sema_expr_complit(Expr* e, Type* ret)
     }
     else
     {
-        vp_err_error(e->loc, "compound literal for scalar type %s", type_name(ty));
+        vp_err_error(e->loc, "compound literal for scalar type %s", type_str(ty));
     }
     return opr_lval(ty);
 }
@@ -1181,7 +1182,7 @@ static Operand sema_expr_call(Expr* e)
 {
     vp_assertX(e->kind == EX_CALL, "call");
     Operand fn = sema_expr_rval(e->call.expr, NULL);
-    if(fn.ty->kind != TY_func)
+    if(!ty_isfunc(fn.ty))
     {
         vp_err_error(e->loc, "cannot call non-function value");
     }
@@ -1236,7 +1237,7 @@ static Operand sema_expr_field(Expr* e)
         ty = lop.ty;
         sym_complete(ty);
     }
-    if(ty->kind != TY_struct && ty->kind != TY_union)
+    if(!ty_isaggr(ty))
     {
         vp_err_error(e->loc, "can only access fields on struct/union types");
     }
@@ -1307,7 +1308,7 @@ static Operand sema_expr_cast(Expr* e)
     bool isconst = opr.isconst;
     if(!opr_cast(&opr, ty))
     {
-        vp_err_error(e->loc, "illegal type cast from %s to %s", type_name(opr.ty), type_name(ty));
+        vp_err_error(e->loc, "invalid type cast from '%s' to '%s'", type_str(opr.ty), type_str(ty));
     }
     return isconst ? opr_const(opr.ty, opr.val) : opr_lval(opr.ty);
 }
@@ -1321,7 +1322,7 @@ static Operand sema_expr_intcast(Expr* e)
     bool isconst = opr.isconst;
     if(!ty_isint(ty) || !ty_isint(opr.ty))
     {
-        vp_err_error(e->loc, "illegal 'intcast' from '%s' to '%s'", type_name(opr.ty), type_name(ty));
+        vp_err_error(e->loc, "invalid intcast from '%s' to '%s'", type_str(opr.ty), type_str(ty));
     }
     return isconst ? opr_const(ty, opr.val) : opr_lval(ty);
 }
@@ -1335,9 +1336,9 @@ static Operand sema_expr_floatcast(Expr* e)
     bool isconst = opr.isconst;
     if(!ty_isnum(ty) || !ty_isnum(opr.ty) || (!ty_isflo(ty) && !ty_isflo(opr.ty)))
     {
-        vp_err_error(e->loc, "illegal 'floatcast' from '%s' to '%s'", type_name(opr.ty), type_name(ty));
+        vp_err_error(e->loc, "invalid floatcast from '%s' to '%s'", type_str(opr.ty), type_str(ty));
     }
-    return isconst ? opr_const(opr.ty, opr.val) : opr_lval(opr.ty);
+    return isconst ? opr_const(opr.ty, opr.val) : opr_lval(ty);
 }
 
 /* Resolve ptrcast */
@@ -1347,12 +1348,12 @@ static Operand sema_expr_ptrcast(Expr* e)
     Type* ty = sema_typespec(e->cast.spec);
     Operand opr = sema_expr_rval(e->cast.expr, NULL);
     bool isconst = opr.isconst;
-
     bool srcvalid = ty_isptrlike(opr.ty) || ty_isint(opr.ty);
-    bool dstvalid = ty_isptrlike(ty);
+    bool dstvalid = ty_isptrlike(ty) || ty_isint(ty);
     if(!srcvalid || !dstvalid)
     {
-        vp_err_error(e->loc, "invalid 'ptrcast' between '%s' and '%s'; requires a combination of pointer, function pointer, or integer types", type_name(opr.ty), type_name(ty));
+        /*vp_err_note(e->loc, "ptrcast requires a combination of pointer, function pointer, or integer types");*/
+        vp_err_error(e->loc, "invalid ptrcast between '%s' and '%s'", type_str(opr.ty), type_str(ty));
     }
     return isconst ? opr_const(ty, opr.val) : opr_lval(ty);
 }
@@ -1364,12 +1365,14 @@ static Operand sema_expr_bitcast(Expr* e, Type* ret)
     Type* ty = sema_typespec(e->cast.spec);
     Operand opr = sema_expr_rval(e->cast.expr, NULL);
     bool isconst = opr.isconst;
-
-    uint32_t lsize = vp_type_sizeof(ty);
-    uint32_t rsize = vp_type_sizeof(opr.ty);
-    if(lsize != rsize)
+    uint32_t dstsize = vp_type_sizeof(ty);
+    uint32_t srcsize = vp_type_sizeof(opr.ty);
+    uint32_t dstalign = vp_type_alignof(ty);
+    uint32_t srcalign = vp_type_alignof(opr.ty);
+    if(dstsize != srcsize || dstalign != srcalign)
     {
-        vp_err_error(e->loc, "bitcast size mismatch: destination type '%s' has %d bits but source type '%s' has %d bits", type_name(ty), lsize, type_name(opr.ty), rsize);
+        /*vp_err_note(e->loc, "bitcast size mismatch: destination type '%s' has %d bits but source type '%s' has %d bits", type_str(ty), lsize, type_str(opr.ty), rsize);*/
+        vp_err_error(e->loc, "invalid bitcast between '%s' and '%s'", type_str(ty), type_str(opr.ty));
     }
     return isconst ? opr_const(ret, opr.val) : opr_lval(ty);
 }
@@ -1429,13 +1432,15 @@ static Operand sema_expr_num(Expr* e, Type* ret)
 static Operand sema_expr_str(Expr* e, Type* ret)
 {
     Operand res;
-    if(ret && ret->kind == TY_array)
+    if(ret && ty_isarr(ret))
     {
         res = opr_rval(vp_type_arr(tyuint8, e->str->len + 1));
     }
     else
     {
-        res = opr_rval(vp_type_ptr(tyuint8));
+        Type* ty = vp_type_ptr(tyuint8);
+        ty = vp_type_qual(ty, TQ_CONST);
+        res = opr_rval(ty);
     }
     return res;
 }
@@ -1563,7 +1568,7 @@ static Operand sema_expr(Expr* e, Type* ret)
         {
             Type* ty = sema_typespec(e->spec);
             sym_complete(ty);
-            if(ty->kind != TY_struct && ty->kind != TY_union)
+            if(!ty_isaggr(ty))
             {
                 vp_err_error(e->loc, "offset can only be used with struct/union types");
             }
@@ -1696,8 +1701,8 @@ static Type* sema_typespec(TypeSpec* spec)
         case SPEC_CONST:
         {
             Type* tyconst = sema_typespec(spec->ptr);
-            /*sym_complete(tyconst);*/
-            ty = vp_type_const(tyconst);
+            sym_complete(tyconst);
+            ty = vp_type_qual(tyconst, TQ_CONST);
             break;
         }
         default:
@@ -1793,7 +1798,7 @@ static Type* sema_fn(Decl* d)
         vec_push(params, typaram);
     }
     Type* ret = vp_type_decayempty(sema_typespec(d->fn.ret));
-    if(ret->kind == TY_array)
+    if(ty_isarr(ret))
     {
         vp_err_error(d->loc, "function return type cannot be array");
     }
@@ -1838,7 +1843,7 @@ static void sema_stmt_assign(Stmt* st)
     {
         vp_err_error(st->loc, "cannot assign to non-lvalue");
     }
-    if(lop.ty->kind == TY_array)
+    if(ty_isarr(lop.ty))
     {
         vp_err_error(st->loc, "cannot assign to array");
     }
@@ -1980,17 +1985,21 @@ static Type* sema_var(Decl* d)
     vp_assertX(d->kind == DECL_VAR, "var declaration");
     Type* ty = NULL;
     Type* inferty = NULL;
-    Type* declty = NULL;
     if(d->var.spec)
     {
-        declty = ty = sema_typespec(d->var.spec);
+        Type* declty = ty = sema_typespec(d->var.spec);
+        sym_complete(declty);
         if(d->var.expr)
         {
             Operand res = sema_init(declty, d->var.expr);
             inferty = ty = res.ty;
+            if(ty_isarr0(declty) && ty_isarr(inferty))
+            {
+                declty = vp_type_arr(declty->p, inferty->len);
+            }
             opr_conv(d->loc, &res, declty);
             opr_fold(d->loc, &d->var.expr, res);
-            d->var.expr->ty = declty;
+            d->var.expr->ty = inferty;
         }
     }
     else
@@ -1998,7 +2007,7 @@ static Type* sema_var(Decl* d)
         vp_assertX(d->var.expr, "expression");
         Operand res = sema_expr(d->var.expr, NULL);
         inferty = ty = res.ty;
-        if(ty->kind == TY_array && d->var.expr->kind != EX_COMPLIT)
+        if(ty_isarr(ty) && d->var.expr->kind != EX_COMPLIT)
         {
             ty = vp_type_decay(ty);
         }
@@ -2085,7 +2094,7 @@ static void sema_enum(Decl* d, Sym* sym)
         {
             if(val_overflow(val, ty))
             {
-                vp_err_error(item->loc, "literal out of range for '%s'", type_name(ty));
+                vp_err_error(item->loc, "literal out of range for '%s'", type_str(ty));
             }
         }
 

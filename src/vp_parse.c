@@ -548,13 +548,13 @@ static TypeSpec* parse_type_fn(LexState* ls)
 /* Parse base type information (keyword or name) */
 static TypeSpec* parse_type(LexState* ls)
 {
+    bool isconst = lex_match(ls, TK_const);
     TypeSpec* spec = NULL;
     if(lex_match(ls, TK_typeof))
     {
         return parse_typeof(ls);
     }
 
-    bool isconst = lex_match(ls, TK_const);
     if(lex_match(ls, TK_name))
     {
         SrcLoc loc = lex_srcloc(ls);

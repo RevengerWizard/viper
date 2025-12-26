@@ -32,6 +32,13 @@ typedef enum TypeKind
 #undef TKENUM
 } TypeKind;
 
+/* Type qualifiers */
+enum
+{
+    TQ_CONST = 1 << 0,  /* const */
+    TQ_NILABLE = 1 << 1 /* ? */
+};
+
 typedef struct TypeField
 {
     Str* name;
@@ -43,6 +50,7 @@ typedef struct Type
 {
     TypeKind kind;
     struct Sym* sym;
+    uint8_t qual;
     union
     {
         struct
@@ -64,6 +72,8 @@ typedef struct Type
         } st;
     };
 } Type;
+
+#define ty_qual(t) ((t)->qual)
 
 /* Unsigned */
 extern Type* tybool;
@@ -130,7 +140,12 @@ static VP_AINLINE bool ty_isptrlike(const Type* t)
     return t->kind == TY_ptr || t->kind == TY_func;
 }
 
-static VP_AINLINE bool ty_isarrempty(const Type* t)
+static VP_AINLINE bool ty_isarr(const Type* t)
+{
+    return t->kind == TY_array;
+}
+
+static VP_AINLINE bool ty_isarr0(const Type* t)
 {
     return t->kind == TY_array && t->len == 0;
 }
@@ -155,7 +170,18 @@ static VP_AINLINE bool ty_isfunc(const Type* t)
     return t->kind == TY_func;
 }
 
+static VP_AINLINE bool ty_isconst(const Type* t)
+{
+    return t->qual & TQ_CONST;
+}
+
+static VP_AINLINE bool ty_isnilable(const Type* t)
+{
+    return t->qual & TQ_NILABLE;
+}
+
 #define type_name(i) (vp_type_names[(i)->kind])
+#define type_str(t) (str_data(vp_type_tostr(t)))
 
 extern const char* const vp_type_names[];
 
@@ -174,10 +200,11 @@ Type* vp_type_none(struct Sym* sym);
 Type* vp_type_ptr(Type* t);
 Type* vp_type_arr(Type* t, uint32_t size);
 Type* vp_type_func(Type* ret, Type** params);
-Type* vp_type_const(Type* t);
+Type* vp_type_qual(Type* t, uint8_t qual);
 void vp_type_struct(Str* name, Type* ty, TypeField* fields);
 void vp_type_union(Str* name, Type* ty, TypeField* fields);
 uint32_t vp_type_fieldidx(Type* ty, Str* name);
 uint32_t vp_type_offset(Type* ty, Str* name);
+Str* vp_type_tostr(Type* ty);
 
 #endif

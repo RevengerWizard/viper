@@ -38,6 +38,14 @@ char* vp_buf_more2(SBuf* sb, size_t size)
     return sb->w;
 }
 
+SBuf* vp_buf_putmem(SBuf* sb, const void* q, size_t len)
+{
+    char* w = vp_buf_more(sb, len);
+    w = vp_buf_wmem(w, q, len);
+    sb->w = w;
+    return sb;
+}
+
 static char* buf_tmp(uint32_t size)
 {
     SBuf* sb = &V->tmpbuf;

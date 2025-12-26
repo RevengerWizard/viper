@@ -4,6 +4,7 @@
 */
 
 #include "vp_type.h"
+#include "vp_buf.h"
 #include "vp_def.h"
 #include "vp_map.h"
 #include "vp_mem.h"
@@ -44,7 +45,7 @@ static VP_AINLINE Type* type_alloc(TypeKind kind)
     return t;
 }
 
-static int vp_type_rank(Type* t)
+static uint32_t type_rank(Type* t)
 {
     switch(t->kind)
     {
@@ -101,7 +102,7 @@ uint32_t vp_type_sizeof(Type* t)
         case TY_union:
             return t->st.size;
         default:
-            vp_assertX(0, "type %d", t->kind);
+            vp_assertX(0, "type '%s'", type_name(t));
             break;
     }
     return 0;
@@ -155,31 +156,31 @@ bool vp_type_isconv(Type* dst, Type* src)
     {
         /* Same signedness widening */
         if(ty_issigned(dst) == ty_issigned(src) &&
-            vp_type_sizeof(src) < vp_type_sizeof(dst))
+            vp_type_sizeof(dst) > vp_type_sizeof(src))
         {
             return true;
         }
         return false;
     }
-    else if(ty_isint(src) && ty_isflo(dst))
+    else if(ty_isflo(dst) && ty_isint(src))
     {
         /* Small enough integers to float */
-        if((vp_type_sizeof(src) <= 4) && dst->kind == TY_float32)
+        if(dst->kind == TY_float32 && (vp_type_sizeof(src) < 4))
         {
             return true;
         }
         /* Any small/medium integers to double */
-        else if((vp_type_sizeof(src) <= 8) && dst->kind == TY_float64)
+        else if(dst->kind == TY_float64 && (vp_type_sizeof(src) < 8))
         {
             return true;
         }
         return false;
     }
-    else if(ty_isflo(src) && ty_isint(dst))
+    else if(ty_isint(dst) && ty_isflo(src))
     {
         return false;
     }
-    else if(ty_isflo(src) && ty_isflo(dst))
+    else if(ty_isflo(dst) && ty_isflo(src))
     {
         return dst == src;
     }
@@ -202,7 +203,7 @@ bool vp_type_isconv(Type* dst, Type* src)
             }
             else
             {
-                return src->p == tyvoid || dst->p == tyvoid;
+                return dst->p == tyvoid || src->p == tyvoid;
             }
         }
     }
@@ -215,19 +216,28 @@ bool vp_type_isconv(Type* dst, Type* src)
 /* Check explicit type cast (dst <- src) is valid */
 bool vp_type_iscast(Type* dst, Type* src)
 {
+    /* All implicit conversions are valid */
     if(vp_type_isconv(dst, src))
     {
         return true;
     }
-    else if(ty_isint(dst))
+    /* Bool to numeric */
+    else if(ty_isnum(dst) && ty_isbool(src))
     {
-        return ty_isptrlike(src);
+        return true;
     }
-    else if(ty_isint(src))
+    /* Numeric to bool */
+    else if(ty_isbool(dst) && ty_isnum(src))
     {
-        return ty_isptrlike(dst);
+        return true;
     }
-    else if(ty_isptrlike(dst) && ty_isptrlike(src))
+    /* void* to any pointer type */
+    else if(ty_isptr(dst) && ty_isptr(src) && src->p == tyvoid)
+    {
+        return true;
+    }
+    /* Any pointer to void* */
+    else if(ty_isptr(dst) && ty_isptr(src) && dst->p == tyvoid)
     {
         return true;
     }
@@ -246,8 +256,7 @@ bool vp_type_isptrcomp(Type* lty, Type* rty)
         Type* rtybase = rty->p;
         if(ltybase == rtybase)
             return true;
-        if((ltybase == tyvoid && rtybase == tyuint8) ||
-            (ltybase == tyuint8 && rtybase == tyvoid))
+        if((ltybase == tyuint8) || (rtybase == tyuint8))
         {
             return true;
         }
@@ -305,8 +314,8 @@ Type* vp_type_common(Type* lty, Type* rty)
         return lty;
     if(right && left)
     {
-        int lrank = vp_type_rank(lty);
-        int rrank = vp_type_rank(rty);
+        uint32_t lrank = type_rank(lty);
+        uint32_t rrank = type_rank(rty);
         return (rrank > lrank) ? rty : lty;
     }
     return lty;
@@ -341,7 +350,7 @@ Type* vp_type_tounsigned(Type* t)
 /* Decay a pointer type, if present */
 Type* vp_type_decay(Type* t)
 {
-    if(t->kind == TY_array)
+    if(ty_isarr(t))
     {
         t = vp_type_ptr(t->p);
     }
@@ -351,7 +360,7 @@ Type* vp_type_decay(Type* t)
 /* Decay an empty array type */
 Type* vp_type_decayempty(Type* t)
 {
-    if(ty_isarrempty(t) && ty_isptr(t))
+    if(ty_isarr0(t) && ty_isptr(t))
     {
         return vp_type_ptr(vp_type_decayempty(t->p));
     }
@@ -428,13 +437,33 @@ Type* vp_type_func(Type* ret, vec_t(Type*) params)
     return ty;
 }
 
-Type* vp_type_const(Type* t)
+Type* vp_type_qual(Type* t, uint8_t qual)
 {
-    /*if(ty_isconst(t))
-    {
+    if(ty_qual(t) == qual)
         return t;
-    }*/
-    return t;
+
+    /* Composite types: qualify base recursively, rebuild in their cache */
+    switch(t->kind)
+    {
+        case TY_ptr:
+            return vp_type_ptr(vp_type_qual(t->p, qual));
+        case TY_array:
+            return vp_type_arr(vp_type_qual(t->p, qual), t->len);
+        case TY_func:
+        default:
+            break;
+    }
+
+    /* Base types: use the qualified cache */
+    Type* ty = vp_map_get(&V->cachequal, t);
+    if(!ty || ty_qual(ty) != qual)
+    {
+        ty = type_alloc(t->kind);
+        *ty = *t;
+        ty->qual = qual;
+        vp_map_put(&V->cachequal, t, ty);
+    }
+    return ty;
 }
 
 void vp_type_struct(Str* name, Type* ty, vec_t(TypeField) fields)
@@ -477,7 +506,7 @@ void vp_type_union(Str* name, Type* ty, TypeField* fields)
 /* Find index of struct/union field name */
 uint32_t vp_type_fieldidx(Type* ty, Str* name)
 {
-    vp_assertX(ty->kind == TY_struct || ty->kind == TY_union, "struct/union");
+    vp_assertX(ty_isaggr(ty), "struct/union");
     for(uint32_t i = 0; i < vec_len(ty->st.fields); i++)
     {
         if(ty->st.fields[i].name == name)
@@ -489,7 +518,7 @@ uint32_t vp_type_fieldidx(Type* ty, Str* name)
 /* Get offset of a field already present */
 uint32_t vp_type_offset(Type* ty, Str* name)
 {
-    vp_assertX(ty->kind == TY_struct || ty->kind == TY_union, "struct/union");
+    vp_assertX(ty_isaggr(ty), "struct/union");
     for(uint32_t i = 0; i < vec_len(ty->st.fields); i++)
     {
         if(ty->st.fields[i].name == name)
@@ -497,4 +526,84 @@ uint32_t vp_type_offset(Type* ty, Str* name)
     }
     vp_assertX(0, "uknown field '%s'", str_data(name));
     return 0;
+}
+
+static void type_tostr(Type* ty, SBuf* sb)
+{
+    if(ty_isconst(ty))
+    {
+        vp_buf_putlit(sb, "const ");
+    }
+    switch(ty->kind)
+    {
+        case TY_none:
+            vp_assertX(0, "none type");
+            break;
+        case TY_bool:
+        case TY_uint8:
+        case TY_int8:
+        case TY_uint16:
+        case TY_int16:
+        case TY_uint32:
+        case TY_int32:
+        case TY_uint64:
+        case TY_int64:
+        case TY_isize:
+        case TY_usize:
+        case TY_float32:
+        case TY_float64:
+        case TY_void:
+        {
+            const char* s = type_name(ty);
+            vp_buf_putmem(sb, s, strlen(s));
+            break;
+        }
+        case TY_ptr:
+            type_tostr(ty->p, sb);
+            vp_buf_putb(sb, '*');
+            break;
+        case TY_array:
+            type_tostr(ty->p, sb);
+            vp_buf_putb(sb, '[');
+            if(ty->len)
+            {
+                char num[32];
+                int len = snprintf(num, sizeof(num), "%u", ty->len);
+                vp_buf_putmem(sb, num, len);
+            }
+            vp_buf_putb(sb, ']');
+            break;
+        case TY_func:
+            vp_buf_putlit(sb, "fn(");
+            for(uint32_t i = 0; i < vec_len(ty->fn.params); i++)
+            {
+                if(i > 0) vp_buf_putlit(sb, ", ");
+                type_tostr(ty->fn.params[i], sb);
+            }
+            vp_buf_putlit(sb, ") : ");
+            type_tostr(ty->fn.ret, sb);
+            break;
+        case TY_struct:
+            vp_buf_putlit(sb, "struct ");
+            if(ty->st.name)
+                vp_buf_putmem(sb, str_data(ty->st.name), ty->st.name->len);
+            break;
+        case TY_union:
+            vp_buf_putlit(sb, "union ");
+            if(ty->st.name)
+                vp_buf_putmem(sb, str_data(ty->st.name), ty->st.name->len);
+            break;
+        default:
+            vp_assertX(0, "?");
+            break;
+    }
+}
+
+/* Convert type to readable string */
+Str* vp_type_tostr(Type* ty)
+{
+    SBuf sb;
+    vp_buf_init(&sb);
+    type_tostr(ty, &sb);
+    return vp_buf_str(&sb);
 }

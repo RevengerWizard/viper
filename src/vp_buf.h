@@ -22,8 +22,11 @@ typedef struct SBuf
 
 char* vp_buf_need2(SBuf* sb, size_t size);
 char* vp_buf_more2(SBuf* sb, size_t size);
+SBuf* vp_buf_putmem(SBuf* sb, const void* q, size_t len);
 
 Str* vp_buf_cat2str(Str* s1, Str* s2);
+
+#define vp_buf_putlit(sb, s) (vp_buf_putmem(sb, "" s, (sizeof(s)/sizeof(char))-1))
 
 static VP_AINLINE void vp_buf_init(SBuf* sb)
 {

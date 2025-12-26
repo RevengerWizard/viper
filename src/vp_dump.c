@@ -592,6 +592,10 @@ void vp_dump_strintern(void)
 
 void vp_dump_type(Type* ty)
 {
+    if(ty_qual(ty) & TQ_CONST)
+    {
+        printf("const ");
+    }
     switch(ty->kind)
     {
         case TY_none:
@@ -671,6 +675,15 @@ void vp_dump_type(Type* ty)
 
 void vp_dump_typecache(void)
 {
+    printf("\n-- cache qual --\n");
+    for(uint32_t i = 0; i < V->cachequal.size; i++)
+    {
+        if(V->cachequal.keys[i])
+        {
+            vp_dump_type((Type*)(uintptr_t)V->cachequal.vals[i]);
+            printf("\n");
+        }
+    }
     printf("\n-- cache ptr --\n");
     for(uint32_t i = 0; i < V->cacheptr.size; i++)
     {
@@ -692,6 +705,7 @@ void vp_dump_typecache(void)
         vp_dump_type(V->cachefunc[i]);
         printf("\n");
     }
+    printf("\n");
 }
 
 /* -- AST dump ------------------------------------------------------ */
