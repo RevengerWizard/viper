@@ -44,6 +44,14 @@
 
 - [ ] support output of .dot files
 
+- [ ] instruction selection: x64, ARM64, RISC-V64
+
+- [ ] multi-target architectures: x64, ARM64, RISC-V64
+
+- [X] anonymous `struct`/`union`
+
+- [ ] `packed` for `struct`/`union`
+
 ### integer literals
 
 `1u8` `1i8` `1u16` `1i16` `1u32` `1i32` `1u64` `1i64` | `1u128` `1i128`
@@ -293,7 +301,7 @@ macro vec_hdr(v) = cast(VecHeader*, cast(uint8*, v - offset(VecHeader, data)));
 | `#name`    | compile-time only   |
 | `keyword`  | semantic modifier   |
 | `@name()`  | builtin/intrinsic   |
-| `[[name]]` | function attributes |
+| `[[name]]` | attributes          |
 
 ---
 
@@ -310,14 +318,6 @@ macro vec_hdr(v) = cast(VecHeader*, cast(uint8*, v - offset(VecHeader, data)));
 `ptrcast`
 
 `constcast` ?
-
-| Cast        | Purpose                             | Notes                  |
-| ----------- | ----------------------------------- | ---------------------- |
-| `cast`      | Safe, context-based conversions     | Default option         |
-| `floatcast` | Float ↔ int, truncating/overflowing | Only for numeric types |
-| `intcast`   | Numeric, lossy, signed ↔ unsigned   | Only for numeric types |
-| `bitcast`   | Raw bit reinterpretation            | Must match size        |
-| `ptrcast`   | Pointer ↔ pointer or int            | Use with caution       |
 
 float32 <- int16, uint16, int8, uint8, bool
 float64 <- int32, uint32, int16, uint16, int8, uint8, bool

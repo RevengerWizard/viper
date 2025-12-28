@@ -795,21 +795,45 @@ static void dump_typespec(TypeSpec* spec)
 
 static void dump_ast_aggr(Aggregate* agr)
 {
+    if(!agr->items) return;
     for(uint32_t i = 0; i < vec_len(agr->items); i++)
     {
         dump_indent();
         AggregateItem* item = &agr->items[i];
-        for(uint32_t j = 0; j < vec_len(item->names); j++)
+        switch(item->kind)
         {
-            Str* name = item->names[j];
-            printf("%s", str_data(name));
-            if(j != vec_len(item->names) - 1)
+            case AGR_ITEM_FIELD:
             {
-                printf(", ");
+                for(uint32_t j = 0; j < vec_len(item->names); j++)
+                {
+                    Str* name = item->names[j];
+                    printf("%s", str_data(name));
+                    if(j != vec_len(item->names) - 1)
+                    {
+                        printf(", ");
+                    }
+                }
+                printf(" : ");
+                dump_typespec(item->type);
+                break;
             }
+            case AGR_ITEM_SUB:
+            {
+                Aggregate* sub = item->sub;
+                printf("%s\n", sub->kind == AGR_UNION ? "union" : "struct");
+                dump_indent();
+                printf("{\n");
+                indent++;
+                dump_ast_aggr(sub);
+                indent--;
+                dump_indent();
+                printf("}\n");
+                break;
+            }
+            default:
+                vp_assertX(0, "?");
+                break;
         }
-        printf(" : ");
-        dump_typespec(item->type);
         printf("\n");
     }
 }

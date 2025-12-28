@@ -264,22 +264,6 @@ bool vp_type_isptrcomp(Type* lty, Type* rty)
     return false;
 }
 
-/* Check if struct/union has duplicate fields */
-bool vp_type_isdupfield(vec_t(TypeField) fields)
-{
-    for(uint32_t i = 0; i < vec_len(fields); i++)
-    {
-        for(uint32_t j = i + 1; j < vec_len(fields); j++)
-        {
-            if(fields[i].name == fields[j].name)
-            {
-                return true;
-            }
-        }
-    }
-    return false;
-}
-
 /* Get builtin type from index */
 Type* vp_type_builtin(int i)
 {
@@ -466,25 +450,46 @@ Type* vp_type_qual(Type* t, uint8_t qual)
     return ty;
 }
 
+static void type_fieldsadd(vec_t(TypeField)* fields, Type* ty, uint32_t base)
+{
+    vp_assertX(ty_isaggr(ty), "struct/union");
+    for(uint32_t i = 0; i < vec_len(ty->st.fields); i++)
+    {
+        TypeField f = ty->st.fields[i];
+        f.offset += base;
+        vec_push(*fields, f);
+    }
+}
+
 void vp_type_struct(Str* name, Type* ty, vec_t(TypeField) fields)
 {
     vp_assertX(ty->kind == TY_name, "type name");
     ty->kind = TY_struct;
     ty->st.name = name;
-    ty->st.fields = fields;
-    ty->st.align = 0;
-    ty->st.size = 0;
+    vec_t(TypeField) newfields = vec_init(TypeField);
+    uint32_t totalign = 0;
+    uint32_t totsize = 0;
     for(TypeField* it = fields; it != vec_end(fields); it++)
     {
         uint32_t align = vp_type_alignof(it->ty);
         vp_assertX(IS_POW2(align), "power of 2");
-        ty->st.size = ALIGN_UP(ty->st.size, align);
-        it->offset = ty->st.size;
-        ty->st.size += vp_type_sizeof(it->ty);
-        ty->st.align = MAX(ty->st.align, align);
+        totsize = ALIGN_UP(totsize, align);
+        if(it->name)
+        {
+            it->offset = totsize;
+            vec_push(newfields, *it);
+        }
+        else
+        {
+            type_fieldsadd(&newfields, it->ty, totsize);
+        }
+        totsize += vp_type_sizeof(it->ty);
+        totalign = MAX(totalign, align);
     }
-    ty->st.fields = fields;
-    ty->st.size = ALIGN_UP(ty->st.size, ty->st.align);
+    totsize = ALIGN_UP(totsize, totalign);
+    ty->st.fields = newfields;
+    ty->st.align = totalign;
+    ty->st.size = totsize;
 }
 
 void vp_type_union(Str* name, Type* ty, TypeField* fields)
@@ -492,15 +497,27 @@ void vp_type_union(Str* name, Type* ty, TypeField* fields)
     vp_assertX(ty->kind == TY_name, "type name");
     ty->kind = TY_union;
     ty->st.name = name;
-    ty->st.fields = fields;
-    ty->st.size = 0;
+    vec_t(TypeField) newfields = vec_init(TypeField);
+    uint32_t totalign = 0;
+    uint32_t totsize = 0;
     for(TypeField* it = fields; it != vec_end(fields); it++)
     {
-        it->offset = 0;
-        ty->st.size = MAX(ty->st.size, vp_type_sizeof(it->ty));
-        ty->st.align = MAX(ty->st.align, vp_type_alignof(it->ty));
+        if(it->name)
+        {
+            it->offset = 0;
+            vec_push(newfields, *it);
+        }
+        else
+        {
+            type_fieldsadd(&newfields, it->ty, 0);
+        }
+        totsize = MAX(totsize, vp_type_sizeof(it->ty));
+        totalign = MAX(totalign, vp_type_alignof(it->ty));
     }
-    ty->st.fields = fields;
+    totsize = ALIGN_UP(totsize, totalign);
+    ty->st.fields = newfields;
+    ty->st.align = totalign;
+    ty->st.size = totsize;
 }
 
 /* Find index of struct/union field name */

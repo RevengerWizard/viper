@@ -155,6 +155,8 @@ static Sym* sym_decl(Decl* d)
     return sym;
 }
 
+static Type* sym_aggr_complete(Str* name, Type* ty, Aggregate* agr);
+
 /* Complete a symbolic type */
 static void sym_complete(Type* ty)
 {
@@ -173,42 +175,114 @@ static void sym_complete(Type* ty)
     ty->kind = TY_name;
     vp_assertX(d->kind == DECL_STRUCT || d->kind == DECL_UNION, "struct/union");
 
-    vec_t(TypeField) fields = vec_init(TypeField);
-    for(uint32_t i = 0; i < vec_len(d->agr->items); i++)
+    sym_aggr_complete(d->name, ty, d->agr);
+}
+
+typedef struct
+{
+    Str* name;
+    SrcLoc loc;
+} FieldLoc;
+
+/* Flatten field names and locs of aggregates */
+static void fieldloc_add(vec_t(FieldLoc)* flocs, Aggregate* agr)
+{
+    for(uint32_t i = 0; i < vec_len(agr->items); i++)
     {
-        AggregateItem* item = &d->agr->items[i];
-        Type* tyitem = sema_typespec(item->type);
-        tyitem = vp_type_decayempty(tyitem);
-        sym_complete(tyitem);
-        if(vp_type_sizeof(tyitem) == 0)
+        AggregateItem* item = &agr->items[i];
+        switch(item->kind)
         {
-            if(tyitem->kind != TY_array || vp_type_sizeof(tyitem->p) == 0)
+            case AGR_ITEM_FIELD:
             {
-                vp_err_error(item->loc, "field type of size 0 is not allowed");
+                for(uint32_t j = 0; j < vec_len(item->names); j++)
+                {
+                    vec_push(*flocs, ((FieldLoc){item->names[j], item->loc}));
+                }
+                break;
             }
+            case AGR_ITEM_SUB:
+            {
+                fieldloc_add(flocs, item->sub);
+                break;
+            }
+            default:
+                vp_assertX(0, "?");
+                break;
         }
-        for(uint32_t j = 0; j < vec_len(item->names); j++)
+    }
+}
+
+/* Complete a (symbolic) aggregate type */
+static Type* sym_aggr_complete(Str* name, Type* ty, Aggregate* agr)
+{
+    vec_t(TypeField) fields = vec_init(TypeField);
+    for(uint32_t i = 0; i < vec_len(agr->items); i++)
+    {
+        AggregateItem* item = &agr->items[i];
+        switch(item->kind)
         {
-            vec_push(fields, (TypeField){item->names[j], tyitem, 0});
+            case AGR_ITEM_FIELD:
+            {
+                Type* itemty = sema_typespec(item->type);
+                itemty = vp_type_decayempty(itemty);
+                sym_complete(itemty);
+                if(vp_type_sizeof(itemty) == 0)
+                {
+                    if(!ty_isarr(itemty) || vp_type_sizeof(itemty->p) == 0)
+                    {
+                        vp_err_error(item->loc, "field type of size 0 is not allowed");
+                    }
+                }
+                for(uint32_t j = 0; j < vec_len(item->names); j++)
+                {
+                    vec_push(fields, (TypeField){item->names[j], itemty, 0});
+                }
+                break;
+            }
+            case AGR_ITEM_SUB:
+            {
+                Type* itemty = sym_aggr_complete(NULL, NULL, item->sub);
+                vec_push(fields, (TypeField){NULL, itemty, 0});
+                break;
+            }
+            default:
+                vp_assertX(0, "?");
+                break;
         }
+    }
+    if(ty == NULL)
+    {
+        ty = vp_type_none(NULL);
+        ty->kind = TY_name;
     }
     if(vec_len(fields) == 0)
     {
-        vp_err_error(d->loc, "no fields");
+        vp_err_error(agr->loc, "no fields");
     }
-    if(vp_type_isdupfield(fields))
+    vec_t(FieldLoc) flocs = vec_init(FieldLoc);
+    fieldloc_add(&flocs, agr);
+    for(uint32_t i = 0; i < vec_len(flocs); i++)
     {
-        vp_err_error(d->loc, "duplicate fields");
+        for(uint32_t j = 0; j < i; j++)
+        {
+            if(flocs[i].name == flocs[j].name)
+            {
+                vp_err_error(flocs[i].loc, "duplicate field '%s' in %s",
+                                str_data(flocs[i].name),
+                                agr->kind == AGR_STRUCT ? "struct" : "union");
+            }
+        }
     }
-    if(d->kind == DECL_STRUCT)
+    if(agr->kind == AGR_STRUCT)
     {
-        vp_type_struct(d->name, ty, fields);
+        vp_type_struct(name, ty, fields);
     }
     else
     {
-        vp_assertX(d->kind == DECL_UNION, "union");
-        vp_type_union(d->name, ty, fields);
+        vp_assertX(agr->kind == AGR_UNION, "union");
+        vp_type_union(name, ty, fields);
     }
+    return ty;
 }
 
 /* -- Constant folding ---------------------------------------------- */

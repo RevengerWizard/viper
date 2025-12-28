@@ -380,8 +380,8 @@ Decl* vp_decl_from(SrcLoc loc, Str* name, Str* alias, vec_t(ImportItem) items, b
 
 Aggregate* vp_aggr_new(SrcLoc loc, AggregateKind kind, AggregateItem* items)
 {
-    UNUSED(loc);
     Aggregate* ag = ast_alloc(sizeof(*ag));
+    ag->loc = loc;
     ag->kind = kind;
     ag->items = items;
     return ag;

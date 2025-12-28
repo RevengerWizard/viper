@@ -288,6 +288,7 @@ typedef enum AggregateKind
 typedef struct Aggregate
 {
     AggregateKind kind;
+    SrcLoc loc;
     vec_t(AggregateItem) items;
 } Aggregate;
 

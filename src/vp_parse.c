@@ -44,7 +44,7 @@ typedef struct
 } ParseRule;
 
 /* Forward declarations */
-static Decl* parse_decl(LexState* ls);
+static Decl* parse_decl(LexState* ls, bool top);
 static ParseRule expr_rule(LexToken t);
 static Expr* expr_prec(LexState* ls, Prec prec);
 static Expr* expr(LexState* ls);
@@ -700,7 +700,7 @@ static Stmt* parse_block(LexState* ls)
     while(!lex_check(ls, '}') && !lex_check(ls, TK_eof))
     {
         Stmt* st = NULL;
-        Decl* d = parse_decl(ls);
+        Decl* d = parse_decl(ls, false);
         if(d)
         {
             st = vp_stmt_decl(d->loc, d);
@@ -957,6 +957,7 @@ static Decl* parse_fn(LexState* ls, uint32_t flags, vec_t(Attr) attrs)
     if(lex_match(ls, ';'))
     {
         body = NULL;
+        flags |= DECL_FLAG_EMPTY;
     }
     else
     {
@@ -1120,7 +1121,7 @@ static Stmt* parse_stmt(LexState* ls)
 }
 
 /* Parse a declaration */
-static Decl* parse_decl(LexState* ls)
+static Decl* parse_decl(LexState* ls, bool top)
 {
     uint32_t flags = 0;
     Decl* d = NULL;
@@ -1173,7 +1174,10 @@ static Decl* parse_decl(LexState* ls)
             d = parse_enum(ls, flags);
             break;
         default:
-            vp_err_error(loc, "invalid declaration");
+            if(top)
+            {
+                vp_err_error(loc, "invalid declaration");
+            }
             break;
     }
     return d;
@@ -1187,7 +1191,7 @@ vec_t(Decl*) vp_parse(VpState* V, LexState* ls)
     vec_t(Decl*) decls = vec_init(Decl*);
     while(!lex_match(ls, TK_eof))
     {
-        Decl* d = parse_decl(ls);
+        Decl* d = parse_decl(ls, true);
         vec_push(decls, d);
     }
     return decls;

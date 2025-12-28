@@ -1357,7 +1357,7 @@ static Code* gen_fn(Decl* d)
 
     Code* code = vp_mem_calloc(1, sizeof(*code));
     code->name = d->name;
-    code->bbs = vec_init(BB*);
+    code->bbs = NULL;
     code->calls = vec_init(IR*);
     code->slots = vec_init(Slot);
     code->numparams = vec_len(d->fn.params);
@@ -1371,6 +1371,7 @@ static Code* gen_fn(Decl* d)
 
     RegAlloc* ra = V->ra = vp_ra_new(V->target->raset);
     code->ra = ra;
+    code->bbs = vec_init(BB*);
     V->fncode = code;
 
     vp_bb_setcurr(vp_bb_new());
