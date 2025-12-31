@@ -337,6 +337,7 @@ typedef struct ImportItem
 typedef enum DeclKind
 {
     DECL_VAR,
+    DECL_CONST,
     DECL_DEF,
     DECL_FN,
     DECL_TYPE,
@@ -450,7 +451,7 @@ Stmt* vp_stmt_asm(SrcLoc loc, vec_t(Inst*) insts);
 
 /* Declarations */
 Decl* vp_decl_fn(SrcLoc loc, uint32_t flags, vec_t(Attr) attrs, TypeSpec* ret, Str* name, vec_t(Param) params, Stmt* body);
-Decl* vp_decl_var(SrcLoc loc, uint32_t flags, Str* name, TypeSpec* spec, Expr* e);
+Decl* vp_decl_var(SrcLoc loc, DeclKind kind, uint32_t flags, Str* name, TypeSpec* spec, Expr* e);
 Decl* vp_decl_def(SrcLoc loc, uint32_t flags, Str* name, TypeSpec* spec, Expr* e);
 Decl* vp_decl_type(SrcLoc loc, uint32_t flags, Str* name, TypeSpec* spec);
 Decl* vp_decl_alias(SrcLoc loc, uint32_t flags, Str* name, TypeSpec* spec);

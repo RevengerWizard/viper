@@ -295,9 +295,10 @@ static Decl* decl_new(DeclKind kind, SrcLoc loc, uint32_t flags, Str* name)
     return d;
 }
 
-Decl* vp_decl_var(SrcLoc loc, uint32_t flags, Str* name, TypeSpec* spec, Expr* e)
+Decl* vp_decl_var(SrcLoc loc, DeclKind kind, uint32_t flags, Str* name, TypeSpec* spec, Expr* e)
 {
-    Decl* d = decl_new(DECL_VAR, loc, flags, name);
+    vp_assertX(kind == DECL_VAR || kind == DECL_CONST, "var/const");
+    Decl* d = decl_new(kind, loc, flags, name);
     d->var.spec = spec;
     d->var.expr = e;
     d->var.vi = NULL;

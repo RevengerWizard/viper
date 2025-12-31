@@ -1036,10 +1036,10 @@ static Decl* parse_def(LexState* ls, uint32_t flags)
     return vp_decl_def(loc, flags, name, spec, e);
 }
 
-/* Parse 'var' */
-static Decl* parse_var(LexState* ls, uint32_t flags)
+/* Parse 'var' or 'const' */
+static Decl* parse_var(LexState* ls, DeclKind kind, uint32_t flags)
 {
-    vp_lex_next(ls);    /* Skip 'var' */
+    vp_lex_next(ls);    /* Skip 'var'/'const' */
     SrcLoc loc = lex_srcloc(ls);
     Str* name = lex_name(ls);
 
@@ -1050,7 +1050,7 @@ static Decl* parse_var(LexState* ls, uint32_t flags)
     Expr* e = lex_match(ls, '=') ? expr(ls) : NULL;
     vp_lex_consume(ls, ';');
 
-    return vp_decl_var(loc, flags, name, spec, e);
+    return vp_decl_var(loc, kind, flags, name, spec, e);
 }
 
 /* Parse simple statement */
@@ -1153,7 +1153,10 @@ static Decl* parse_decl(LexState* ls, bool top)
             d = parse_fn(ls, flags, NULL);
             break;
         case TK_var:
-            d = parse_var(ls, flags);
+            d = parse_var(ls, DECL_VAR, flags);
+            break;
+        case TK_const:
+            d = parse_var(ls, DECL_CONST, flags);
             break;
         case TK_def:
             d = parse_def(ls, flags);

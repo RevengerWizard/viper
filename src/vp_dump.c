@@ -1251,9 +1251,18 @@ void vp_dump_decl(Decl* d)
             break;
         }
         case DECL_VAR:
+        case DECL_CONST:
         {
             dump_indent();
-            printf("var %s", str_data(d->name));
+            if(d->kind == DECL_VAR)
+            {
+                printf("var ");
+            }
+            else
+            {
+                printf("const ");
+            }
+            printf("%s", str_data(d->name));
             if(d->var.spec)
             {
                 printf(" : ");

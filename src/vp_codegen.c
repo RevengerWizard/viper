@@ -933,7 +933,7 @@ static void gen_var(Stmt* st)
 {
     Decl* d = st->decl;
     if(d->kind == DECL_NOTE) return;
-    vp_assertX(d->kind == DECL_VAR, "?");
+    vp_assertX(d->kind == DECL_VAR || d->kind == DECL_CONST, "var/const");
 
     VarInfo* vi = d->var.vi;
     vp_assertX(vi, "empty variable info");

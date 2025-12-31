@@ -10,19 +10,21 @@
 
 - [x] `def` declarations
 
-- [ ] `const` variable declarations
+- [X] `const` variable declarations
 
 - [ ] fix casts, conversions
 
 - [X] fix `const` types
 
 - [X] object files
+    * [X] COFF
+    * [ ] ELF
 
 - [ ] linker?
 
 - [ ] length from string literals/arrays
 
-- [x] function prototypes from dynamic (Win32) libraries
+- [X] function prototypes from dynamic (Win32) libraries
 
 - [ ] globals emission
 
@@ -36,11 +38,11 @@
 
 - [ ] nil-able types `uint8*?`
 
-- [x] enums
+- [X] enums
 
-- [x] incomplete struct/union declarations `struct tea_State;`
+- [X] incomplete struct/union declarations `struct tea_State;`
 
-- [ ] local `alias`/`type`/`struct`/`union` declarations
+- [ ] local `alias`/`type`/`struct`/`union`/`enum` declarations
 
 - [ ] support output of .dot files
 
@@ -51,6 +53,10 @@
 - [X] anonymous `struct`/`union`
 
 - [ ] `packed` for `struct`/`union`
+
+- [ ] unnamed `struct`/`union`/`enum` types
+
+---
 
 ### integer literals
 
@@ -95,8 +101,9 @@ custom-width integer types
 `vxc [mode] [options] [file]`
 
 - `build`
-
 - `link`
+- `doc`
+- `check`
 
 ---
 
@@ -147,9 +154,15 @@ asm
 
 ### std
 
-`io::write`
+`os::exit(x : uint32)`
 
-`io::read`
+`os::getenv`
+
+`io::write(f : FILE*, buf : const uint8*, n : usize) : usize`
+
+`io::read(f : FILE*, buf : uint8*, n : usize) : usize`
+
+`io::flush(f : FILE*)`
 
 `io::fmt`
 
@@ -157,19 +170,114 @@ asm
 
 `io::println`
 
-`str::len`
+`str::len(s : const uint8*) : usize`
 
-`mem::copy`
+`str::toi32`
+`str::toi64`
+`str::tof64`
 
-`mem::set`
+`mem::copy(dst : void*, src : const void*, n : usize) : void`
 
-`mem::alloc`
+`mem::move(dst : void*, src : const void*, n : usize) : void`
+
+`mem::set(dst : void*, val : uint32, n : usize) : void`
+
+`mem::cmp(a : const void*, b : const void*, n : usize) : int32`
+
+`mem::alloc(n : usize) : void*`
+
+`mem::free(p : void*) : void`
+
+`math::abs`
+`math::absi64(x : int64) : int64`
+`math::absf64(x : float64) : float64`
 
 `math::sin`
+`math::sinf32(x : float32) : float32`
+`math::sinf64(x : float64) : float64`
 
 `math::cos`
+`math::cosf32(x : float32) : float32`
+`math::cosf64(x : float64) : float64`
 
-`math::pi`
+`math::sqrt`
+`math::sqrtf32(x : float32) : float32`
+`math::sqrtf64(x : float64) : float64`
+
+`math::min(a : T, b : T) : T`
+
+`math::max(a : T, b : T) : T`
+
+`math::pi : float64`
+
+`math::e : float64`
+
+---
+
+### fmt
+
+```
+%[flags][width][.precision]type
+```
+
+- `%` start specifier
+- `%%` -> `%`
+
+- integers
+`%u8` `%i8` 
+`%u16` `%i16`
+`%u32` `%i32` 
+`%u64` `%i64`
+`%uz` `%iz` -> `usize`/`isize`
+- floats
+`%f32` `%f64`
+`%e32` `%e64` scientific
+- bool
+`%b` -> `true`/`false`
+`%B` -> `1`/`0`
+- strings
+`%s` -> `const uint8*` (nil-terminated)
+`%S` -> `(const uint8*, usize)`
+
+`%s` with `nil` -> `(nil)`
+`%s` with `(nil, n)` -> `(nil)`
+- pointers
+`%p` -> hex, `0x` prefixed, pointer-sized
+- others
+`%c` single byte `uint8`, ASCII
+
+- `%i32` -> `-42`
+- `8%i32`
+
+Flags
+
+Single-char, order-independent, optional
+- `-` left align
+- `0` zero pad
+- `#` alternate form
+- `+` always show sign
+
+Width
+
+Number digit
+- `%8i32`
+- `-16s`
+- `%08u32`
+
+Base
+
+- `#x` hex (lower)
+- `#H` hex (upper)
+- `#b` binary
+
+- `%#xu32` -> `0xDEADBEEF`
+- `%#u8` -> `0b101010`
+
+Precision
+
+- `%.4i32` -> `0042`
+- `%.2f32` -> `3.14`
+- `%.5s` -> at most 5 bytes
 
 ---
 
@@ -198,6 +306,10 @@ asm
 `aligned(8)`
 
 `alias`
+
+`export` ?
+
+`goto` ?
 
 ---
 
@@ -233,7 +345,10 @@ struct VecHeader
     data : uint8[];
 }
 
-macro vec_hdr(v) = cast(VecHeader*, cast(uint8*, v - offset(VecHeader, data)));
+macro len(v) = hdr(v).len;
+macro size(v) = hdr(v).size;
+macro end(v) = v + len(v);
+macro hdr(v) = cast(VecHeader*, cast(uint8*, v - offset(VecHeader, data)));
 ```
 
 ---
@@ -317,7 +432,7 @@ macro vec_hdr(v) = cast(VecHeader*, cast(uint8*, v - offset(VecHeader, data)));
 
 `ptrcast`
 
-`constcast` ?
+~~`constcast`~~ ?
 
 float32 <- int16, uint16, int8, uint8, bool
 float64 <- int32, uint32, int16, uint16, int8, uint8, bool
@@ -448,7 +563,7 @@ fn example<T>(a : T, b : T) : T
 {
     // get type info with some operator, I'll use % as an example
     const T_info: type = %T;
-    if !T_info.is_numerical { compile_error("raagh"); }
+    if !T_info.is_numerical { #error("raagh"); }
 
     switch T_info.id
     {
@@ -457,4 +572,58 @@ fn example<T>(a : T, b : T) : T
       else: return 0;
     }
 }
+```
+
+---
+
+`int32::max`
+`int64::min`
+`float64::max`
+
+```
+for i : int32 = 0; i < 10; i++ {  }
+for i := 0u32; i < 10; i++ {  }
+```
+
+```
+switch x
+case 10 {  }
+case 11 {  }
+default {  }
+
+var c = switch x 
+case 10 => 'A';
+case 12 => 'C';
+default => '\0';
+```
+
+```
+struct Data
+{
+    kind : enum : int32 {
+        EMPTY,
+        HALF,
+        FULL
+    };
+    union
+    {
+        
+    }
+}
+```
+
+```
+type X = struct;
+
+type U = union;
+
+type S = struct { ... };
+
+type R = enum { ... };
+
+var x : struct { id : int32; name : const uint8*; } = {12, "tony"};
+
+var y : struct { int32; bool; } = {13, true};
+
+var e : enum : int32 { STOP, RUN, END } = e::STOP;
 ```

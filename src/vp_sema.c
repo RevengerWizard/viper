@@ -46,9 +46,10 @@ static Sym* sym_new(SymKind kind, Str* name, Decl* d)
 }
 
 /* Add symbol to local scope */
-static void sym_add(Str* name, Type* ty)
+static void sym_add(Str* name, SymKind kind, Type* ty)
 {
-    Sym* sym = sym_new(SYM_VAR, name, NULL);
+    vp_assertX(kind == SYM_VAR || kind == SYM_CONST, "sym var/const");
+    Sym* sym = sym_new(kind, name, NULL);
     sym->state = SYM_DONE;
     sym->type = ty;
     sym->local = true;
@@ -135,6 +136,9 @@ static Sym* sym_decl(Decl* d)
             break;
         case DECL_FN:
             kind = SYM_FN;
+            break;
+        case DECL_CONST:
+            kind = SYM_CONST;
             break;
         case DECL_VAR:
             kind = SYM_VAR;
@@ -1115,6 +1119,7 @@ static Operand sema_expr_name(Expr* e)
     e->scope = scope;
     switch(sym->kind)
     {
+        case SYM_CONST:
         case SYM_VAR:
             return opr_lval(sym->type);
         case SYM_DEF:
@@ -1774,9 +1779,9 @@ static Type* sema_typespec(TypeSpec* spec)
             break;
         case SPEC_CONST:
         {
-            Type* tyconst = sema_typespec(spec->ptr);
-            sym_complete(tyconst);
-            ty = vp_type_qual(tyconst, TQ_CONST);
+            ty = sema_typespec(spec->ptr);
+            sym_complete(ty);
+            ty = vp_type_qual(ty, TQ_CONST);
             break;
         }
         default:
@@ -1912,6 +1917,15 @@ static void sema_block(Stmt** stmts, Type* ret)
 static void sema_stmt_assign(Stmt* st)
 {
     vp_assertX(st->kind >= ST_ASSIGN && st->kind <= ST_RSHIFT_ASSIGN, "assignment");
+    if(st->lhs->kind == EX_NAME)
+    {
+        Sym* sym = sym_name(st->lhs->name);
+        if(sym->kind == SYM_CONST)
+        {
+            vp_err_error(st->lhs->loc, "cannot assign to 'const' variable '%s'",
+                                     str_data(sym->name));
+        }
+    }
     Operand lop = sema_expr(st->lhs, NULL);
     if(!lop.islval)
     {
@@ -1921,10 +1935,6 @@ static void sema_stmt_assign(Stmt* st)
     {
         vp_err_error(st->loc, "cannot assign to array");
     }
-    /*if(ty_isconst(lop.ty))
-    {
-        vp_err_error(st->loc, "left-hand side of assign is const");
-    }*/
     Operand rop = sema_expr_rval(st->rhs, lop.ty);
     if(st->kind != ST_ASSIGN)
     {
@@ -1994,10 +2004,11 @@ static void sema_stmt(Stmt* st, Type* ret)
         case ST_DECL:
         {
             Decl* d = st->decl;
-            if(st->decl->kind == DECL_VAR)
+            if(st->decl->kind == DECL_VAR || st->decl->kind == DECL_CONST)
             {
+                SymKind kind = st->decl->kind == DECL_VAR ? SYM_VAR : SYM_CONST;
                 Type* ty = sema_var(d);
-                sym_add(d->name, ty);
+                sym_add(d->name, kind, ty);
             }
             else if(st->decl->kind == DECL_NOTE)
             {
@@ -2036,7 +2047,7 @@ static void sema_fn_body(Sym* sym)
         {
             Param* param = &d->fn.params[i];
             Type* pty = sema_typespec(param->spec);
-            sym_add(param->name, pty);
+            sym_add(param->name, SYM_VAR, pty);
 
             vp_scope_add(V->currscope, param->name, pty);
         }
@@ -2056,7 +2067,7 @@ static void sema_fn_body(Sym* sym)
 /* Resolve var declaration */
 static Type* sema_var(Decl* d)
 {
-    vp_assertX(d->kind == DECL_VAR, "var declaration");
+    vp_assertX(d->kind == DECL_VAR || d->kind == DECL_CONST, "var/const declaration");
     Type* ty = NULL;
     Type* inferty = NULL;
     if(d->var.spec)
@@ -2202,6 +2213,7 @@ static void sema_resolve(Sym* sym)
             sym->type = sema_typedef(d);
             break;
         case SYM_VAR:
+        case SYM_CONST:
             sym->type = sema_var(d);
             break;
         case SYM_DEF:
