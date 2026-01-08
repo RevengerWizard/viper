@@ -195,6 +195,7 @@ Type* vp_type_common(Type* lty, Type* rty);
 Type* vp_type_tounsigned(Type* t);
 Type* vp_type_decay(Type* t);
 Type* vp_type_decayempty(Type* t);
+Type* vp_type_dup(Type* t);
 Type* vp_type_none(struct Sym* sym);
 Type* vp_type_ptr(Type* t);
 Type* vp_type_arr(Type* t, uint32_t size);

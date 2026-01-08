@@ -126,6 +126,8 @@ static Sym* sym_decl(Decl* d)
     switch(d->kind)
     {
         case DECL_ALIAS:
+            kind = SYM_ALIAS;
+            break;
         case DECL_TYPE:
         case DECL_STRUCT:
         case DECL_UNION:
@@ -542,6 +544,10 @@ static void opr_conv(SrcLoc loc, Operand* opr, Type* ty)
 {
     if(!vp_type_isconv(ty, opr->ty))
     {
+        if(!ty_isnilable(ty) && ty_isnil(opr->ty))
+        {
+            vp_err_error(loc, "cannot assign 'nil' to non-nilable type '%s'", type_str(ty));
+        }
         vp_err_error(loc, "implicit '%s' to '%s'", type_str(opr->ty), type_str(ty));
     }
     opr_cast(opr, ty);
@@ -1260,6 +1266,24 @@ static Operand sema_expr_complit(Expr* e, Type* ret)
 static Operand sema_expr_call(Expr* e)
 {
     vp_assertX(e->kind == EX_CALL, "call");
+    if(e->call.expr->kind == EX_NAME)
+    {
+        Sym* sym = sym_name(e->call.expr->name);
+        if(sym && (sym->kind == SYM_TYPE || sym->kind == SYM_ALIAS))
+        {
+            if(vec_len(e->call.args) != 1)
+            {
+                vp_err_error(e->loc, "type conversion takes 1 argument");
+            }
+            Operand opr = sema_expr_rval(e->call.args[0], sym->type);
+            bool isconst = opr.isconst;
+            if(!opr_cast(&opr, sym->type))
+            {
+                vp_err_error(e->loc, "invalid type cast from '%s' to '%s'", type_str(opr.ty), type_str(sym->type));
+            }
+            return isconst ? opr_const(opr.ty, opr.val) : opr_lval(opr.ty);
+        }
+    }
     Operand fn = sema_expr_rval(e->call.expr, NULL);
     if(!ty_isfunc(fn.ty))
     {
@@ -1277,10 +1301,11 @@ static Operand sema_expr_call(Expr* e)
     }
     for(uint32_t i = 0; i < numparam; i++)
     {
+        SrcLoc loc = e->call.args[i]->loc;
         Type* typaram = fn.ty->fn.params[i];
         Operand arg = sema_expr_rval(e->call.args[i], typaram);
-        opr_conv(e->loc, &arg, typaram);
-        opr_fold(e->loc, &e->call.args[i], arg);
+        opr_conv(loc, &arg, typaram);
+        opr_fold(loc, &e->call.args[i], arg);
     }
     e->ty = fn.ty->fn.ret;
     return opr_rval(fn.ty->fn.ret);
@@ -1727,6 +1752,7 @@ static Type* sema_typespec(TypeSpec* spec)
             switch(sym->kind)
             {
                 case SYM_ENUM:
+                case SYM_ALIAS:
                 case SYM_TYPE:
                     ty = sym->type;
                     break;
@@ -1777,24 +1803,32 @@ static Type* sema_typespec(TypeSpec* spec)
         case SPEC_TYPEOF:
             ty = sema_expr(spec->expr, NULL).ty;
             break;
-        case SPEC_CONST:
-        {
-            ty = sema_typespec(spec->ptr);
-            sym_complete(ty);
-            ty = vp_type_qual(ty, TQ_CONST);
-            break;
-        }
         default:
             vp_assertX(0, "unknown typespec");
             break;
     }
+    if(!ty_isptr(ty) && (spec->qual & SPEC_NILABLE))
+    {
+        vp_err_error(spec->loc, "'%s' cannot be nil-able; only pointer types support '?'", type_str(ty));
+    }
+    if(spec->qual)
+    {
+        ty = vp_type_qual(ty, spec->qual);
+    }
     return ty;
 }
 
-/* Resolve type declaration */
-static Type* sema_typedef(Decl* d)
+/* Resolve alias declaration */
+static Type* sema_alias(Decl* d)
 {
-    vp_assertX(d->kind == DECL_TYPE || d->kind == DECL_ALIAS, "type/alias declaration");
+    vp_assertX(d->kind == DECL_ALIAS, "alias declaration");
+    return sema_typespec(d->ts.spec);
+}
+
+/* Resolve type declaration */
+static Type* sema_type(Decl* d)
+{
+    vp_assertX(d->kind == DECL_TYPE, "type declaration");
     return sema_typespec(d->ts.spec);
 }
 
@@ -2112,6 +2146,7 @@ static Type* sema_var(Decl* d)
     {
         vp_err_error(d->loc, "variable of size 0");
     }
+    /* Add variable to current scope */
     d->var.vi = vp_scope_add(V->currscope, d->name, ty);
     return ty;
 }
@@ -2209,8 +2244,11 @@ static void sema_resolve(Sym* sym)
     Decl* d = sym->decl;
     switch(sym->kind)
     {
+        case SYM_ALIAS:
+            sym->type = sema_alias(d);
+            break;
         case SYM_TYPE:
-            sym->type = sema_typedef(d);
+            sym->type = sema_type(d);
             break;
         case SYM_VAR:
         case SYM_CONST:
@@ -2236,22 +2274,30 @@ static void sema_complete()
     {
         Sym* sym = *p;
         vp_assertX(sym->state == SYM_DONE, "unresolved symbol");
-        if(sym->decl && !declflag_empty(sym->decl))
+        if(sym->decl)
         {
-            if(sym->kind == SYM_TYPE)
+            switch(sym->kind)
             {
-                sym_complete(sym->type);
-            }
-            else if(sym->kind == SYM_FN)
-            {
-                /* Add function name to global scope */
-                VarInfo* vi = vp_scope_add(V->globscope, sym->name, sym->type);
-                vi->storage |= VS_FN;
-
-                if(sym->mod == S.root)
+                case SYM_ALIAS:
+                case SYM_TYPE:
+                    if(!declflag_empty(sym->decl))
+                    {
+                        sym_complete(sym->type);
+                    }
+                    break;
+                case SYM_FN:
                 {
-                    sema_fn_body(sym);
+                    /* Add function name to global scope */
+                    VarInfo* vi = vp_scope_add(V->globscope, sym->name, sym->type);
+                    vi->storage |= VS_FN;
+                    if(sym->mod == S.root)
+                    {
+                        sema_fn_body(sym);
+                    }
+                    break;
                 }
+                default:
+                    break;
             }
         }
     }

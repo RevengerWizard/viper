@@ -67,4 +67,5 @@ void vp_load(VpState* V, const char* filename)
     vp_link();
     vp_layout_init(&V->L);
     //vp_dump_code(codes);
+    vp_dump_typecache();
 }

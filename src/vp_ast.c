@@ -448,3 +448,10 @@ TypeSpec* vp_typespec_const(SrcLoc loc, TypeSpec* base)
     ts->ptr = base;
     return ts;
 }
+
+TypeSpec* vp_typespec_nilable(SrcLoc loc, TypeSpec* base)
+{
+    TypeSpec* ts = new_typespec(SPEC_NILABLE, loc);
+    ts->ptr = base;
+    return ts;
+}

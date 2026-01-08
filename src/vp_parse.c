@@ -599,10 +599,16 @@ static TypeSpec* parse_type(LexState* ls)
             spec = vp_typespec_ptr(loc, spec);
         }
     }
+    uint8_t qual = 0;
+    if(lex_match(ls, '?'))
+    {
+        qual |= SPEC_NILABLE;
+    }
     if(isconst)
     {
-        spec = vp_typespec_const(loc, spec);
+        qual |= SPEC_CONST;
     }
+    spec->qual = qual;
     return spec;
 }
 

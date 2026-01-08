@@ -36,7 +36,7 @@
 
 - [ ] default constant values for `struct`/`union` fields?
 
-- [ ] nil-able types `uint8*?`
+- [X] nil-able types `uint8*?`
 
 - [X] enums
 
@@ -93,6 +93,28 @@
 custom-width integer types
 
 `bit{n}` -> `bit7` `bit24`, `bit16`
+
+---
+
+1. lex
+2. parse -> AST
+3. AST -> sema -> AST
+4. AST -> codegen -> IR
+5. IR -> opt -> IR
+7. IR -> low -> IR
+6. IR -> regalloc
+7. IR -> emit -> ISA
+
+
+1. lex
+2. parse -> AST
+3. AST -> sema -> AST
+4. AST -> codegen -> IR
+5. IR -> opt -> IR
+6. IR -> low -> LIR
+7. LIR -> sel -> LIR
+8. LIR -> regalloc
+9. LIR -> emit -> ISA
 
 ---
 
@@ -271,7 +293,7 @@ Base
 - `#b` binary
 
 - `%#xu32` -> `0xDEADBEEF`
-- `%#u8` -> `0b101010`
+- `%#bu8` -> `0b101010`
 
 Precision
 
@@ -516,7 +538,10 @@ Linux Syscall x64
 
 ```
 [[syscall]]
-fn write(fd : uint32, buf : const uint8*, count : usize) : isize;
+fn write(fd : uint32, buf : const uint8*, count : usize) : isize
+{
+    @syscall(1);
+}
 ```
 
 ```
@@ -528,6 +553,26 @@ fn write(fd : uint32, buf : const uint8*, count : usize) : isize
         mov rax, 1; // sys_write
         syscall;
     }
+}
+```
+
+```
+[[syscall]]
+noreturn fn exit(status : int32) : void
+{
+    asm
+    {
+        mov x8, 0x5d;
+        svc 0;
+    }
+}
+```
+
+```
+[[syscall]]
+noreturn fn exit(status : int32) : void
+{
+    @svc(0x5d);
 }
 ```
 
@@ -579,6 +624,12 @@ fn example<T>(a : T, b : T) : T
 `int32::max`
 `int64::min`
 `float64::max`
+`bool::align`
+`bool::size`
+
+```
+fn foo() alloc {  }
+```
 
 ```
 for i : int32 = 0; i < 10; i++ {  }
@@ -600,7 +651,7 @@ default => '\0';
 ```
 struct Data
 {
-    kind : enum : int32 {
+    kind : enum : uint8 {
         EMPTY,
         HALF,
         FULL

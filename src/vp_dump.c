@@ -592,85 +592,8 @@ void vp_dump_strintern(void)
 
 void vp_dump_type(Type* ty)
 {
-    if(ty_qual(ty) & TQ_CONST)
-    {
-        printf("const ");
-    }
-    switch(ty->kind)
-    {
-        case TY_none:
-            break;
-        case TY_bool:
-        case TY_uint8:
-        case TY_int8:
-        case TY_uint16:
-        case TY_int16:
-        case TY_uint32:
-        case TY_int32:
-        case TY_uint64:
-        case TY_int64:
-        case TY_isize:
-        case TY_usize:
-        case TY_float32:
-        case TY_float64:
-        case TY_void:
-            printf("%s", type_name(ty));
-            break;
-        case TY_ptr:
-            vp_dump_type(ty->p);
-            printf("*");
-            break;
-        case TY_array:
-            vp_dump_type(ty->p);
-            printf("[");
-            printf("%d", ty->len);
-            printf("]");
-            break;
-        case TY_func:
-            printf("fn(");
-            for(uint32_t i = 0; i < vec_len(ty->fn.params); i++)
-            {
-                Type* pt = ty->fn.params[i];
-                vp_dump_type(pt);
-                if(i != vec_len(ty->fn.params) - 1)
-                {
-                    printf(", ");
-                }
-            }
-            printf(") : ");
-            vp_dump_type(ty->fn.ret);
-            break;
-        case TY_union:
-        case TY_struct:
-            if(ty->sym)
-            {
-                /* May need something better to avoid stack overflow */
-                printf("%s", str_data(ty->sym->name));
-                break;
-            }
-            if(ty->kind == TY_union)
-                printf("union");
-            else
-                printf("struct");
-            if(ty->st.name)
-            {
-                printf(" %s", str_data(ty->st.name));
-            }
-            printf("\n{\n");
-            for(uint32_t i = 0; i < vec_len(ty->st.fields); i++)
-            {
-                indent++;
-                printf("%s : ", str_data(ty->st.fields[i].name));
-                vp_dump_type(ty->st.fields[i].ty);
-                printf("\n");
-                indent--;
-            }
-            printf("}");
-            break;
-        default:
-            vp_assertX(0, "?");
-            break;
-    }
+    Str* s = vp_type_tostr(ty);
+    printf("%.*s", s->len, str_data(s));
 }
 
 void vp_dump_typecache(void)
@@ -680,6 +603,8 @@ void vp_dump_typecache(void)
     {
         if(V->cachequal.keys[i])
         {
+            vp_dump_type((Type*)(uintptr_t)V->cachequal.keys[i]);
+            printf(" -> ");
             vp_dump_type((Type*)(uintptr_t)V->cachequal.vals[i]);
             printf("\n");
         }
@@ -689,6 +614,8 @@ void vp_dump_typecache(void)
     {
         if(V->cacheptr.keys[i])
         {
+            vp_dump_type((Type*)(uintptr_t)V->cacheptr.keys[i]);
+            printf(" -> ");
             vp_dump_type((Type*)(uintptr_t)V->cacheptr.vals[i]);
             printf("\n");
         }
@@ -745,6 +672,10 @@ static void dump_ast_attr(Attr* attr)
 
 static void dump_typespec(TypeSpec* spec)
 {
+    if(spec->qual & SPEC_CONST)
+    {
+        printf("const ");
+    }
     switch(spec->kind)
     {
         case SPEC_NAME:
@@ -783,13 +714,13 @@ static void dump_typespec(TypeSpec* spec)
             dump_ast_expr(spec->expr);
             printf(")");
             break;
-        case SPEC_CONST:
-            printf("const ");
-            dump_typespec(spec->ptr);
-            break;
         default:
             vp_assertX(0, "unknown typespec");
             break;
+    }
+    if(spec->qual & SPEC_NILABLE)
+    {
+        printf("?");
     }
 }
 

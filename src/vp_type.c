@@ -11,6 +11,7 @@
 #include "vp_str.h"
 #include "vp_vec.h"
 #include "vp_state.h"
+#include "vp_sema.h"
 
 /* Unsigned */
 Type* tybool = &(Type){.kind = TY_bool};
@@ -184,7 +185,7 @@ bool vp_type_isconv(Type* dst, Type* src)
     {
         return dst == src;
     }
-    else if(ty_isptrlike(dst) && ty_isnil(src))
+    else if(ty_isptrlike(dst) && ty_isnil(src) && ty_isnilable(dst))
     {
         return true;
     }
@@ -354,6 +355,14 @@ Type* vp_type_decayempty(Type* t)
     }
 }
 
+/* Duplicate an existing type */
+Type* vp_type_dup(Type* t)
+{
+    Type* ty = type_alloc(t->kind);
+    *ty = *t;
+    return ty;
+}
+
 Type* vp_type_none(struct Sym* sym)
 {
     Type* ty = type_alloc(TY_none);
@@ -426,26 +435,15 @@ Type* vp_type_qual(Type* t, uint8_t qual)
     if(ty_qual(t) == qual)
         return t;
 
-    /* Composite types: qualify base recursively, rebuild in their cache */
-    switch(t->kind)
-    {
-        case TY_ptr:
-            return vp_type_ptr(vp_type_qual(t->p, qual));
-        case TY_array:
-            return vp_type_arr(vp_type_qual(t->p, qual), t->len);
-        case TY_func:
-        default:
-            break;
-    }
+    qual = ty_qual(t) | qual;
 
-    /* Base types: use the qualified cache */
     Type* ty = vp_map_get(&V->cachequal, t);
     if(!ty || ty_qual(ty) != qual)
     {
-        ty = type_alloc(t->kind);
-        *ty = *t;
+        ty = vp_type_dup(t);
         ty->qual = qual;
         vp_map_put(&V->cachequal, t, ty);
+        vp_map_put(&V->cachequal, ty, ty);
     }
     return ty;
 }
@@ -610,9 +608,16 @@ static void type_tostr(Type* ty, SBuf* sb)
             if(ty->st.name)
                 vp_buf_putmem(sb, str_data(ty->st.name), ty->st.name->len);
             break;
-        default:
-            vp_assertX(0, "?");
+        case TY_nil:
+            vp_buf_putlit(sb, "nil");
             break;
+        default:
+            vp_assertX(0, "%d", ty->kind);
+            break;
+    }
+    if(ty_qual(ty) & TQ_NILABLE)
+    {
+        vp_buf_putb(sb, '?');
     }
 }
 

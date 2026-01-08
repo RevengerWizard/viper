@@ -42,6 +42,7 @@ typedef enum SymKind
     SYM_CONST,
     SYM_FN,
     SYM_DEF,
+    SYM_ALIAS,
     SYM_TYPE,
     SYM_ENUM,
     SYM_MODULE,
