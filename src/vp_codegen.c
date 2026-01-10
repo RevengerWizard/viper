@@ -875,6 +875,7 @@ static VReg* gen_expr(Expr* e)
 /* Generate expression statement */
 static void gen_expr_stmt(Stmt* st)
 {
+    vp_assertX(st->kind == ST_EXPR, "not an expression statement");
     gen_expr(st->expr);
 }
 
@@ -1006,6 +1007,8 @@ static void gen_ret(Stmt* st)
     vp_bb_setcurr(bb);
 }
 
+static void gen_stmt(Stmt* st);
+
 static BB* breakbb;
 static BB* continuebb;
 
@@ -1091,6 +1094,36 @@ static void gen_if_stmt(Stmt* st)
     }
 }
 
+/* Generate for statement */
+static void gen_for_stmt(Stmt* st)
+{
+    vp_assertX(st->kind == ST_FOR, "not a for statement");
+
+    BB* breakbb1, *contbb1;
+    BB* loopbb = vp_bb_new();
+    BB* contbb = bb_push_continue(&contbb1);
+    BB* condbb = vp_bb_new();
+    BB* exitbb = bb_push_break(&breakbb1);
+
+    gen_stmt(st->forst.init);
+
+    vp_ir_jmp(condbb);
+
+    vp_bb_setcurr(loopbb);
+    gen_stmt(st->forst.body);
+
+    vp_bb_setcurr(contbb);
+    gen_stmt(st->forst.next);
+
+    /* Set up the condition block */
+    vp_bb_setcurr(condbb);
+    gen_cond_jmp(st->forst.cond, loopbb, exitbb);
+
+    vp_bb_setcurr(exitbb);
+    bb_pop_continue(contbb1);
+    bb_pop_break(breakbb1);
+}
+
 /* Generate while statement */
 static void gen_while_stmt(Stmt* st)
 {
@@ -1111,8 +1144,8 @@ static void gen_while_stmt(Stmt* st)
     gen_cond_jmp(st->whst.cond, loopbb, exitbb);
 
     vp_bb_setcurr(exitbb);
-    bb_pop_break(breakbb1);
     bb_pop_continue(contbb1);
+    bb_pop_break(breakbb1);
 }
 
 /* Generate asm block statement */
@@ -1139,6 +1172,7 @@ static const GenStmtFn gensttab[] = {
     [ST_LSHIFT_ASSIGN] = gen_comp_assign, [ST_RSHIFT_ASSIGN] = gen_comp_assign,
     [ST_EXPR] = gen_expr_stmt,
     [ST_IF] = gen_if_stmt,
+    [ST_FOR] = gen_for_stmt,
     [ST_WHILE] = gen_while_stmt,
     [ST_RETURN] = gen_ret,
     [ST_BREAK] = gen_break,

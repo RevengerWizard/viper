@@ -268,6 +268,16 @@ Stmt* vp_stmt_if(SrcLoc loc, Expr* cond, Stmt* tblock, Stmt* fblock)
     return st;
 }
 
+Stmt* vp_stmt_for(SrcLoc loc, Stmt* init, Expr* cond, Stmt* next, Stmt* body)
+{
+    Stmt* st = stmt_new(ST_FOR, loc);
+    st->forst.init = init;
+    st->forst.cond = cond;
+    st->forst.next = next;
+    st->forst.body = body;
+    return st;
+}
+
 Stmt* vp_stmt_while(SrcLoc loc, Expr* cond, Stmt* body)
 {
     Stmt* st = stmt_new(ST_WHILE, loc);

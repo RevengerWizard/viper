@@ -614,6 +614,8 @@ static TypeSpec* parse_type(LexState* ls)
 
 /* Forward declaration */
 static Stmt* parse_stmt(LexState* ls);
+static Stmt* parse_stmt_simple(LexState* ls);
+static Decl* parse_var(LexState* ls, DeclKind kind, uint32_t flags);
 
 /* Parse 'import' */
 static Decl* parse_import(LexState* ls)
@@ -744,6 +746,41 @@ static Stmt* parse_if(LexState* ls)
 }
 
 static uint32_t loopcount = 0;
+
+/* Parse 'for' statement */
+static Stmt* parse_for(LexState* ls)
+{
+    vp_lex_next(ls);    /* Skip 'for' */
+    SrcLoc loc = lex_srcloc(ls);
+    Stmt* init = NULL;
+    Expr* cond = NULL;
+    Stmt* next = NULL;
+    Decl* d = NULL;
+    switch(ls->curr)
+    {
+    case TK_var:
+        d = parse_var(ls, DECL_VAR, 0);
+        break;
+    case TK_const:
+        d = parse_var(ls, DECL_CONST, 0);
+        break;
+    default:
+        init = parse_stmt_simple(ls);
+        vp_lex_consume(ls, ';');
+        break;
+    }
+    if(d)
+    {
+        init = vp_stmt_decl(d->loc, d);
+    }
+    cond = expr(ls);
+    vp_lex_consume(ls, ';');
+    next = parse_stmt_simple(ls);
+    loopcount++;
+    Stmt* body = parse_block(ls);
+    loopcount--;
+    return vp_stmt_for(loc, init, cond, next, body);
+}
 
 /* Parse 'while' statement */
 static Stmt* parse_while(LexState* ls)
@@ -1090,7 +1127,6 @@ static Stmt* parse_stmt_simple(LexState* ls)
             st = vp_stmt_expr(e->loc, e);
             break;
     }
-    vp_lex_consume(ls, ';');
     return st;
 }
 
@@ -1102,6 +1138,9 @@ static Stmt* parse_stmt(LexState* ls)
     {
         case TK_if:
             st = parse_if(ls);
+            break;
+        case TK_for:
+            st = parse_for(ls);
             break;
         case TK_while:
             st = parse_while(ls);
@@ -1121,6 +1160,7 @@ static Stmt* parse_stmt(LexState* ls)
             break;
         default:
             st = parse_stmt_simple(ls);
+            vp_lex_consume(ls, ';');
             break;
     }
     return st;

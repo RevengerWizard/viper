@@ -32,7 +32,7 @@
     _(float32) _(float64) \
     _(true) _(false) _(nil) \
     _(if) _(else) \
-    _(while) \
+    _(for) _(while) \
     _(break) _(continue) \
     _(return) \
     /* Symbols */ \

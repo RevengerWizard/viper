@@ -219,6 +219,7 @@ typedef enum StmtKind
     ST_BREAK,
     ST_CONTINUE,
     ST_IF,
+    ST_FOR,
     ST_WHILE,
     ST_ASM
 } StmtKind;
@@ -243,6 +244,13 @@ typedef struct Stmt
             struct Stmt* tblock;   /* Then block */
             struct Stmt* fblock;   /* Else block */
         } ifst;
+        struct
+        {
+            struct Stmt* init;
+            Expr* cond;
+            struct Stmt* next;
+            struct Stmt* body;
+        } forst;
         struct
         {
             Expr* cond;
@@ -452,6 +460,7 @@ Stmt* vp_stmt_block(SrcLoc loc, vec_t(Stmt*) block);
 Stmt* vp_stmt_return(SrcLoc loc, Expr* e);
 Stmt* vp_stmt_break(SrcLoc loc, StmtKind kind);
 Stmt* vp_stmt_if(SrcLoc loc, Expr* cond, Stmt* tblock, Stmt* fblock);
+Stmt* vp_stmt_for(SrcLoc loc, Stmt* init, Expr* cond, Stmt* next, Stmt* body);
 Stmt* vp_stmt_while(SrcLoc loc, Expr* cond, Stmt* body);
 Stmt* vp_stmt_asm(SrcLoc loc, vec_t(Inst*) insts);
 

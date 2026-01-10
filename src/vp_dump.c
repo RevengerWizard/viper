@@ -13,7 +13,6 @@
 #include "vp_type.h"
 #include "vp_vec.h"
 #include "vp_tab.h"
-#include "vp_sema.h"
 
 static int indent = 0;
 
@@ -1020,6 +1019,23 @@ static void dump_ast_stmt(Stmt* st)
                 dump_indent();
                 printf("}\n");
             }
+            break;
+        case ST_FOR:
+            dump_indent();
+            printf("for ");
+            dump_ast_stmt(st->forst.init);
+            printf("; ");
+            dump_ast_expr(st->forst.cond);
+            printf("; ");
+            dump_ast_stmt(st->forst.next);
+            printf("\n");
+            dump_indent();
+            printf("{\n");
+            indent++;
+            dump_ast_stmt(st->forst.body);
+            indent--;
+            dump_indent();
+            printf("}\n");
             break;
         case ST_WHILE:
             dump_indent();

@@ -2025,6 +2025,16 @@ static void sema_stmt(Stmt* st, Type* ret)
         case ST_CONTINUE:
             /* Ignore */
             break;
+        case ST_FOR:
+        {
+            uint32_t len = sym_enter();
+            sema_stmt(st->forst.init, ret);
+            sema_cond(st->forst.cond);
+            sema_stmt(st->forst.next, ret);
+            sema_stmt(st->forst.body, ret);
+            sym_leave(len);
+            break;
+        }
         case ST_WHILE:
             sema_cond(st->whst.cond);
             sema_stmt(st->whst.body, ret);
