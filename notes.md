@@ -122,22 +122,29 @@ custom-width integer types
 
 `vxc [mode] [options] [file]`
 
+- `comp`
 - `build`
 - `link`
 - `doc`
 - `check`
 
+`--nostd`
+`--version`
+`-I`
+`-W`
+`-D`
+`--entry <sym>`
+`--sanitize`
+`--help`
+`--arch=<kind>`
+`--emit=<kind>` -  `obj | asm | ir | exe | bin`
+`--target=<kind>`
+
 ---
 
-`vxc [options] [file]`
-
-`--nostd`
-
-`--version` `--help`
-
-`--emit <kind>` -  `obj | asm | ir | exe | bin`
-
-`--target <kind>`
+`vxc check file.vp`
+`vxc build file.vp`
+`vxc link out.obj -o test`
 
 ---
 
@@ -598,6 +605,8 @@ MessageBoxA(
 ### linker
 
 `ld out.obj -o out.exe -L. -lkernel32 -ltea00 --subsystem=console -e main`
+
+`ld out.obj -o out.exe --subsystem=console -e main`
 
 ---
 
