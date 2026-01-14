@@ -506,17 +506,15 @@ Windows x64
 
 - caller-saved (volatile), can be freely used in expressions
 `rax`, `rcx`, `rdx`, `r8`, `r9`, `r10`, `r11`
+`xmm0-xmm3` (volatile)
 
 - callee-saved (non-volatile), must preserve across function calls
 `rbx`, `rsi`, `rdi`, `r12`, `r13`, `r14`, `r15`
-
-- floating point registers
-`xmm0`, `xmm1`, `xmm2`, `xmm3` (volatile)
-`xmm6`, `xmm7`, `xmm8`, `xmm9` (non-volatile)
+`xmm6-xmm9` (non-volatile)
 
 - params
 `rcx`, `rdx`, `r8`, `r9` (first 4 int)
-`xmm0`, `xmm1`, `xmm2`, `xmm3` (first 4 floats)
+`xmm0-xmm3` (first 4 floats)
 
 ---
 
@@ -524,11 +522,19 @@ Linux System-V x64
 
 - caller-saved
 `rax`, `rcx`, `rdx`, `rsi`, `rdi`, `r8`, `r9`, `r10`, `r11`
+`xmm0-xmm15`
 
 - callee-saved
 `rbx`, `rbp`, `r12`, `r13`, `r14`, `r15`
+`xmm8-xmm15`
 
-Linux Syscall x64
+- params
+`rdi`, `rsi`, `rdx`, `rcx`, `r8`, `r9`
+`xmm0-xmm7`
+
+---
+
+### syscall
 
 `rax` = syscall number
 `rdi` = arg0
@@ -543,9 +549,28 @@ Linux Syscall x64
 - clobbers
 `rcx`, `r11`
 
+---
+
+`[[syscall]]`
+
+- x64: `syscall`, rax/rdi/rsi/rdx/r10/r8/r9, rcx/r11 clobbered
+- arm64: `svc #0`, x8/x0-x5
+* macos: `svc #0`, x16/x0-x5
+- rv64: `ecall`, a7/a0-a5
+
+- max 6 arguments
+- all arguments must be ints/pointers
+- return type must be int/pointer
+
+- `[[syscall]]` implicitly `inline` and `naked`
+- cannot take address
+- cannot be recursive
+- cannot be exported (dynamic link)
+- must end in `@syscall` or equivalent `asm`
+
 ```
 [[syscall]]
-fn write(fd : uint32, buf : const uint8*, count : usize) : isize
+fn syswrite(fd : uint32, buf : const uint8*, count : usize) : isize
 {
     @syscall(1);
 }
@@ -620,11 +645,9 @@ fn example<T>(a : T, b : T) : T
     if !T_info.is_numerical { #error("raagh"); }
 
     switch T_info.id
-    {
-      case %int32.id: return a + b;
-      case %float.id: return a / b;
-      else: return 0;
-    }
+    case %int32.id { return a + b; }
+    case %float.id: { return a / b; }
+    else: { return 0; }
 }
 ```
 
