@@ -9,6 +9,12 @@
 #include "vp_err.h"
 #include "vp_mod.h"
 
+/* ANSI color codes */
+#define ANSI_RED     "\033[1;31m"
+#define ANSI_YELLOW  "\033[1;33m"
+#define ANSI_CYAN    "\033[1;36m"
+#define ANSI_RESET   "\033[0m"
+
 /* Show line of error with an offset indicator */
 static void err_line(LexLine line, LexOffset ofs)
 {
@@ -52,7 +58,7 @@ void vp_err_note(SrcLoc loc, const char* msg, ...)
 {
     va_list args;
     va_start(args, msg);
-    fprintf(stderr, "%s:%d note: ", loc.name, loc.line);
+    fprintf(stderr, "%s:%d " ANSI_CYAN "note:" ANSI_RESET " ", loc.name, loc.line);
     vfprintf(stderr, msg, args);
     fputc('\n', stderr);
     va_end(args);
@@ -64,7 +70,7 @@ void vp_err_warn(SrcLoc loc, const char* msg, ...)
 {
     va_list args;
     va_start(args, msg);
-    fprintf(stderr, "%s:%d warn: ", loc.name, loc.line);
+    fprintf(stderr, "%s:%d " ANSI_YELLOW "warn:" ANSI_RESET " ", loc.name, loc.line);
     vfprintf(stderr, msg, args);
     fputc('\n', stderr);
     va_end(args);
@@ -76,7 +82,7 @@ void vp_err_error(SrcLoc loc, const char* msg, ...)
 {
     va_list args;
     va_start(args, msg);
-    fprintf(stderr, "%s:%d error: ", loc.name, loc.line);
+    fprintf(stderr, "%s:%d " ANSI_RED "error:" ANSI_RESET " ", loc.name, loc.line);
     vfprintf(stderr, msg, args);
     fputc('\n', stderr);
     va_end(args);
@@ -87,7 +93,7 @@ void vp_err_error(SrcLoc loc, const char* msg, ...)
 /* Lexer error */
 void vp_err_lex(LexLine line, LexOffset ofs, const char* name, const char* msg, va_list argp)
 {
-    fprintf(stderr, "%s:%d error: ", name, line);
+    fprintf(stderr, "%s:%d " ANSI_RED "error:" ANSI_RESET " ", name, line);
     vfprintf(stderr, msg, argp);
     fputc('\n', stderr);
     err_line(line, ofs);
