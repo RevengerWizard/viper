@@ -47,7 +47,7 @@ typedef enum OpCode
     CVTSI2SS_XR, CVTSI2SD_XR,
     CVTSS2SD_XX, CVTSD2SS_XX,
 
-    RDTSC, CPUID, RET,
+    RDTSC, CPUID, RET, SYSCALL
 } OpCode;
 
 typedef uint64_t RegType;

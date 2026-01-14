@@ -295,7 +295,7 @@ static void dump_ir(IR* ir)
         }
         case IR_PUSHARG:
         {
-            printf("%d, ", ir->arg.idx);
+            printf("r%d, ", ir->arg.idx);
             dump_vreg(ir->src1);
             break;
         }

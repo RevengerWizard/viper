@@ -79,7 +79,7 @@ static void params_assign(RegAlloc* ra, Code* code)
         VReg* vr = rp->vr;
         uint32_t size = vp_type_sizeof(rp->ty);
         VRSize p = vp_msb(size);
-        uint32_t idx = ra->set->imap[rp->idx];
+        uint32_t idx = code->imap[rp->idx];
         if(vrf_spill(vr))
         {
             uint32_t ofs = vr->fi.ofs;
@@ -99,7 +99,7 @@ static void params_assign(RegAlloc* ra, Code* code)
     {
         RegParam* rp = &fparams[i];
         VReg* vr = rp->vr;
-        uint32_t idx = ra->set->fmap[rp->idx];
+        uint32_t idx = code->fmap[rp->idx];
         X64Reg src = REG_MAKE(idx, RC_XMM, 16, SUB_LO);
         if(vrf_spill(vr))
         {
@@ -135,9 +135,9 @@ static vec_t(RegSave) collect_caller_save(RegSet iliving, RegSet fliving)
 {
     vec_t(RegSave) saves = vec_init(RegSave);
 
-    for(uint32_t i = 0; i < V->target->abiinfo->icallersize; i++)
+    for(uint32_t i = 0; i < V->T->abi->icallersize; i++)
     {
-        uint32_t ireg = V->target->abiinfo->icaller[i];
+        uint32_t ireg = V->T->abi->icaller[i];
         if(iliving & (1ULL << ireg))
         {
             RegSave rs = {.reg = ireg};
@@ -145,9 +145,9 @@ static vec_t(RegSave) collect_caller_save(RegSet iliving, RegSet fliving)
         }
     }
 
-    for(uint32_t i = 0; i < V->target->abiinfo->fcallersize; i++)
+    for(uint32_t i = 0; i < V->T->abi->fcallersize; i++)
     {
-        uint32_t freg = V->target->abiinfo->fcaller[i];
+        uint32_t freg = V->T->abi->fcaller[i];
         if(fliving & (1ULL << freg))
         {
             RegSave rs = {.reg = freg, .flo = true};
@@ -161,19 +161,16 @@ static vec_t(RegSave) collect_caller_save(RegSet iliving, RegSet fliving)
 static uint32_t detect_call_size(Code* code)
 {
     uint32_t max = 0;
-    if(code->calls)
+    for(uint32_t i = 0; i < vec_len(code->calls); i++)
     {
-        for(uint32_t i = 0; i < vec_len(code->calls); i++)
-        {
-            IR* ir = code->calls[i];
+        IR* ir = code->calls[i];
 
-            /* Caller save registers */
-            vec_t(RegSave) saves = collect_caller_save(ir->call->ipregs, ir->call->fpregs);
-            ir->call->saves = saves;
+        /* Caller save registers */
+        vec_t(RegSave) saves = collect_caller_save(ir->call->ipregs, ir->call->fpregs);
+        ir->call->saves = saves;
 
-            uint32_t total = ir->call->stacksize + vec_len(saves) * TARGET_PTR_SIZE;
-            max = MAX(max, total);
-        }
+        uint32_t total = ir->call->stacksize + vec_len(saves) * TARGET_PTR_SIZE;
+        max = MAX(max, total);
     }
     return max;
 }
@@ -217,9 +214,9 @@ void pop_caller_save(vec_t(RegSave) saves, uint32_t ofs)
 static uint32_t push_callee_save(RegAlloc* ra, RegSet iused)
 {
     uint32_t inum = 0;
-    for(uint32_t i = 0; i < ra->set->iphysmax; i++)
+    for(uint32_t i = 0; i < ra->iphysmax; i++)
     {
-        if((ra->set->itemp & (1ULL << i)) && (iused & (1ULL << i)))
+        if((ra->itemp & (1ULL << i)) && (iused & (1ULL << i)))
         {
             X64Reg reg = REG_MAKE(i, RC_GPR, 8, SUB_LO);
             EMITX64(pushR)(reg);
@@ -231,9 +228,9 @@ static uint32_t push_callee_save(RegAlloc* ra, RegSet iused)
 
 static void pop_callee_save(RegAlloc* ra, RegSet iused)
 {
-    for(uint32_t i = ra->set->iphysmax; i-- > 0;)
+    for(uint32_t i = ra->iphysmax; i-- > 0;)
     {
-        if((ra->set->itemp & (1ULL << i)) && (iused & (1ULL << i)))
+        if((ra->itemp & (1ULL << i)) && (iused & (1ULL << i)))
         {
             X64Reg reg = REG_MAKE(i, RC_GPR, 8, SUB_LO);
             EMITX64(popR)(reg);
@@ -268,7 +265,7 @@ static void emit_body(Code* code)
         }
 
         framesize = code->framesize + stacksize;
-        if(code->calls || stacksize)
+        if(vec_len(code->calls) > 0 || stacksize)
         {
             /* Align frame size to 16 */
             size_t calleesize = numcallee * TARGET_PTR_SIZE;

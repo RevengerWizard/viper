@@ -34,7 +34,7 @@ VpState* vp_state_open()
     V->currscope = V->globscope;
     const TargetInfo* target = vp_target_init(TARGET_X64_WINDOWS);
     vp_assertX(target, "empty target");
-    V->target = target;
+    V->T = target;
     return V;
 }
 

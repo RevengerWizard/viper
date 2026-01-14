@@ -24,6 +24,8 @@
 #define UNUSED(x) ((void)x)
 #define ARRSIZE(arr) (sizeof(arr) / sizeof(*(arr)))
 
+typedef uint64_t RegSet;
+
 #define MIN(x, y) ((x) <= (y) ? (x) : (y))
 #define MAX(x, y) ((x) >= (y) ? (x) : (y))
 #define CLAMP_MAX(x, max) MIN(x, max)

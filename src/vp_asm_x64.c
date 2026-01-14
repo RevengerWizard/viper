@@ -29,7 +29,7 @@ typedef enum RawOpCode
     R_CVTTSS2SI, R_CVTTSD2SI,
     R_CVTSI2SS, R_CVTSI2SD,
     R_CVTSS2SD, R_CVTSD2SS,
-    R_RDTSC, R_CPUID, R_RET,
+    R_RDTSC, R_CPUID, R_RET, R_SYSCALL
 } RawOpCode;
 
 const char* opcode[] = {
@@ -50,7 +50,7 @@ const char* opcode[] = {
     "cvttss2si", "cvttsd2si",
     "cvtsi2ss", "cvtsi2sd",
     "cvtss2sd", "cvtsd2ss",
-    "rdtsc", "cpuid", "ret"
+    "rdtsc", "cpuid", "ret", "syscall"
 };
 
 const RegInfo regs[] = {
@@ -228,6 +228,7 @@ const InstTable insttab[] = {
     [R_RDTSC] = {1, (const OpArray*[]){ &(OpArray){RDTSC, {}} }},
     [R_CPUID] = {1, (const OpArray*[]){ &(OpArray){CPUID, {}} }},
     [R_RET] = {1, (const OpArray*[]){ &(OpArray){RET, {}} }},
+    [R_SYSCALL] = {1, (const OpArray*[]){ &(OpArray){SYSCALL, {}} }},
 };
 
 /* Allocate new asm instruction */

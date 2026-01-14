@@ -13,6 +13,7 @@
 #include "vp_str.h"
 #include "vp_tab.h"
 #include "vp_target.h"
+#include "vp_target_x64.h"
 #include "vp_type.h"
 #include "vp_var.h"
 #include "vp_vec.h"
@@ -135,26 +136,29 @@ static void gen_store(VReg* dst, VReg* src, Type* ty)
 }
 
 /* Forward declarations */
+static void gen_block(Stmt* st);
 static void gen_stmt(Stmt* st);
 static VReg* gen_expr(Expr* e);
 static VReg* gen_complit(Expr* e);
 static VReg* gen_lval(Expr* e);
+static void gen_var_assign(VarInfo* vi, Expr* e);
+static VReg* gen_inline(Expr* e, Type* ret, Stmt* body, Code* code);
 
 /* -- Gen expressions ----------------------------------------------- */
 
-/* Generate nil constant (0) */
+/* Generate 'nil' constant (0) */
 static VReg* gen_nil(Expr* e)
 {
     return vp_vreg_ki(0, vp_vsize(e->ty));
 }
 
-/* Generate true constant (1) */
+/* Generate 'true' constant (1) */
 static VReg* gen_true(Expr* e)
 {
     return vp_vreg_ki(e->b, vp_vsize(e->ty));
 }
 
-/* Generate false constant (0) */
+/* Generate 'false' constant (0) */
 static VReg* gen_false(Expr* e)
 {
     return vp_vreg_ki(e->b, vp_vsize(e->ty));
@@ -411,6 +415,34 @@ static VReg* gen_call(Expr* e)
     vp_assertX(e->kind == EX_CALL, "not a call expression");
     vp_assertX(e->ty, "call type");
 
+    VReg* freg = NULL;
+    Str* label = NULL;
+    Code* fn;
+    uint32_t* imap, *fmap;
+    /* Determine if this is a direct or indirect call */
+    if(e->call.expr->kind == EX_NAME)
+    {
+        label = e->call.expr->name;
+        VarInfo* vi = vp_scope_find(e->call.expr->scope, e->call.expr->name, NULL);
+        vp_assertX(vi, "'%s' not found", str_data(e->call.expr->name));
+        vp_assertX(ty_isfunc(vi->type) && (vi->storage & VS_FN), "not a function");
+        fn = vp_tab_get(&V->funcs, label);
+    }
+    else
+    {
+        freg = gen_expr(e->call.expr);
+    }
+    if(fn)
+    {
+        imap = (uint32_t*)fn->imap;
+        fmap = (uint32_t*)fn->fmap;
+    }
+    else
+    {
+        imap = (uint32_t*)V->T->abi->imap;
+        fmap = (uint32_t*)V->T->abi->fmap;
+    }
+
     Type* ret = e->ty;
     FrameInfo* fi = NULL;
     if(param_isstack(ret))
@@ -450,7 +482,14 @@ static VReg* gen_call(Expr* e)
             if(i < 4)
             {
                 p.stack = false;
-                p.regidx = i;
+                if(p.flo)
+                {
+                    p.regidx = fmap[i];
+                }
+                else
+                {
+                    p.regidx = imap[i];
+                }
                 regargs++;
             }
             else
@@ -497,7 +536,12 @@ static VReg* gen_call(Expr* e)
             args[i + argstart] = src;
         }
     }
+    if(fn && (fn->flags & FN_SYSCALL))
+    {
+        return gen_inline(NULL, ret, fn->body, fn);
+    }
     /* Handle stack return */
+    VReg* dst = NULL;
     if(fi != NULL)
     {
         VReg* dst = vp_ir_bofs(fi)->dst;
@@ -505,27 +549,13 @@ static VReg* gen_call(Expr* e)
         args[0] = dst;
         regargs++;
     }
-
-    /* Determine if this is a direct or indirect call */
-    bool labelcall = false;
-    if(e->call.expr->kind == EX_NAME)
-    {
-        VarInfo* vi = vp_scope_find(e->call.expr->scope, e->call.expr->name, NULL);
-        vp_assertX(vi, "'%s' not found", str_data(e->call.expr->name));
-        labelcall = ty_isfunc(vi->type) && (vi->storage & VS_FN);
-    }
-
-    Str* label = NULL;
-    VReg* freg = NULL;
-    VReg* dst = NULL;
-    if(ret->kind != TY_void)
-    {
-        dst = vp_vreg_new(ret);
-    }
-    if(labelcall)
-        label = e->call.expr->name;
     else
-        freg = gen_expr(e->call.expr);
+    {
+        if(ret->kind != TY_void)
+        {
+            dst = vp_vreg_new(ret);
+        }
+    }
 
     IRCallInfo* ci = vp_ircallinfo_new(args, argnum, label);
     ci->regargs = regargs;
@@ -533,7 +563,7 @@ static VReg* gen_call(Expr* e)
     ci->argtotal = argtotal;
     if(label)
     {
-        ci->fn = vp_tab_get(&V->funcs, label);
+        ci->fn = fn;
         if(!ci->fn)
         {
             vp_tab_set(&V->ifuncs, label, NULL);
@@ -870,6 +900,42 @@ static VReg* gen_expr(Expr* e)
     return (*genexprtab[e->kind])(e);
 }
 
+/* Inline body of a function */
+static VReg* gen_inline(Expr* e, Type* ret, Stmt* body, Code* code)
+{
+    vp_assertX(body->kind == ST_BLOCK, "not a block");
+
+    if(e)
+    {
+        vp_assertX(e->kind == EX_CALL, "call");
+        vp_assertX(vec_len(e->call.args) == code->numparams, "mismatch arguments");
+        /* Assign arguments to variables for embedding function arguments */
+        for(uint32_t i = 0; i < code->numparams; i++)
+        {
+            VarInfo* vi = code->scopes[0]->vars[i];
+            Expr* arg = e->call.args[i];
+            gen_var_assign(vi, arg);
+        }
+    }
+
+    /* Handle restore of any `return` for inlined functions */
+    BB* inlbb = vp_bb_new();
+    BB* saveretbb = V->fncode->retbb;
+    VReg* saveretvr = V->fncode->retvr;
+    V->fncode->retbb = inlbb;
+
+    VReg* dst = NULL;
+    /* Inline the body */
+    gen_block(body);
+
+    V->fncode->retbb = saveretbb;
+    V->fncode->retvr = saveretvr;
+
+    vp_bb_setcurr(inlbb);
+
+    return dst;
+}
+
 /* -- Gen statements ------------------------------------------------ */
 
 /* Generate expression statement */
@@ -929,14 +995,9 @@ static void gen_assign(Stmt* st)
     gen_store(dst, src, lhs->ty);
 }
 
-/* Generate variable declaration */
-static void gen_var(Stmt* st)
+/* Generate varinfo and assignment */
+static void gen_var_assign(VarInfo* vi, Expr* e)
 {
-    Decl* d = st->decl;
-    if(d->kind == DECL_NOTE) return;
-    vp_assertX(d->kind == DECL_VAR || d->kind == DECL_CONST, "var/const");
-
-    VarInfo* vi = d->var.vi;
     vp_assertX(vi, "empty variable info");
     if(!gen_varinfo(vi))
     {
@@ -949,20 +1010,19 @@ static void gen_var(Stmt* st)
     }
 
     /* Generate initialization if provided */
-    if(d->var.expr)
+    if(e)
     {
         if(ty_isscalar(vi->type))
         {
             vp_assertX(vi->vreg, "empty vreg");
-            uint8_t flag = ir_flag(vi->type);
-            VReg* src = gen_expr(d->var.expr);
-            vp_ir_mov(vi->vreg, src, flag);
+            VReg* src = gen_expr(e);
+            vp_ir_mov(vi->vreg, src, ir_flag(vi->type));
         }
         else
         {
             vp_assertX(vi->fi, "missing frame info");
             VReg* dst = vp_ir_bofs(vi->fi)->dst;
-            VReg* src = gen_expr(d->var.expr);
+            VReg* src = gen_expr(e);
             gen_memcpy(vi->type, dst, src);
         }
     }
@@ -972,6 +1032,16 @@ static void gen_var(Stmt* st)
         VReg* dst = vp_ir_bofs(vi->fi)->dst;
         gen_memzero(vi->type, dst);
     }
+}
+
+/* Generate variable declaration */
+static void gen_var(Stmt* st)
+{
+    Decl* d = st->decl;
+    if(d->kind == DECL_NOTE) return;
+    vp_assertX(d->kind == DECL_VAR || d->kind == DECL_CONST, "var/const");
+
+    gen_var_assign(d->var.vi, d->var.expr);
 }
 
 /* Generate return statement */
@@ -1188,104 +1258,6 @@ static void gen_stmt(Stmt* st)
     (*gensttab[st->kind])(st);
 }
 
-/* Detect living registers for each instruction */
-static void ra_living(RegAlloc* ra, vec_t(BB*) bbs)
-{
-    LiveInterval** ilivings = vp_mem_calloc(ra->set->iphysmax, sizeof(*ilivings));
-    LiveInterval** flivings = vp_mem_calloc(ra->set->fphysmax, sizeof(*flivings));
-
-    RegSet ipregs = 0;
-    RegSet fpregs = 0;
-
-#define VREGFOR(ra, li) ((VReg*)ra->vregs[li->virt])
-
-    /* Activate function parameters first */
-    for(uint32_t i = 0; i < vec_len(ra->vregs); i++)
-    {
-        LiveInterval* li = ra->sorted[i];
-        vp_assertX(li, "empty live interval");
-        if(li->start != REG_NO)
-            break;
-        if(li->state != LI_NORMAL || VREGFOR(ra, li) == NULL)
-            continue;
-        if(vrf_flo(VREGFOR(ra, li)))
-        {
-            fpregs |= 1ULL << li->phys;
-            flivings[li->phys] = li;
-        }
-        else
-        {
-            ipregs |= 1ULL << li->phys;
-            ilivings[li->phys] = li;
-        }
-    }
-
-    uint32_t nip = 0, head = 0;
-    for(uint32_t i = 0; i < vec_len(bbs); i++)
-    {
-        BB* bb = bbs[i];
-        for(uint32_t j = 0; j < vec_len(bb->irs); j++, nip++)
-        {
-            /* Eliminate deactivated registers (intervals ending at nip) */
-            /* Integer livings */
-            for(uint32_t k = 0; k < ra->set->iphysmax; k++)
-            {
-                LiveInterval* li = ilivings[k];
-                if(li && nip == li->end)
-                {
-                    ipregs &= ~(1ULL << k);
-                    ilivings[k] = NULL;
-                }
-            }
-
-            /* Float livings */
-            for(uint32_t k = 0; k < ra->set->fphysmax; k++)
-            {
-                LiveInterval* li = flivings[k];
-                if(li && nip == li->end)
-                {
-                    fpregs &= ~(1ULL << k);
-                    flivings[k] = NULL;
-                }
-            }
-
-            /* Store living vregs into IR_CALL */
-            IR* ir = bb->irs[j];
-            if(ir->kind == IR_CALL)
-            {
-                ir->call->ipregs = ipregs;
-                ir->call->fpregs = fpregs;
-            }
-
-            /* Add activated registers */
-            for(; head < vec_len(ra->vregs); head++)
-            {
-                LiveInterval* li = ra->sorted[head];
-                if(li->start != REG_NO && li->start > nip)
-                    break;
-                if(li->state != LI_NORMAL)
-                    continue;
-                if(li->start != REG_NO && nip == li->start)
-                {
-                    vp_assertX(VREGFOR(ra, li) != NULL, "?");
-                    if(vrf_flo(VREGFOR(ra, li)))
-                    {
-                        fpregs |= 1ULL << li->phys;
-                        flivings[li->phys] = li;
-                    }
-                    else
-                    {
-                        ipregs |= 1ULL << li->phys;
-                        ilivings[li->phys] = li;
-                    }
-                }
-            }
-        }
-    }
-
-#undef VREGFOR
-}
-
 /* Set stack offsets for spills/slots */
 static void gen_stack(Code* code)
 {
@@ -1358,7 +1330,14 @@ static void gen_params(Decl* d, Code* code)
             uint32_t slot = i + start;
             if(slot < 4)
             {
-                vr->param = slot;
+                if(vrf_flo(vr))
+                {
+                    vr->param = code->fmap[slot];
+                }
+                else
+                {
+                    vr->param = code->imap[slot];
+                }
             }
             else
             {
@@ -1384,6 +1363,10 @@ static void gen_params(Decl* d, Code* code)
     }
 }
 
+static const uint32_t syscall_imap[] = {
+    RN_DI, RN_SI, RN_DX, RN_10, RN_8, RN_9
+};
+
 /* Generate function body, if present */
 static Code* gen_fn(Decl* d)
 {
@@ -1396,6 +1379,14 @@ static Code* gen_fn(Decl* d)
     code->slots = vec_init(Slot);
     code->numparams = vec_len(d->fn.params);
     code->scopes = d->fn.scopes;
+    code->flags = d->fn.flags;
+    code->body = d->fn.body;
+    code->imap = V->T->abi->imap;
+    code->fmap = V->T->abi->fmap;
+    if(code->flags & FN_SYSCALL)
+    {
+        code->imap = syscall_imap;
+    }
     vp_tab_set(&V->funcs, code->name, code);
 
     if(!d->fn.body)
@@ -1403,8 +1394,12 @@ static Code* gen_fn(Decl* d)
         return code;
     }
 
-    RegAlloc* ra = V->ra = vp_ra_new(V->target->raset);
+    RegAlloc* ra = V->ra = vp_ra_new((TargetInfo*)V->T);
     code->ra = ra;
+    if(code->flags & FN_INLINE)
+    {
+        return code;
+    }
     code->bbs = vec_init(BB*);
     V->fncode = code;
 
@@ -1428,7 +1423,6 @@ static Code* gen_fn(Decl* d)
     vp_ir_x64_tweak(code);
     vp_bb_analyze(code->bbs);
     vp_ra_alloc(ra, code->bbs);
-    ra_living(ra, code->bbs);
     gen_stack(code);
 
     vp_dump_bbs(code);

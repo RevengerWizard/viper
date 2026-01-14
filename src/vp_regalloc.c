@@ -7,8 +7,10 @@
 
 #include "vp_regalloc.h"
 #include "vp_ir.h"
+#include "vp_low.h"
 #include "vp_mem.h"
 #include "vp_state.h"
+#include "vp_target.h"
 #include "vp_vec.h"
 
 /* -- Virtual registers --------------------------------------------- */
@@ -162,13 +164,13 @@ static void live_spill(RegAlloc* ra, LiveInterval** active, uint32_t len, LiveIn
     if(spill->end > li->end)
     {
         li->phys = spill->phys;
-        spill->phys = ra->set->iphysmax;
+        spill->phys = ra->iphysmax;
         spill->state = LI_SPILL;
         live_insert(active, len - 1, li);
     }
     else
     {
-        li->phys = ra->set->iphysmax;
+        li->phys = ra->iphysmax;
         li->state = LI_SPILL;
     }
 }
@@ -195,7 +197,6 @@ static void live_detect(RegAlloc* ra, BB** bbs, uint32_t vreglen, LiveInterval**
         }
     }
 
-    const RASettings* set = ra->set;
     RegSet iargset = 0, fargset = 0;
     uint32_t nip = 0;   /* IR position */
     for(uint32_t i = 0; i < vec_len(bbs); i++)
@@ -205,9 +206,9 @@ static void live_detect(RegAlloc* ra, BB** bbs, uint32_t vreglen, LiveInterval**
         {
             IR* ir = bb->irs[j];
             /* Detect extra occupied registers */
-            if(set->extra != NULL)
+            if(ra->extra != NULL)
             {
-                RegSet ioccupy = set->extra(ra, ir);
+                RegSet ioccupy = ra->extra(ra, ir);
                 if(ioccupy != 0)
                 {
                     live_occupy(ra, actives, ioccupy, 0);
@@ -235,21 +236,20 @@ static void live_detect(RegAlloc* ra, BB** bbs, uint32_t vreglen, LiveInterval**
                 VReg* src = ir->src1;
                 if(vrf_flo(src))
                 {
-                    uint64_t n = set->fmap[ir->arg.idx];
+                    uint64_t n = ir->arg.idx;
                     fargset |= 1ULL << n;
                 }
                 else
                 {
-                    uint64_t n = set->imap[ir->arg.idx];
+                    uint64_t n = ir->arg.idx;
                     iargset |= 1ULL << n;
                 }
             }
-
-            /* Call instruction breaks temporary registers */
-            if(ir->kind == IR_CALL)
+            else if(ir->kind == IR_CALL)
             {
-                RegSet ibroke = set->itemp;
-                RegSet fbroke = set->ftemp;
+                /* Call instruction breaks temporary registers */
+                RegSet ibroke = ra->itemp;
+                RegSet fbroke = ra->ftemp;
                 live_occupy(ra, actives, ibroke, fbroke);
                 iargset = fargset = 0;
             }
@@ -426,19 +426,19 @@ static uint32_t ra_spill(RegAlloc* ra, BB** bbs)
 static void ra_scan(RegAlloc* ra, LiveInterval** sorted, uint32_t vreglen)
 {
     PhysRegSet iregset = {
-        .active = vp_mem_alloc(sizeof(LiveInterval*) * ra->set->iphysmax),
+        .active = vp_mem_alloc(sizeof(LiveInterval*) * ra->iphysmax),
         .len = 0,
-        .physmax = ra->set->iphysmax,
-        .phystemp = ra->set->itemp,
+        .physmax = ra->iphysmax,
+        .phystemp = ra->itemp,
         .usebits = 0,
         .bits = 0
     };
 
     PhysRegSet fregset = {
-        .active = vp_mem_alloc(sizeof(LiveInterval*) * ra->set->fphysmax),
+        .active = vp_mem_alloc(sizeof(LiveInterval*) * ra->fphysmax),
         .len = 0,
-        .physmax = ra->set->fphysmax,
-        .phystemp = ra->set->ftemp,
+        .physmax = ra->fphysmax,
+        .phystemp = ra->ftemp,
         .usebits = 0,
         .bits = 0
     };
@@ -464,21 +464,10 @@ static void ra_scan(RegAlloc* ra, LiveInterval** sorted, uint32_t vreglen)
         bool useall = true;
         RegSet mask = prsp->phystemp;  /* Callee registers mask */
         uint32_t regno = REG_NO;
-        uint32_t ip = vr->param;
+        uint32_t ip = vr->param;    /* Physical param register already mapped */
         RegSet occupied = prsp->usebits | li->regbits;
         if(ip != REG_NO)
         {
-            if(vrf_flo(vr))
-            {
-                /* Map floating registers */
-                ip = ra->set->fmap[ip];
-            }
-            else
-            {
-                /* Map integer registers */
-                ip = ra->set->imap[ip];
-            }
-
             if(!(occupied & (1ULL << ip)))
             {
                 regno = ip;
@@ -530,6 +519,104 @@ static void ra_scan(RegAlloc* ra, LiveInterval** sorted, uint32_t vreglen)
 
     vp_mem_free(iregset.active);
     vp_mem_free(fregset.active);
+}
+
+/* Detect living registers for each instruction */
+static void ra_living(RegAlloc* ra, vec_t(BB*) bbs)
+{
+    LiveInterval** ilivings = vp_mem_calloc(ra->iphysmax, sizeof(*ilivings));
+    LiveInterval** flivings = vp_mem_calloc(ra->fphysmax, sizeof(*flivings));
+
+    RegSet ipregs = 0;
+    RegSet fpregs = 0;
+
+#define VREGFOR(ra, li) ((VReg*)ra->vregs[li->virt])
+
+    /* Activate function parameters first */
+    for(uint32_t i = 0; i < vec_len(ra->vregs); i++)
+    {
+        LiveInterval* li = ra->sorted[i];
+        vp_assertX(li, "empty live interval");
+        if(li->start != REG_NO)
+            break;
+        if(li->state != LI_NORMAL || VREGFOR(ra, li) == NULL)
+            continue;
+        if(vrf_flo(VREGFOR(ra, li)))
+        {
+            fpregs |= 1ULL << li->phys;
+            flivings[li->phys] = li;
+        }
+        else
+        {
+            ipregs |= 1ULL << li->phys;
+            ilivings[li->phys] = li;
+        }
+    }
+
+    uint32_t nip = 0, head = 0;
+    for(uint32_t i = 0; i < vec_len(bbs); i++)
+    {
+        BB* bb = bbs[i];
+        for(uint32_t j = 0; j < vec_len(bb->irs); j++, nip++)
+        {
+            /* Eliminate deactivated registers (intervals ending at nip) */
+            /* Integer livings */
+            for(uint32_t k = 0; k < ra->iphysmax; k++)
+            {
+                LiveInterval* li = ilivings[k];
+                if(li && nip == li->end)
+                {
+                    ipregs &= ~(1ULL << k);
+                    ilivings[k] = NULL;
+                }
+            }
+
+            /* Float livings */
+            for(uint32_t k = 0; k < ra->fphysmax; k++)
+            {
+                LiveInterval* li = flivings[k];
+                if(li && nip == li->end)
+                {
+                    fpregs &= ~(1ULL << k);
+                    flivings[k] = NULL;
+                }
+            }
+
+            /* Store living vregs into IR_CALL */
+            IR* ir = bb->irs[j];
+            if(ir->kind == IR_CALL)
+            {
+                ir->call->ipregs = ipregs;
+                ir->call->fpregs = fpregs;
+            }
+
+            /* Add activated registers */
+            for(; head < vec_len(ra->vregs); head++)
+            {
+                LiveInterval* li = ra->sorted[head];
+                if(li->start != REG_NO && li->start > nip)
+                    break;
+                if(li->state != LI_NORMAL)
+                    continue;
+                if(li->start != REG_NO && nip == li->start)
+                {
+                    vp_assertX(VREGFOR(ra, li) != NULL, "?");
+                    if(vrf_flo(VREGFOR(ra, li)))
+                    {
+                        fpregs |= 1ULL << li->phys;
+                        flivings[li->phys] = li;
+                    }
+                    else
+                    {
+                        ipregs |= 1ULL << li->phys;
+                        ilivings[li->phys] = li;
+                    }
+                }
+            }
+        }
+    }
+
+#undef VREGFOR
 }
 
 /* Allocate physical registers */
@@ -593,13 +680,14 @@ void vp_ra_alloc(RegAlloc *ra, BB** bbs)
             vr->phys = ra->intervals[vr->virt].phys;
         }
     }
+
+    ra_living(ra, bbs);
 }
 
 /* Create a new register allocator state */
-RegAlloc* vp_ra_new(const RASettings* set)
+RegAlloc* vp_ra_new(TargetInfo* T)
 {
     RegAlloc* ra = vp_arena_alloc(&V->irarena, sizeof(*ra));
-    ra->set = set;
     ra->vconsts = vec_init(VReg*);
     ra->vregs = vec_init(VReg*);
     ra->intervals = NULL;
@@ -607,6 +695,12 @@ RegAlloc* vp_ra_new(const RASettings* set)
     ra->iregbits = 0;
     ra->fregbits = 0;
     ra->flag = 0;
+    /* Register allocator settings */
+    ra->extra = vp_ir_x64_extra;
+    ra->iphysmax = T->arch->imax;
+    ra->fphysmax = T->arch->fmax;
+    ra->itemp = T->abi->icallee;
+    ra->ftemp = T->abi->fcallee;
     return ra;
 }
 

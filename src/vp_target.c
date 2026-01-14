@@ -6,9 +6,7 @@
 #include "vp_target.h"
 
 #include "vp_def.h"
-#include "vp_regalloc.h"
 #include "vp_target_x64.h"
-#include "vp_low.h"
 
 /* -- Windows x64 ABI ----------------------------------------------- */
 
@@ -83,8 +81,8 @@ static const uint32_t sysvx64_fcaller[] = {
 static const ArchInfo archs[] = {
     [ARCH_X64] = {
         .ptrsize = 8,
-        .iregnum = X64_IREG,
-        .fregnum = X64_FREG,
+        .imax = X64_IREG,
+        .fmax = X64_FREG,
         .name = "x64"
     }
 };
@@ -113,28 +111,6 @@ static const ABIInfo abis[] = {
     }
 };
 
-/* RegAlloc settings */
-static const RASettings ras[] = {
-    [ABI_WIN_X64] = {
-        .extra = vp_ir_x64_extra,
-        .imap = abis[ABI_WIN_X64].imap,
-        .fmap = abis[ABI_WIN_X64].fmap,
-        .iphysmax = archs[ARCH_X64].iregnum,
-        .fphysmax = archs[ARCH_X64].fregnum,
-        .itemp = abis[ABI_WIN_X64].icallee,
-        .ftemp = abis[ABI_WIN_X64].fcallee,
-    },
-    [ABI_SYSV_X64] = {
-        .extra = vp_ir_x64_extra,
-        .imap = abis[ABI_SYSV_X64].imap,
-        .fmap = abis[ABI_SYSV_X64].fmap,
-        .iphysmax = archs[ARCH_X64].iregnum,
-        .fphysmax = archs[ARCH_X64].fregnum,
-        .itemp = abis[ABI_SYSV_X64].icallee,
-        .ftemp = abis[ABI_SYSV_X64].fcallee,
-    }
-};
-
 /* Target configuration table */
 static const TargetInfo targets[] = {
     {
@@ -145,7 +121,6 @@ static const TargetInfo targets[] = {
         "x64-windows",
         &abis[ABI_WIN_X64],
         &archs[ARCH_X64],
-        &ras[ABI_WIN_X64]
     }
 };
 

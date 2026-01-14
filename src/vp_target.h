@@ -6,7 +6,7 @@
 #ifndef _VP_TARGET_H
 #define _VP_TARGET_H
 
-#include "vp_regalloc.h"
+#include "vp_def.h"
 
 /* Object target format */
 typedef enum
@@ -32,8 +32,8 @@ typedef enum
 typedef struct
 {
     uint8_t ptrsize;    /* Size of pointer */
-    uint32_t iregnum;   /* Number of int registers */
-    uint32_t fregnum;   /* Number of float registers */
+    uint32_t imax;   /* Number of int registers */
+    uint32_t fmax;   /* Number of float registers */
     const char* name;
 } ArchInfo;
 
@@ -50,12 +50,10 @@ typedef struct
     /* Parameter registers */
     const uint32_t* imap;
     const uint32_t* fmap;
-
     /* Caller-save registers */
     const uint32_t* icaller;
     const uint32_t* fcaller;
     uint32_t icallersize, fcallersize;
-
     /* Callee-save registers */
     RegSet icallee;
     RegSet fcallee;
@@ -71,13 +69,12 @@ typedef enum
 typedef struct TargetInfo
 {
     TargetID id;
-    OSType os;
-    ArchType arch;
-    ABIType abi;
+    OSType ostt;
+    ArchType archtt;
+    ABIType abitt;
     const char* name;
-    const ABIInfo* abiinfo;
-    const ArchInfo* archinfo;
-    const RASettings* raset;
+    const ABIInfo* abi;
+    const ArchInfo* arch;
 } TargetInfo;
 
 const TargetInfo* vp_target_init(TargetID id);

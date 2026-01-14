@@ -200,10 +200,10 @@ static void ir_x64_ret(IR* ir)
 
 static void ir_x64_pusharg(IR* ir)
 {
+    uint32_t dst = ir->arg.idx;
     if(vrf_flo(ir->src1))
     {
         vp_assertX(!vrf_const(ir->src1), "const src1");
-        uint32_t dst = V->target->raset->fmap[ir->arg.idx];
         if(dst != ir->src1->phys)
         {
             switch(ir->src1->vsize)
@@ -216,7 +216,6 @@ static void ir_x64_pusharg(IR* ir)
     }
     else
     {
-        uint32_t dst = V->target->raset->imap[ir->arg.idx];
         VRSize p = ir->src1->vsize;
         if(vrf_const(ir->src1))
         {

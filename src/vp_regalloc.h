@@ -8,14 +8,13 @@
 
 #include "vp_ir.h"
 #include "vp_type.h"
+#include "vp_target.h"
 
 enum
 {
     LI_NORMAL,
     LI_SPILL
 };
-
-typedef uint64_t RegSet;
 
 /* Liveness intervals */
 typedef struct LiveInterval
@@ -30,18 +29,6 @@ typedef struct LiveInterval
 
 struct RegAlloc;
 
-/* Register allocator settings */
-typedef struct RASettings
-{
-    RegSet (*extra)(struct RegAlloc* ra, IR* ir);    /* Detect extra register constraints */
-    const uint32_t* imap;    /* Mapping of integer params -> registers */
-    const uint32_t* fmap;    /* Mapping of float params -> registers */
-    uint32_t iphysmax;  /* Max physical integer registers */
-    uint32_t fphysmax;  /* Max physical float registers */
-    RegSet itemp; /* Temporary integer registers (bitmask) */
-    RegSet ftemp; /* Temporary float registers (bitmask) */
-} RASettings;
-
 #define RAF_STACK_FRAME (1 << 0)    /* Require stack frame */
 
 #define raf_stackframe(ra) ((ra)->flag & RAF_STACK_FRAME)
@@ -49,7 +36,6 @@ typedef struct RASettings
 /* Register allocator state */
 typedef struct RegAlloc
 {
-    const RASettings* set;  /* Regalloc settings */
     vec_t(VReg*) vregs;   /* Virtual registers */
     vec_t(VReg*) vconsts; /* Constant registers */
     LiveInterval* intervals;    /* Live intervals */
@@ -57,6 +43,12 @@ typedef struct RegAlloc
     RegSet iregbits;  /* Integer register bits in use */
     RegSet fregbits;  /* Floating regitser bits in use */
     uint8_t flag;   /* RegAlloc flags */
+    /* Register allocator settings */
+    RegSet (*extra)(struct RegAlloc* ra, IR* ir);    /* Detect extra register constraints */
+    uint32_t iphysmax;  /* Max physical integer registers */
+    uint32_t fphysmax;  /* Max physical float registers */
+    RegSet itemp; /* Temporary integer registers (bitmask) */
+    RegSet ftemp; /* Temporary float registers (bitmask) */
 } RegAlloc;
 
 /* Virtual registers */
@@ -66,7 +58,7 @@ VReg* vp_vreg_kf(double n, VRSize vsize);
 VRSize vp_vreg_elem(uint32_t size, uint32_t align);
 
 /* Register allocation */
-RegAlloc* vp_ra_new(const RASettings* set);
+RegAlloc* vp_ra_new(TargetInfo* T);
 VReg* vp_ra_spawn(VRSize vsize, uint8_t vflag);
 void vp_ra_alloc(RegAlloc *ra, BB** bbs);
 

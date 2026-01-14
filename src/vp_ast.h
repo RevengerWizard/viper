@@ -387,6 +387,7 @@ typedef struct Decl
         } ts;
         struct
         {
+            uint32_t flags;
             vec_t(Attr) attrs;
             Type* rett;
             TypeSpec* ret;
@@ -485,7 +486,5 @@ TypeSpec* vp_typespec_ptr(SrcLoc loc, TypeSpec* base);
 TypeSpec* vp_typespec_arr(SrcLoc loc, TypeSpec* base, Expr* e);
 TypeSpec* vp_typespec_fn(SrcLoc loc, TypeSpec* ret, vec_t(TypeSpec*) args);
 TypeSpec* vp_typespec_typeof(SrcLoc loc, Expr* e);
-TypeSpec* vp_typespec_const(SrcLoc loc, TypeSpec* base);
-TypeSpec* vp_typespec_nilable(SrcLoc loc, TypeSpec* base);
 
 #endif

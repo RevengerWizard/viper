@@ -17,10 +17,18 @@ typedef struct Slot
     FrameInfo* fi;
 } Slot;
 
+enum
+{
+    FN_INLINE = 1 << 0,
+    FN_SYSCALL = 1 << 1,
+    FN_EXPORT = 1 << 2
+};
+
 /* Function code blocks */
 typedef struct Code
 {
     Str* name;  /* Function name */
+    uint32_t flags;
     RegAlloc* ra;
     vec_t(BB*) bbs;
     vec_t(Scope*) scopes;
@@ -32,7 +40,9 @@ typedef struct Code
     uint32_t stacksize; /* Stack size used */
     BB* retbb;  /* Final return basic block */
     VReg* retvr;    /* Return vreg */
-    bool export;
+    Stmt* body;
+    const uint32_t* imap;    /* Mapping of integer params -> registers */
+    const uint32_t* fmap;    /* Mapping of float params -> registers */
 } Code;
 
 vec_t(Code*) vp_codegen(vec_t(Decl*) decls);

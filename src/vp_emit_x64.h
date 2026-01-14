@@ -80,6 +80,7 @@ void EMITX64(setcc)(X64CC cc, X64Reg reg);
 void EMITX64(cwde)();
 void EMITX64(cdq)();
 void EMITX64(cqo)();
-void EMITX64(ret)();
 void EMITX64(rdtsc)();
 void EMITX64(cpuid)();
+void EMITX64(ret)();
+void EMITX64(syscall)();

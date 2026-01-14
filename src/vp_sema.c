@@ -156,7 +156,13 @@ static Sym* sym_decl(Decl* d)
     if(d->kind == DECL_STRUCT || d->kind == DECL_UNION)
     {
         sym->state = SYM_DONE;
-        sym->type = vp_type_none(sym);
+        Type* ty = vp_type_none(sym);
+        /* Incomplete struct/union are already resolved */
+        if(declflag_empty(d))
+        {
+            ty->kind = (d->kind == DECL_STRUCT) ? TY_struct : TY_union;
+        }
+        sym->type = ty;
     }
     return sym;
 }
@@ -1807,7 +1813,7 @@ static Type* sema_typespec(TypeSpec* spec)
             vp_assertX(0, "unknown typespec");
             break;
     }
-    if(!ty_isptr(ty) && (spec->qual & SPEC_NILABLE))
+    if(!ty_isptrlike(ty) && (spec->qual & SPEC_NILABLE))
     {
         vp_err_error(spec->loc, "'%s' cannot be nil-able; only pointer types support '?'", type_str(ty));
     }
@@ -1833,7 +1839,7 @@ static Type* sema_type(Decl* d)
 }
 
 /* Resolve fn attributes */
-static void sema_attrs(vec_t(Attr) attrs, Str* funcname)
+static void sema_attrs(Decl* d, vec_t(Attr) attrs, Str* funcname)
 {
     for(uint32_t i = 0; i < vec_len(attrs); i++)
     {
@@ -1842,7 +1848,7 @@ static void sema_attrs(vec_t(Attr) attrs, Str* funcname)
         uint32_t argnum = vec_len(at->args);
         if(strncmp(str_data(name), "lib", name->len) == 0)
         {
-            if(argnum != 1) vp_err_error(at->loc, "expected 1 argument to lib");
+            if(argnum != 1) vp_err_error(at->loc, "expected 1 argument to [[lib]]");
             if(at->args[0].e->kind != EX_STR) vp_err_error(at->loc, "expected library name");
             Str* lib = at->args[0].e->str;
 
@@ -1884,6 +1890,11 @@ static void sema_attrs(vec_t(Attr) attrs, Str* funcname)
             }
 
             vp_tab_set(&V->ifuncs, funcname, funcname);
+        }
+        else if(strncmp(str_data(name), "syscall", name->len) == 0)
+        {
+            if(argnum != 0) vp_err_error(at->loc, "expected 0 arguments to [[syscall]]");
+            d->fn.flags |= (FN_SYSCALL | FN_INLINE);
         }
         else
         {
@@ -2417,7 +2428,7 @@ void vp_sema_decls(vec_t(Decl*) decls)
                 }
                 else if(d->kind == DECL_FN && d->fn.attrs)
                 {
-                    sema_attrs(d->fn.attrs, d->name);
+                    sema_attrs(d, d->fn.attrs, d->name);
                 }
                 break;
             }

@@ -697,12 +697,6 @@ void EMITX64(cqo)()
     emit_u8(V, 0x99);
 }
 
-/* RET */
-void EMITX64(ret)()
-{
-    emit_u8(V, 0xC3);
-}
-
 /* RDTSC */
 void EMITX64(rdtsc)()
 {
@@ -715,4 +709,17 @@ void EMITX64(cpuid)()
 {
     emit_u8(V, 0x0f);
     emit_u8(V, 0xa2);
+}
+
+/* RET */
+void EMITX64(ret)()
+{
+    emit_u8(V, 0xC3);
+}
+
+/* SYSCALL */
+void EMITX64(syscall)()
+{
+    emit_u8(V, 0x0F);
+    emit_u8(V, 0x05);
 }

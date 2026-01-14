@@ -15,6 +15,13 @@ static void inst_mov_rr(Inst* inst)
     EMITX64(movRR)(dst, src);
 }
 
+static void inst_mov_ri(Inst* inst)
+{
+    RegType dst = inst->oprs[0].reg;
+    int64_t src = inst->oprs[1].imm;
+    EMITX64(movRI)(dst, src);
+}
+
 static void inst_or_rr(Inst* inst)
 {
     RegType dst = inst->oprs[0].reg;
@@ -47,14 +54,22 @@ static void inst_ret(Inst* inst)
     EMITX64(ret)();
 }
 
+static void inst_syscall(Inst* inst)
+{
+    UNUSED(inst);
+    EMITX64(syscall)();
+}
+
 typedef void (*EmitAsmFn)(Inst* inst);
 static const EmitAsmFn emitinsttab[] = {
     [MOV_RR] = inst_mov_rr,
+    [MOV_RI] = inst_mov_ri,
     [OR_RR] = inst_or_rr,
     [SHL_RI] = inst_shl_ri,
     [RDTSC] = inst_rdtsc,
     [CPUID] = inst_cpuid,
     [RET] = inst_ret,
+    [SYSCALL] = inst_syscall,
 };
 
 void vp_inst_x64(Inst* inst)
