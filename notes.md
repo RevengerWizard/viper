@@ -36,6 +36,8 @@
 
 - [ ] default constant values for `struct`/`union` fields?
 
+- [ ] default constexpr function parameters
+
 - [X] nil-able types `uint8*?`
 
 - [X] enums
@@ -384,6 +386,8 @@ macro hdr(v) = cast(VecHeader*, cast(uint8*, v - offset(VecHeader, data)));
 
 ### notes
 
+`#if`
+
 `#fall`
 
 `#staticassert`
@@ -492,7 +496,8 @@ int64 <- int32 | uint32 | int16 | uint16 | int8 | uint8 | bool
 
 ### x64
 
-[`rax`, `rdi`, `rsi`, `rdx`, `rcx`, `r8`, `r9`, `r10`, `r11`, `r12`, `r13`, `r14`, `r15`]
+`rax`, `rcx`, `rdx`, `rbx`, `rsp`, `rbp`, `rdi`, `rsi`, `r8-r15`
+`xmm0-xmm15`
 
 max physical registers : 16
 
@@ -578,11 +583,11 @@ fn syswrite(fd : uint32, buf : const uint8*, count : usize) : isize
 
 ```
 [[syscall]]
-fn write(fd : uint32, buf : const uint8*, count : usize) : isize
+fn syswrite(fd : uint32, buf : const uint8*, count : usize) : isize
 {
     asm
     {
-        mov rax, 1; // sys_write
+        mov eax, 1;
         syscall;
     }
 }
@@ -590,7 +595,7 @@ fn write(fd : uint32, buf : const uint8*, count : usize) : isize
 
 ```
 [[syscall]]
-noreturn fn exit(status : int32) : void
+noreturn fn sysexit(status : int32) : void
 {
     asm
     {
@@ -602,7 +607,7 @@ noreturn fn exit(status : int32) : void
 
 ```
 [[syscall]]
-noreturn fn exit(status : int32) : void
+noreturn fn sysexit(status : int32) : void
 {
     @svc(0x5d);
 }
@@ -660,11 +665,19 @@ fn example<T>(a : T, b : T) : T
 `bool::size`
 
 ```
-fn foo() alloc {  }
+#alloc
+fn foo() {  }
+```
+
+```
+for var i : int32 = 0; i < 10; i++ {  }
 ```
 
 ```
 for i : int32 = 0; i < 10; i++ {  }
+```
+
+```
 for i := 0u32; i < 10; i++ {  }
 ```
 
@@ -709,4 +722,22 @@ var x : struct { id : int32; name : const uint8*; } = {12, "tony"};
 var y : struct { int32; bool; } = {13, true};
 
 var e : enum : int32 { STOP, RUN, END } = e::STOP;
+```
+
+```
+union StatusReg
+{
+    raw : uint8;
+    bits : packed struct
+    {
+        idle : bit1;
+        low_brightness : bit1;
+        normal_brightness : bit1;
+        high_brightness : bit1;
+        party_mode : bit1;
+        debug_mode : bit1;
+        reserved : bit1;
+        factory_test : bit1;
+    }
+}
 ```

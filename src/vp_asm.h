@@ -71,7 +71,7 @@ typedef struct AsmOperand
     AsmOperandType type;
     union
     {
-        uint8_t reg;
+        uint64_t reg;
         int64_t imm;
         Str* ident;
         struct

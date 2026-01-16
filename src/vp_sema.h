@@ -25,14 +25,25 @@ typedef union Val
     double f64;
 } Val;
 
+/* Operand flags */
+enum
+{
+    OPR_LIT = 1 << 0,       /* Literal value */
+    OPR_CONST = 1 << 1,     /* Constexpr value */
+    OPR_LVAL = 1 << 2,      /* lvalue */
+    OPR_UNTYPED = 1 << 3    /* Untyped literal */
+};
+
+#define opr_islit(o)    ((o).flags & OPR_LIT)
+#define opr_isconst(o)  ((o).flags & OPR_CONST)
+#define opr_islval(o)   ((o).flags & OPR_LVAL)
+#define opr_isuntyped(o) ((o).flags & OPR_UNTYPED)
+
 typedef struct Operand
 {
     Type* ty;
     Val val;
-    bool islit;
-    bool isconst;
-    bool islval;
-    bool untyped;
+    uint8_t flags;
 } Operand;
 
 typedef enum SymKind

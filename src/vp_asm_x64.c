@@ -435,7 +435,7 @@ static void asm_opr(LexState* ls, AsmOperand* opr, uint32_t* flags)
             if(reg != (RegType)-1)
             {
                 opr->type = ASM_REG;
-                opr->reg = (uint8_t)reg;
+                opr->reg = reg;
                 *flags = reg_flags(reg);
                 return;
             }
