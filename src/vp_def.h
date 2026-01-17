@@ -121,4 +121,9 @@ void vp_assert_fail(const char* file, int line, const char* func, const char* fm
     extern void VP_ASSERT_NAME(__LINE__)(int STATIC_ASSERTION_FAILED[(cond) ? 1 : -1])
 #endif
 
+typedef struct SBuf
+{
+    char* w, *e, *b;
+} SBuf;
+
 #endif

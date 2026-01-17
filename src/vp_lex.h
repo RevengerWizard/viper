@@ -15,7 +15,8 @@
     /* Keywords */ \
     _(fn) \
     _(struct) _(union) _(enum) \
-    _(pub) _(import) _(from) _(as) \
+    _(pub) _(inline) _(noreturn) \
+    _(import) _(from) _(as) \
     _(asm) \
     _(var) _(const) \
     _(def) \

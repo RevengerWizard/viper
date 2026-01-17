@@ -10,11 +10,7 @@
 
 #include "vp_def.h"
 #include "vp_str.h"
-
-typedef struct SBuf
-{
-    char* w, *e, *b;
-} SBuf;
+#include "vp_state.h"
 
 #define sbuf_size(sb)  ((size_t)((sb)->e - (sb)->b))
 #define sbuf_len(sb)   ((size_t)((sb)->w - (sb)->b))
@@ -27,6 +23,7 @@ SBuf* vp_buf_putmem(SBuf* sb, const void* q, size_t len);
 Str* vp_buf_cat2str(Str* s1, Str* s2);
 
 #define vp_buf_putlit(sb, s) (vp_buf_putmem(sb, "" s, (sizeof(s)/sizeof(char))-1))
+#define vp_buf_putstr(sb, s) (vp_buf_putmem(sb, str_data((s)), (s)->len))
 
 static VP_AINLINE void vp_buf_init(SBuf* sb)
 {
@@ -36,6 +33,13 @@ static VP_AINLINE void vp_buf_init(SBuf* sb)
 static VP_AINLINE void vp_buf_reset(SBuf* sb)
 {
     sb->w = sb->b;
+}
+
+static VP_AINLINE SBuf* vp_buf_tmp_(VpState* V)
+{
+    SBuf* sb = &V->tmpbuf;
+    vp_buf_reset(sb);
+    return sb;
 }
 
 static VP_AINLINE char* vp_buf_need(SBuf* sb, size_t size)

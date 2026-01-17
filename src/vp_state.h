@@ -8,7 +8,6 @@
 
 #include <stdio.h>
 
-#include "vp_buf.h"
 #include "vp_ir.h"
 #include "vp_mem.h"
 #include "vp_target.h"

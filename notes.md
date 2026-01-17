@@ -497,6 +497,7 @@ int64 <- int32 | uint32 | int16 | uint16 | int8 | uint8 | bool
 ### x64
 
 `rax`, `rcx`, `rdx`, `rbx`, `rsp`, `rbp`, `rdi`, `rsi`, `r8-r15`
+
 `xmm0-xmm15`
 
 max physical registers : 16
@@ -637,6 +638,10 @@ MessageBoxA(
 `ld out.obj -o out.exe -L. -lkernel32 -ltea00 --subsystem=console -e main`
 
 `ld out.obj -o out.exe --subsystem=console -e main`
+
+---
+
+`dot -Tpng out.dot -o out.png`
 
 ---
 
