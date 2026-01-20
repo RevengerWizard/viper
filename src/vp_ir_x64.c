@@ -10,7 +10,6 @@
 #include "vp_ir.h"
 #include "vp_regalloc.h"
 #include "vp_state.h"
-#include "vp_target.h"
 #include "vp_target_x64.h"
 #include "vp_vec.h"
 #include "vp_low.h"
@@ -70,17 +69,17 @@ static void emit_mov(VReg* dst, VReg* src)
     }
 }
 
-static void ir_x64_bofs(IR* ir)
+static void irX64_bofs(IR* ir)
 {
     int64_t ofs = ir->bofs.fi->ofs + ir->bofs.ofs;
-    EMITX64(leaRM)(irx64R[VRSize8][ir->dst->phys], MEM_MAKE(RN_BP, NOREG, 1, ofs, 8));
+    EMITX64(leaRM)(irx64R[VRSize8][ir->dst->phys], X64MEM(RN_BP, NOREG, 1, ofs, 8));
 }
 
-static void ir_x64_iofs(IR* ir)
+static void irX64_iofs(IR* ir)
 {
     Str* label = ir->iofs.label;
     int64_t ofs = ir->iofs.ofs;
-    EMITX64(leaRM)(irx64R[VRSize8][ir->dst->phys], MEM_MAKE_RIP(ofs, 8));
+    EMITX64(leaRM)(irx64R[VRSize8][ir->dst->phys], X64MEM_RIP(ofs, 8));
     uint32_t patch = sbuf_len(&V->code) - 4;
     if(ir->iofs.isfn)
     {
@@ -94,24 +93,24 @@ static void ir_x64_iofs(IR* ir)
     }
 }
 
-static void ir_x64_sofs(IR* ir)
+static void irX64_sofs(IR* ir)
 {
     int64_t ofs = ir->sofs.ofs;
-    EMITX64(leaRM)(irx64R[VRSize8][ir->dst->phys], MEM_MAKE(RN_SP, NOREG, 1, ofs, 8));
+    EMITX64(leaRM)(irx64R[VRSize8][ir->dst->phys], X64MEM(RN_SP, NOREG, 1, ofs, 8));
 }
 
-static void ir_x64_mov(IR* ir)
+static void irX64_mov(IR* ir)
 {
     emit_mov(ir->dst, ir->src1);
 }
 
-static void ir_x64_store(IR* ir)
+static void irX64_store(IR* ir)
 {
     X64Mem dst;
     if(ir->kind == IR_STORE)
     {
         vp_assertX(!vrf_spill(ir->src2), "src2 spilled");
-        dst = MEM_MAKE(ir->src2->phys, NOREG, 1, 0, 8);
+        dst = X64MEM(ir->src2->phys, NOREG, 1, 0, 8);
     }
     else
     {
@@ -119,7 +118,7 @@ static void ir_x64_store(IR* ir)
         vp_assertX(!vrf_const(ir->src2), "const src2");
         vp_assertX(vrf_spill(ir->src2), "src2 not spilled");
         int32_t disp = ir->src2->fi.ofs;
-        dst = MEM_MAKE(RN_BP, NOREG, 1, disp, 8);
+        dst = X64MEM(RN_BP, NOREG, 1, disp, 8);
     }
 
     if(vrf_flo(ir->src1))
@@ -149,13 +148,13 @@ static void ir_x64_store(IR* ir)
     }
 }
 
-static void ir_x64_load(IR* ir)
+static void irX64_load(IR* ir)
 {
     X64Mem mem;
     if(ir->kind == IR_LOAD)
     {
         vp_assertX(!vrf_spill(ir->src1), "src1 spilled");
-        mem = MEM_MAKE(ir->src1->phys, NOREG, 1, 0, 8);
+        mem = X64MEM(ir->src1->phys, NOREG, 1, 0, 8);
     }
     else
     {
@@ -164,7 +163,7 @@ static void ir_x64_load(IR* ir)
         vp_assertX(vrf_spill(ir->src1), "src1 not spilled");
 
         int32_t disp = ir->src1->fi.ofs;
-        mem = MEM_MAKE(RN_BP, NOREG, 1, disp, 8);
+        mem = X64MEM(RN_BP, NOREG, 1, disp, 8);
     }
 
     if(vrf_flo(ir->dst))
@@ -192,13 +191,13 @@ static void ir_x64_load(IR* ir)
     }
 }
 
-static void ir_x64_ret(IR* ir)
+static void irX64_ret(IR* ir)
 {
     VReg dst = {.phys = vrf_flo(ir->src1) ? XN_0 : RN_AX, .vsize = VRSize8, .flag = ir->src1->flag};
     emit_mov(&dst, ir->src1);
 }
 
-static void ir_x64_pusharg(IR* ir)
+static void irX64_pusharg(IR* ir)
 {
     uint32_t dst = ir->arg.idx;
     if(vrf_flo(ir->src1))
@@ -228,11 +227,11 @@ static void ir_x64_pusharg(IR* ir)
     }
 }
 
-static void ir_x64_call(IR* ir)
+static void irX64_call(IR* ir)
 {
     uint32_t total = ir->call->stacksize;
     /* Save caller registers */
-    push_caller_save(ir->call->saves, total);
+    vp_lowX64_caller_push(ir->call->saves, total);
 
     if(ir->call->label)
     {
@@ -281,10 +280,10 @@ static void ir_x64_call(IR* ir)
     }
 
     /* Restore caller registers */
-    pop_caller_save(ir->call->saves, total);
+    vp_lowX64_caller_pop(ir->call->saves, total);
 }
 
-static void ir_x64_cast(IR* ir)
+static void irX64_cast(IR* ir)
 {
     vp_assertX(!vrf_const(ir->src1), "const src1");
     if(vrf_flo(ir->dst))
@@ -399,15 +398,15 @@ static void ir_x64_cast(IR* ir)
     }
 }
 
-static void ir_x64_keep(IR* ir)
+static void irX64_keep(IR* ir)
 {
     UNUSED(ir);
 }
 
-static void ir_x64_asm(IR* ir)
+static void irX64_asm(IR* ir)
 {
     Inst* inst = ir->asm_.inst;
-    vp_inst_x64(inst);
+    vp_instX64(inst);
 }
 
 static void cmp_vregs(VReg* src1, VReg* src2, CondKind cond)
@@ -485,7 +484,7 @@ static X64CC cond2cc(CondKind cond)
     return 0;
 }
 
-static void ir_x64_cond(IR* ir)
+static void irX64_cond(IR* ir)
 {
     VReg* src1 = ir->src1, *src2 = ir->src2;
     vp_assertX(!vrf_const(ir->dst), "const dst");
@@ -502,7 +501,7 @@ static void ir_x64_cond(IR* ir)
     EMITX64(movsxRR)(irx64R[VRSize4][ir->dst->phys], irx64R[VRSize1][ir->dst->phys]);
 }
 
-static void ir_x64_jmp(IR* ir)
+static void irX64_jmp(IR* ir)
 {
     CondKind cond = ir->jmp.cond;
     vp_assertX(cond != COND_NONE, "unconditional jump");
@@ -552,7 +551,7 @@ static void ir_x64_jmp(IR* ir)
     patchinfo_jmprel(ir->jmp.bb, patch);
 }
 
-static void ir_x64_add(IR* ir)
+static void irX64_add(IR* ir)
 {
     vp_assertX(ir->dst->phys == ir->src1->phys, "dst != src");
     if(vrf_flo(ir->dst))
@@ -591,7 +590,7 @@ static void ir_x64_add(IR* ir)
     }
 }
 
-static void ir_x64_sub(IR* ir)
+static void irX64_sub(IR* ir)
 {
     vp_assertX(ir->dst->phys == ir->src1->phys, "dst != src1");
     if(vrf_flo(ir->dst))
@@ -630,7 +629,7 @@ static void ir_x64_sub(IR* ir)
     }
 }
 
-static void ir_x64_mul(IR* ir)
+static void irX64_mul(IR* ir)
 {
     vp_assertX(!vrf_const(ir->src1) &&
             !vrf_const(ir->src2), "const src1 and const src2");
@@ -666,7 +665,7 @@ static void ir_x64_mul(IR* ir)
     }
 }
 
-static void ir_x64_div(IR* ir)
+static void irX64_div(IR* ir)
 {
     vp_assertX(!vrf_const(ir->src1) &&
             !vrf_const(ir->src2), "const src1 and src2");
@@ -720,7 +719,7 @@ static void ir_x64_div(IR* ir)
     }
 }
 
-static void ir_x64_mod(IR* ir)
+static void irX64_mod(IR* ir)
 {
     vp_assertX(!vrf_const(ir->src1) &&
             !vrf_const(ir->src2), "const src1 and src2");
@@ -758,7 +757,7 @@ static void ir_x64_mod(IR* ir)
     }
 }
 
-static void ir_x64_band(IR* ir)
+static void irX64_band(IR* ir)
 {
     vp_assertX(ir->dst->phys == ir->src1->phys, "dst != src1");
     vp_assertX(!vrf_const(ir->src1), "const src1");
@@ -775,7 +774,7 @@ static void ir_x64_band(IR* ir)
     }
 }
 
-static void ir_x64_bor(IR* ir)
+static void irX64_bor(IR* ir)
 {
     vp_assertX(ir->dst->phys == ir->src1->phys, "dst != src1");
     vp_assertX(!vrf_const(ir->src1), "const src1");
@@ -792,7 +791,7 @@ static void ir_x64_bor(IR* ir)
     }
 }
 
-static void ir_x64_bxor(IR* ir)
+static void irX64_bxor(IR* ir)
 {
     vp_assertX(ir->dst->phys == ir->src1->phys, "dst != src1");
     vp_assertX(!vrf_const(ir->src1), "const src1");
@@ -808,7 +807,7 @@ static void ir_x64_bxor(IR* ir)
     }
 }
 
-static void ir_x64_lshift(IR* ir)
+static void irX64_lshift(IR* ir)
 {
     vp_assertX(ir->dst->phys == ir->src1->phys, "dst != src1");
     vp_assertX(!vrf_const(ir->src1), "const src1");
@@ -827,7 +826,7 @@ static void ir_x64_lshift(IR* ir)
     }
 }
 
-static void ir_x64_rshift(IR* ir)
+static void irX64_rshift(IR* ir)
 {
     vp_assertX(ir->dst->phys == ir->src1->phys, "dst != src1");
     vp_assertX(!vrf_const(ir->src1), "const src1");
@@ -860,7 +859,7 @@ static void ir_x64_rshift(IR* ir)
     }
 }
 
-static void ir_x64_neg(IR* ir)
+static void irX64_neg(IR* ir)
 {
     vp_assertX(!vrf_const(ir->dst), "const dst");
     if(vrf_flo(ir->src1))
@@ -909,7 +908,7 @@ static void ir_x64_neg(IR* ir)
     }
 }
 
-static void ir_x64_bnot(IR* ir)
+static void irX64_bnot(IR* ir)
 {
     vp_assertX(ir->dst->phys == ir->src1->phys, "dst != src1");
     vp_assertX(!vrf_const(ir->dst), "const dst");
@@ -918,30 +917,30 @@ static void ir_x64_bnot(IR* ir)
     EMITX64(notR)(irx64R[p][ir->dst->phys]);
 }
 
-typedef void (*IRFn)(IR* ir);
-static const IRFn irx64tab[] = {
-    [IR_BOFS] = ir_x64_bofs,
-    [IR_IOFS] = ir_x64_iofs,
-    [IR_SOFS] = ir_x64_sofs,
-    [IR_MOV] = ir_x64_mov,
-    [IR_STORE] = ir_x64_store, [IR_LOAD] = ir_x64_load,
-    [IR_STORE_S] = ir_x64_store, [IR_LOAD_S] = ir_x64_load,
-    [IR_RET] = ir_x64_ret,
-    [IR_COND] = ir_x64_cond,
-    [IR_JMP] = ir_x64_jmp,
-    [IR_PUSHARG] = ir_x64_pusharg,
-    [IR_CALL] = ir_x64_call,
-    [IR_CAST] = ir_x64_cast,
-    [IR_KEEP] = ir_x64_keep,
-    [IR_ASM] = ir_x64_asm,
-    [IR_ADD] = ir_x64_add, [IR_SUB] = ir_x64_sub,
-    [IR_MUL] = ir_x64_mul, [IR_DIV] = ir_x64_div, [IR_MOD] = ir_x64_mod,
-    [IR_BAND] = ir_x64_band, [IR_BOR] = ir_x64_bor, [IR_BXOR] = ir_x64_bxor,
-    [IR_LSHIFT] = ir_x64_lshift, [IR_RSHIFT] = ir_x64_rshift,
-    [IR_NEG] = ir_x64_neg, [IR_BNOT] = ir_x64_bnot,
+typedef void (*IRX64Fn)(IR* ir);
+static const IRX64Fn irx64tab[] = {
+    [IR_BOFS] = irX64_bofs,
+    [IR_IOFS] = irX64_iofs,
+    [IR_SOFS] = irX64_sofs,
+    [IR_MOV] = irX64_mov,
+    [IR_STORE] = irX64_store, [IR_LOAD] = irX64_load,
+    [IR_STORE_S] = irX64_store, [IR_LOAD_S] = irX64_load,
+    [IR_RET] = irX64_ret,
+    [IR_COND] = irX64_cond,
+    [IR_JMP] = irX64_jmp,
+    [IR_PUSHARG] = irX64_pusharg,
+    [IR_CALL] = irX64_call,
+    [IR_CAST] = irX64_cast,
+    [IR_KEEP] = irX64_keep,
+    [IR_ASM] = irX64_asm,
+    [IR_ADD] = irX64_add, [IR_SUB] = irX64_sub,
+    [IR_MUL] = irX64_mul, [IR_DIV] = irX64_div, [IR_MOD] = irX64_mod,
+    [IR_BAND] = irX64_band, [IR_BOR] = irX64_bor, [IR_BXOR] = irX64_bxor,
+    [IR_LSHIFT] = irX64_lshift, [IR_RSHIFT] = irX64_rshift,
+    [IR_NEG] = irX64_neg, [IR_BNOT] = irX64_bnot,
 };
 
-void vp_ir_x64(IR* ir)
+void vp_irX64(IR* ir)
 {
     vp_assertX(ir->kind < (int)ARRSIZE(irx64tab), "out of bounds ir kind");
     vp_assertX(irx64tab[ir->kind], "empty entry %d", ir->kind);
@@ -949,7 +948,7 @@ void vp_ir_x64(IR* ir)
 }
 
 /* x64 register allocator constraints */
-RegSet vp_ir_x64_extra(RegAlloc* ra, IR* ir)
+RegSet vp_raX64(RegAlloc* ra, IR* ir)
 {
     RegSet ioccupy = 0;
     switch(ir->kind)
@@ -971,7 +970,7 @@ RegSet vp_ir_x64_extra(RegAlloc* ra, IR* ir)
 }
 
 /* Convert `A = B op C` to `A = B; A = A op C` */
-static void ir_x64_conv3to2(vec_t(BB*) bbs)
+static void irX64_3to2(vec_t(BB*) bbs)
 {
     for(uint32_t i = 0; i < vec_len(bbs); i++)
     {
@@ -1020,10 +1019,10 @@ static void ir_x64_conv3to2(vec_t(BB*) bbs)
 }
 
 /* Tweak the IR for x64 */
-void vp_ir_x64_tweak(Code* code)
+void vp_irX64_tweak(Code* code)
 {
     vec_t(BB*) bbs = code->bbs;
-    ir_x64_conv3to2(bbs);
+    irX64_3to2(bbs);
     for(uint32_t i = 0; i < vec_len(bbs); i++)
     {
         BB* bb = bbs[i];

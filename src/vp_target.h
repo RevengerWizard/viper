@@ -19,7 +19,8 @@ typedef enum
 /* Operating systems */
 typedef enum
 {
-    OS_WINDOWS
+    OS_WINDOWS,
+    OS_LINUX
 } OSType;
 
 /* Architectures */
@@ -44,16 +45,24 @@ typedef enum
     ABI_SYSV_X64,   /* System V x64 */
 } ABIType;
 
+/* ABI flags */
+enum
+{
+    ABI_POS = 1 << 0,       /* Positional parameters */
+    ABI_SHADOW = 1 << 1,    /* Use shadow stack before arguments */
+};
+
 /* ABI configurations */
 typedef struct
 {
+    uint8_t flags;
     /* Parameter registers */
     const uint32_t* imap;
     const uint32_t* fmap;
+    uint32_t imax, fmax;
     /* Caller-save registers */
-    const uint32_t* icaller;
-    const uint32_t* fcaller;
-    uint32_t icallersize, fcallersize;
+    RegSet icaller;
+    RegSet fcaller;
     /* Callee-save registers */
     RegSet icallee;
     RegSet fcallee;
@@ -62,7 +71,8 @@ typedef struct
 /* Predefined targets */
 typedef enum
 {
-    TARGET_X64_WINDOWS  /* x64-windows */
+    TARGET_X64_WINDOWS,  /* x64-windows */
+    TARGET_X64_LINUX  /* x64-linux */
 } TargetID;
 
 /* Target configuration */

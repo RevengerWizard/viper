@@ -20,15 +20,14 @@ static const uint32_t winx64_fmap[] = {
     XN_0, XN_1, XN_2, XN_3
 };
 
-/* Caller-save registers */
-const uint32_t winx64_icaller[] = {
-    RN_AX, RN_CX, RN_DX, RN_8, RN_9, RN_10, RN_11
-};
+/* Caller-save int registers */
+#define WINX64_ICALLER \
+    ((1ULL << RN_AX) | (1ULL << RN_CX) | (1ULL << RN_DX) | \
+    (1ULL << RN_8) | (1ULL << RN_9) | (1ULL << RN_10) | (1ULL << RN_11))
 
-/* Caller-save registers */
-const uint32_t winx64_fcaller[] = {
-    XN_0, XN_1, XN_2, XN_3
-};
+/* Caller-save float registers */
+#define WINX64_FCALLER \
+    ((1ULL << XN_0) | (1ULL << XN_1) | (1ULL << XN_2) | (1ULL << XN_3))
 
 /* Callee-save int registers */
 #define WINX64_ICALLEE \
@@ -52,19 +51,17 @@ static const uint32_t sysvx64_fmap[] = {
     XN_0, XN_1, XN_2, XN_3, XN_4, XN_5, XN_6, XN_7
 };
 
-/* Caller-save registers */
-static const uint32_t sysvx64_icaller[] = {
-    RN_AX, RN_CX, RN_DX, RN_SI,
-    RN_DI, RN_8, RN_9, RN_10, RN_11
-};
+/* Caller-save int registers */
+#define SYSV_X64_ICALLER \
+    ((1ULL << RN_AX) | (1ULL << RN_CX) | (1ULL << RN_DX) | (1ULL << RN_SI) | \
+    (1ULL << RN_DI) | (1ULL << RN_8) | (1ULL << RN_9) | (1ULL << RN_10) | (1ULL << RN_11))
 
-/* Caller-save registers */
-static const uint32_t sysvx64_fcaller[] = {
-    XN_0, XN_1, XN_2, XN_3,
-    XN_4, XN_5, XN_6, XN_7,
-    XN_8, XN_9, XN_10, XN_11,
-    XN_12, XN_13, XN_14, XN_15
-};
+/* Caller-save float registers */
+#define SYSV_X64_FCALLER \
+    ((1ULL << XN_0) | (1ULL << XN_1) | (1ULL << XN_2) | (1ULL << XN_3) | \
+    (1ULL << XN_4) | (1ULL << XN_5) | (1ULL << XN_6) | (1ULL << XN_7) | \
+    (1ULL << XN_8) | (1ULL << XN_9) | (1ULL << XN_10) | (1ULL << XN_11) | \
+    (1ULL << XN_12) | (1ULL << XN_13) | (1ULL << XN_14) | (1ULL << XN_15))
 
 /* Callee-save int registers */
 #define SYSV_X64_ICALLEE \
@@ -90,22 +87,24 @@ static const ArchInfo archs[] = {
 /* ABIs */
 static const ABIInfo abis[] = {
     [ABI_WIN_X64] = {
+        .flags = ABI_POS | ABI_SHADOW,
         .imap = winx64_imap,
         .fmap = winx64_fmap,
-        .icaller = winx64_icaller,
-        .fcaller = winx64_fcaller,
-        .icallersize = ARRSIZE(winx64_icaller),
-        .fcallersize = ARRSIZE(winx64_fcaller),
+        .imax = ARRSIZE(winx64_imap),
+        .fmax = ARRSIZE(winx64_fmap),
+        .icaller = WINX64_ICALLER,
+        .fcaller = WINX64_FCALLER,
         .icallee = WINX64_ICALLEE,
         .fcallee = WINX64_FCALLEE
     },
     [ABI_SYSV_X64] = {
+        .flags = 0,
         .imap = sysvx64_imap,
         .fmap = sysvx64_fmap,
-        .icaller = sysvx64_icaller,
-        .fcaller = sysvx64_fcaller,
-        .icallersize = ARRSIZE(sysvx64_icaller),
-        .fcallersize = ARRSIZE(sysvx64_fcaller),
+        .imax = ARRSIZE(sysvx64_imap),
+        .fmax = ARRSIZE(sysvx64_fmap),
+        .icaller = SYSV_X64_ICALLER,
+        .fcaller = SYSV_X64_FCALLER,
         .icallee = SYSV_X64_ICALLEE,
         .fcallee = SYSV_X64_FCALLEE
     }
@@ -121,6 +120,15 @@ static const TargetInfo targets[] = {
         "x64-windows",
         &abis[ABI_WIN_X64],
         &archs[ARCH_X64],
+    },
+    {
+        TARGET_X64_LINUX,
+        OS_LINUX,
+        ARCH_X64,
+        ABI_WIN_X64,
+        "x64-linux",
+        &abis[ABI_WIN_X64],
+        &archs[ARCH_X64]
     }
 };
 

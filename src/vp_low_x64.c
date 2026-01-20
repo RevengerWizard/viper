@@ -4,6 +4,7 @@
 */
 
 #include "vp_low.h"
+#include "vp_abi.h"
 #include "vp_regalloc.h"
 #include "vp_target.h"
 #include "vp_emit_x64.h"
@@ -11,116 +12,112 @@
 #include "vp_ir.h"
 #include "vp_target_x64.h"
 
-typedef struct RegParam
+/* Assign saved param registers */
+static void lowX64_params(Code* code)
 {
-    Type* ty;
-    VReg* vr;
-    uint32_t idx;
-} RegParam;
+    uint32_t start = code->retvr ? 1 : 0;
 
-static void params_enum(Code* code, RegParam iargs[], RegParam fargs[], uint32_t imax, uint32_t fmax, uint32_t* icount, uint32_t* fcount)
-{
-    uint32_t inums = 0;
-    uint32_t fnums = 0;
-
-    VReg* retvr = code->retvr;
-    if(retvr)
+    /* Handle return value parameter */
+    if(code->retvr)
     {
-        RegParam* rp = &iargs[inums++];
-        rp->ty = vp_type_ptr(tyvoid);
-        rp->vr = retvr;
-        rp->idx = 0;
-    }
+        VReg* vr = code->retvr;
+        ParamLoc* pl = &code->plocs[0];
+        vp_assertX(pl->cls == PC_IREG, "return ptr must be in int reg");
 
-    for(uint32_t i = 0; i < code->numparams; i++)
-    {
-        VarInfo* vi = code->scopes[0]->vars[i];
-        Type* ty = vi->type;
-        if(param_isstack(ty))
-            continue;
-        VReg* vr = vi->vreg;
-        vp_assertX(vr, "empty vreg");
-        RegParam* rp = NULL;
-        uint32_t idx = 0;
-        if(ty_isflo(ty))
-        {
-            if(fnums < fmax)
-                rp = &fargs[idx = fnums++];
-        }
-        else
-        {
-            if(inums < imax)
-                rp = &iargs[idx = inums++];
-        }
-        if(rp)
-        {
-            rp->ty = ty;
-            rp->vr = vr;
-            rp->idx = idx;
-        }
-    }
-
-    *icount = inums;
-    *fcount = fnums;
-}
-
-static void params_assign(RegAlloc* ra, Code* code)
-{
-    RegParam iparams[10] = {};
-    RegParam fparams[10] = {};
-    uint32_t inums = 0;
-    uint32_t fnums = 0;
-    params_enum(code, iparams, fparams, 4, 4, &inums, &fnums);
-
-    /* Int parameter stores */
-    for(uint32_t i = 0; i < inums; i++)
-    {
-        RegParam* rp = &iparams[i];
-        VReg* vr = rp->vr;
-        uint32_t size = vp_type_sizeof(rp->ty);
-        VRSize p = vp_msb(size);
-        uint32_t idx = code->imap[rp->idx];
         if(vrf_spill(vr))
         {
             uint32_t ofs = vr->fi.ofs;
             vp_assertX(ofs, "0 offset");
-            EMITX64(movMR)(MEM_MAKE(RN_BP, NOREG, 1, ofs, 8), REG_MAKE(idx, RC_GPR, 8, SUB_LO));
+            EMITX64(movMR)(X64MEM(RN_BP, NOREG, 1, ofs, 8),
+                          X64REG(pl->idx, RC_GPR, 8, SUB_LO));
         }
-        else if(idx != vr->phys)
+        else if(pl->idx != vr->phys)
         {
-            X64Reg dst = REG_MAKE(vr->phys, RC_GPR, p, SUB_LO);
-            X64Reg src = REG_MAKE(idx, RC_GPR, p, SUB_LO);
+            X64Reg dst = X64REG(vr->phys, RC_GPR, 8, SUB_LO);
+            X64Reg src = X64REG(pl->idx, RC_GPR, 8, SUB_LO);
             EMITX64(movRR)(dst, src);
         }
     }
 
-    /* Float parameter stores */
-    for(uint32_t i = 0; i < fnums; i++)
+    /* Handle function parameters */
+    for(uint32_t i = 0; i < code->numparams; i++)
     {
-        RegParam* rp = &fparams[i];
-        VReg* vr = rp->vr;
-        uint32_t idx = code->fmap[rp->idx];
-        X64Reg src = REG_MAKE(idx, RC_XMM, 16, SUB_LO);
-        if(vrf_spill(vr))
+        VarInfo* vi = code->scopes[0]->vars[i];
+        ParamLoc* pl = &code->plocs[i + start];
+
+        /* Skip memory parameters (already on stack) */
+        if(pl->cls == PC_MEM)
+            continue;
+
+        VReg* vr = vi->vreg;
+        if(!vr)
+            continue;
+
+        Type* ty = vi->type;
+        uint32_t size = vp_type_sizeof(ty);
+        VRSize p = vp_msb(size);
+
+        switch(pl->cls)
         {
-            uint32_t ofs = vr->fi.ofs;
-            vp_assertX(ofs, "0 offset");
-            switch(vr->vsize)
+            case PC_IREG:
             {
-            case VRSize4: EMITX64(movssMX)(MEM_MAKE(RN_BP, NOREG, 1, ofs, 8), src); break;
-            case VRSize8: EMITX64(movsdMX)(MEM_MAKE(RN_BP, NOREG, 1, ofs, 8), src); break;
-            default: vp_assertX(0, "?");
+                if(vrf_spill(vr))
+                {
+                    uint32_t ofs = vr->fi.ofs;
+                    vp_assertX(ofs, "0 offset");
+                    EMITX64(movMR)(X64MEM(RN_BP, NOREG, 1, ofs, 8),
+                                  X64REG(pl->idx, RC_GPR, 8, SUB_LO));
+                }
+                else if(pl->idx != vr->phys)
+                {
+                    X64Reg dst = X64REG(vr->phys, RC_GPR, p, SUB_LO);
+                    X64Reg src = X64REG(pl->idx, RC_GPR, p, SUB_LO);
+                    EMITX64(movRR)(dst, src);
+                }
+                break;
             }
-        }
-        else if(idx != vr->phys)
-        {
-            X64Reg dst = REG_MAKE(vr->phys, RC_XMM, 16, SUB_LO);
-            switch(vr->vsize)
+            case PC_FREG:
             {
-            case VRSize4: EMITX64(movssXX)(dst, src); break;
-            case VRSize8: EMITX64(movsdXX)(dst, src); break;
-            default: vp_assertX(0, "?");
+                X64Reg src = X64REG(pl->idx, RC_XMM, 16, SUB_LO);
+
+                if(vrf_spill(vr))
+                {
+                    uint32_t ofs = vr->fi.ofs;
+                    vp_assertX(ofs, "0 offset");
+                    switch(vr->vsize)
+                    {
+                    case VRSize4:
+                        EMITX64(movssMX)(X64MEM(RN_BP, NOREG, 1, ofs, 8), src);
+                        break;
+                    case VRSize8:
+                        EMITX64(movsdMX)(X64MEM(RN_BP, NOREG, 1, ofs, 8), src);
+                        break;
+                    default:
+                        vp_assertX(0, "invalid float size");
+                    }
+                }
+                else if(pl->idx != vr->phys)
+                {
+                    X64Reg dst = X64REG(vr->phys, RC_XMM, 16, SUB_LO);
+                    switch(vr->vsize)
+                    {
+                    case VRSize4:
+                        EMITX64(movssXX)(dst, src);
+                        break;
+                    case VRSize8:
+                        EMITX64(movsdXX)(dst, src);
+                        break;
+                    default:
+                        vp_assertX(0, "invalid float size");
+                    }
+                }
+                break;
             }
+            case PC_STACK:
+                /* Already on stack */
+                break;
+            default:
+                vp_assertX(0, "invalid param class");
         }
     }
 }
@@ -131,34 +128,40 @@ typedef struct RegSave
     bool flo;
 } RegSave;
 
-static vec_t(RegSave) collect_caller_save(RegSet iliving, RegSet fliving)
+/* Collect caller saved living registers */
+static vec_t(RegSave) lowX64_caller_save(RegSet iliving, RegSet fliving)
 {
     vec_t(RegSave) saves = vec_init(RegSave);
+    RegSet icaller = V->T->abi->icaller;
+    RegSet fcaller = V->T->abi->fcaller;
 
-    for(uint32_t i = 0; i < V->T->abi->icallersize; i++)
+    /* Intersect living with caller-saved */
+    RegSet isave = iliving & icaller;
+    RegSet fsave = fliving & fcaller;
+
+    /* Collect living int regs */
+    while(isave)
     {
-        uint32_t ireg = V->T->abi->icaller[i];
-        if(iliving & (1ULL << ireg))
-        {
-            RegSave rs = {.reg = ireg};
-            vec_push(saves, rs);
-        }
+        uint32_t ireg = __builtin_ctzll(isave);
+        RegSave rs = {.reg = ireg};
+        vec_push(saves, rs);
+        isave &= isave - 1;  /* Clear lowest bit */
     }
 
-    for(uint32_t i = 0; i < V->T->abi->fcallersize; i++)
+    /* Collect living float regs */
+    while(fsave)
     {
-        uint32_t freg = V->T->abi->fcaller[i];
-        if(fliving & (1ULL << freg))
-        {
-            RegSave rs = {.reg = freg, .flo = true};
-            vec_push(saves, rs);
-        }
+        uint32_t freg = __builtin_ctzll(fsave);
+        RegSave rs = {.reg = freg, .flo = true};
+        vec_push(saves, rs);
+        fsave &= fsave - 1; /* Clear lowest bit */
     }
 
     return saves;
 }
 
-static uint32_t detect_call_size(Code* code)
+/* Detect maximum call stack requirement */
+static uint32_t lowX64_call_size(Code* code)
 {
     uint32_t max = 0;
     for(uint32_t i = 0; i < vec_len(code->calls); i++)
@@ -166,7 +169,7 @@ static uint32_t detect_call_size(Code* code)
         IR* ir = code->calls[i];
 
         /* Caller save registers */
-        vec_t(RegSave) saves = collect_caller_save(ir->call->ipregs, ir->call->fpregs);
+        vec_t(RegSave) saves = lowX64_caller_save(ir->call->ipregs, ir->call->fpregs);
         ir->call->saves = saves;
 
         uint32_t total = ir->call->stacksize + vec_len(saves) * TARGET_PTR_SIZE;
@@ -175,7 +178,8 @@ static uint32_t detect_call_size(Code* code)
     return max;
 }
 
-void push_caller_save(vec_t(RegSave) saves, uint32_t total)
+/* Push caller-save registers */
+void vp_lowX64_caller_push(vec_t(RegSave) saves, uint32_t total)
 {
     uint32_t ofs = total;
     ofs += vec_len(saves) * TARGET_PTR_SIZE;
@@ -183,62 +187,63 @@ void push_caller_save(vec_t(RegSave) saves, uint32_t total)
     {
         RegSave* rs = &saves[i];
         ofs -= TARGET_PTR_SIZE;
+        X64Mem mem = X64MEM(RN_SP, NOREG, 1, ofs, 8);
         if(rs->flo)
         {
-            EMITX64(movsdMX)(MEM_MAKE(RN_SP, NOREG, 1, ofs, 8), REG_MAKE(rs->reg, RC_XMM, 16, SUB_LO));
+            EMITX64(movsdMX)(mem, X64REG(rs->reg, RC_XMM, 16, SUB_LO));
         }
         else
         {
-            EMITX64(movMR)(MEM_MAKE(RN_SP, NOREG, 1, ofs, 8), REG_MAKE(rs->reg, RC_GPR, 8, SUB_LO));
+            EMITX64(movMR)(mem, X64REG(rs->reg, RC_GPR, 8, SUB_LO));
         }
     }
 }
 
-void pop_caller_save(vec_t(RegSave) saves, uint32_t ofs)
+/* Pop caller-save registers */
+void vp_lowX64_caller_pop(vec_t(RegSave) saves, uint32_t ofs)
 {
     for(uint32_t i = vec_len(saves); i-- > 0;)
     {
         RegSave* rs = &saves[i];
+        X64Mem mem = X64MEM(RN_SP, NOREG, 1, ofs, 8);
         if(rs->flo)
         {
-            EMITX64(movsdXM)(REG_MAKE(rs->reg, RC_XMM, 16, SUB_LO), MEM_MAKE(RN_SP, NOREG, 1, ofs, 8));
+            EMITX64(movsdXM)(X64REG(rs->reg, RC_XMM, 16, SUB_LO), mem);
         }
         else
         {
-            EMITX64(movRM)(REG_MAKE(rs->reg, RC_GPR, 8, SUB_LO), MEM_MAKE(RN_SP, NOREG, 1, ofs, 8));
+            EMITX64(movRM)(X64REG(rs->reg, RC_GPR, 8, SUB_LO), mem);
         }
         ofs += TARGET_PTR_SIZE;
     }
 }
 
-static uint32_t push_callee_save(RegAlloc* ra, RegSet iused)
+/* Push callee-save registers */
+static void lowX64_callee_push(RegSet mask, uint32_t max)
 {
-    uint32_t inum = 0;
-    for(uint32_t i = 0; i < ra->iphysmax; i++)
+    for(uint32_t i = 0; i < max; i++)
     {
-        if((ra->itemp & (1ULL << i)) && (iused & (1ULL << i)))
+        if(mask & (1ULL << i))
         {
-            X64Reg reg = REG_MAKE(i, RC_GPR, 8, SUB_LO);
-            EMITX64(pushR)(reg);
-            inum++;
-        }
-    }
-    return inum;
-}
-
-static void pop_callee_save(RegAlloc* ra, RegSet iused)
-{
-    for(uint32_t i = ra->iphysmax; i-- > 0;)
-    {
-        if((ra->itemp & (1ULL << i)) && (iused & (1ULL << i)))
-        {
-            X64Reg reg = REG_MAKE(i, RC_GPR, 8, SUB_LO);
-            EMITX64(popR)(reg);
+            EMITX64(pushR)(X64REG(i, RC_GPR, 8, SUB_LO));
         }
     }
 }
 
-static void emit_body(Code* code)
+/* Pop callee-save registers */
+static void lowX64_callee_pop(RegSet mask, uint32_t max)
+{
+    for(uint32_t i = max; i-- > 0;)
+    {
+        if(mask & (1ULL << i))
+        {
+            EMITX64(popR)(X64REG(i, RC_GPR, 8, SUB_LO));
+        }
+    }
+}
+
+/* Lower code body to x64 */
+static void lowX64_body(Code* code)
 {
     RegAlloc* ra = code->ra;
     code->ofs = sbuf_len(&V->code);
@@ -247,14 +252,19 @@ static void emit_body(Code* code)
     uint32_t framesize = 0;
     uint32_t numcallee = 0;
     uint32_t frameofs = 8;
+    uint32_t shadow = (code->abi->flags & ABI_SHADOW) ? 32 : 0;
 
-    uint32_t stacksize = detect_call_size(code);
+    uint32_t stacksize = lowX64_call_size(code);
     code->stacksize = stacksize;
+
+    /* Compute callee-save mask */
+    RegSet calleemask = ra->itemp & ra->iregbits;
+    numcallee = __builtin_popcountll(calleemask);
 
     /* Prologue */
     {
         /* Callee save */
-        numcallee = push_callee_save(ra, ra->iregbits);
+        lowX64_callee_push(calleemask, ra->iphysmax);
         if(code->framesize > 0 || raf_stackframe(ra))
         {
             EMITX64(pushR)(RBP);
@@ -270,17 +280,17 @@ static void emit_body(Code* code)
             /* Align frame size to 16 */
             size_t calleesize = numcallee * TARGET_PTR_SIZE;
             framesize += -(framesize + calleesize + frameofs) & 15;
-            framesize += 32;    /* Shadow space? */
+            framesize += shadow;    /* Shadow space */
         }
 
         if(framesize > 0)
         {
             EMITX64(subRI)(RSP, framesize);
         }
-        params_assign(ra, code);
+        lowX64_params(code);
     }
 
-    /* Lower basic block IR */
+    /* Lower basic block IRs */
     for(uint32_t i = 0; i < vec_len(code->bbs); i++)
     {
         BB* bb = code->bbs[i];
@@ -288,7 +298,7 @@ static void emit_body(Code* code)
         for(uint32_t j = 0; j < vec_len(bb->irs); j++)
         {
             IR* ir = bb->irs[j];
-            vp_ir_x64(ir);
+            vp_irX64(ir);
         }
     }
 
@@ -303,18 +313,18 @@ static void emit_body(Code* code)
             EMITX64(movRR)(RSP, RBP);
             EMITX64(popR)(RBP);
         }
-        pop_callee_save(ra, ra->iregbits);
+        lowX64_callee_pop(calleemask, ra->iphysmax);
         EMITX64(ret)();
     }
 }
 
-void vp_low(vec_t(Code*) codes)
+void vp_lowX64(vec_t(Code*) codes)
 {
     for(uint32_t i = 0; i < vec_len(codes); i++)
     {
         if(codes[i]->bbs)
         {
-            emit_body(codes[i]);
+            lowX64_body(codes[i]);
         }
     }
 }

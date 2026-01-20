@@ -46,11 +46,11 @@
 
 - [ ] local `alias`/`type`/`struct`/`union`/`enum` declarations
 
-- [ ] support output of .dot files
+- [X] support output of .dot files
 
-- [ ] instruction selection: x64, ARM64, RISC-V64
+- [ ] instruction selection: x64, ARM64, RV64
 
-- [ ] multi-target architectures: x64, ARM64, RISC-V64
+- [ ] multi-target architectures: x64, ARM64, RV64
 
 - [X] anonymous `struct`/`union`
 

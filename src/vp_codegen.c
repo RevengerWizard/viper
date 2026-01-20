@@ -4,6 +4,7 @@
 */
 
 #include "vp_codegen.h"
+#include "vp_abi.h"
 #include "vp_low.h"
 #include "vp_mem.h"
 #include "vp_opt.h"
@@ -417,8 +418,8 @@ static VReg* gen_call(Expr* e)
 
     VReg* freg = NULL;
     Str* label = NULL;
-    Code* fn;
-    uint32_t* imap, *fmap;
+    Code* fn = NULL;
+
     /* Determine if this is a direct or indirect call */
     if(e->call.expr->kind == EX_NAME)
     {
@@ -432,20 +433,14 @@ static VReg* gen_call(Expr* e)
     {
         freg = gen_expr(e->call.expr);
     }
-    if(fn)
-    {
-        imap = (uint32_t*)fn->imap;
-        fmap = (uint32_t*)fn->fmap;
-    }
-    else
-    {
-        imap = (uint32_t*)V->T->abi->imap;
-        fmap = (uint32_t*)V->T->abi->fmap;
-    }
+
+    /* Determine ABI to use */
+    const ABIInfo* abi = fn ? fn->abi : V->T->abi;
+    uint32_t shadow = (abi->flags & ABI_SHADOW) ? 32 : 0;
 
     Type* ret = e->ty;
     FrameInfo* fi = NULL;
-    if(param_isstack(ret))
+    if(abi_isstack(ret))
     {
         fi = vp_frameinfo_new();
         Slot sl = {.type = ret, .fi = fi};
@@ -454,98 +449,96 @@ static VReg* gen_call(Expr* e)
 
     typedef struct
     {
-        uint32_t regidx;
-        uint32_t offset;
+        ParamClass cls;    /* Parameter class */
+        uint32_t idx;   /* Register index or stack offset */
         uint32_t size;
-        bool stack; /* Is a stack argument */
-        bool flo;   /* Is a float argument */
     } ArgInfo;
 
     vec_t(ArgInfo) arginfos = vec_init(ArgInfo);
-    uint32_t argstart = (fi != NULL) ? 1 : 0;
+    uint32_t iidx = (fi != NULL) ? 1 : 0;
+    uint32_t fidx = 0;
     uint32_t offset = 0;
     uint32_t regargs = 0;
     uint32_t argnum = vec_len(e->call.args);
 
-    /* Argument placements */
+    /* Classify arguments */
+    for(uint32_t i = 0; i < argnum; i++)
     {
-        for(uint32_t i = argstart; i < argnum; i++)
+        Expr* arg = e->call.args[i];
+        Type* argty = arg->ty;
+        vp_assertX(argty, "missing arg type");
+
+        uint32_t previidx = iidx, prevfidx = fidx;
+        ParamClass cls = abi_classify(argty, abi, &iidx, &fidx);
+        ArgInfo p = {.cls = cls, .size = vp_type_sizeof(argty)};
+        switch(cls)
         {
-            Expr* arg = e->call.args[i];
-            Type* argty = arg->ty;
-            vp_assertX(argty, "missing arg type");
-
-            ArgInfo p = {0};
-            p.size = vp_type_sizeof(argty);
-            p.flo = ty_isflo(argty);
-
-            if(i < 4)
-            {
-                p.stack = false;
-                if(p.flo)
-                {
-                    p.regidx = fmap[i];
-                }
-                else
-                {
-                    p.regidx = imap[i];
-                }
+            case PC_IREG:
+                p.idx = abi->imap[previidx];
                 regargs++;
-            }
-            else
+                break;
+            case PC_FREG:
+                p.idx = abi->fmap[prevfidx];
+                regargs++;
+                break;
+            case PC_STACK:
+            case PC_MEM:
             {
                 uint32_t align = vp_type_alignof(argty);
-                p.stack = true;
                 offset = ALIGN_UP(offset, align);
-                p.offset = offset;
+                p.idx = offset;
                 offset += ALIGN_UP(p.size, TARGET_PTR_SIZE);
+                break;
             }
-
-            vec_push(arginfos, p);
         }
+
+        vec_push(arginfos, p);
     }
 
-    uint32_t argtotal = argnum + argstart;
+    uint32_t argtotal = argnum + (fi != NULL ? 1 : 0);
     VReg** args = argtotal == 0 ? NULL : vp_mem_calloc(argtotal, sizeof(*args));
 
-    /* Generate arguments */
+    /* Generate arguments (in reverse, for stack) */
+    for(uint32_t i = argnum; i-- > 0;)
     {
-        for(uint32_t i = argnum; i-- > 0;)
+        VReg* src = gen_expr(e->call.args[i]);
+        ArgInfo* p = &arginfos[i];
+        uint32_t argidx = (fi != NULL) ? i + 1 : i;
+        switch(p->cls)
         {
-            VReg* src = gen_expr(e->call.args[i]);
-
-            ArgInfo* p = &arginfos[i];
-            if(p->stack)
+            case PC_IREG:
+            case PC_FREG:
+                vp_ir_pusharg(src, p->idx);
+                break;
+            case PC_STACK:
             {
                 Type* argty = e->call.args[i]->ty;
-                VReg* dst = vp_ir_sofs(p->offset + 32)->dst;    /* +32 for shadow space? */
-                if(param_isstack(argty))
-                {
-                    gen_memcpy(argty, dst, src);
-                }
-                else
-                {
-                    vp_ir_store(dst, src, ir_flag(argty));
-                }
+                VReg* dst = vp_ir_sofs(p->idx + shadow)->dst;
+                vp_ir_store(dst, src, ir_flag(argty));
+                break;
             }
-            else
+            case PC_MEM:
             {
-                vp_ir_pusharg(src, p->regidx);
+                Type* argty = e->call.args[i]->ty;
+                VReg* dst = vp_ir_sofs(p->idx + shadow)->dst;
+                gen_memcpy(argty, dst, src);
+                break;
             }
-
-            args[i + argstart] = src;
         }
+
+        args[argidx] = src;
     }
     if(fn && (fn->flags & FN_SYSCALL))
     {
         return gen_inline(NULL, ret, fn->body, fn);
     }
+
     /* Handle stack return */
     VReg* dst = NULL;
     if(fi != NULL)
     {
         VReg* dst = vp_ir_bofs(fi)->dst;
-        vp_ir_pusharg(dst, 0);
+        vp_ir_pusharg(dst, abi->imap[0]);
         args[0] = dst;
         regargs++;
     }
@@ -573,6 +566,9 @@ static VReg* gen_call(Expr* e)
 
     IR* ir = vp_ir_call(ci, dst, freg);
     vec_push(V->fncode->calls, ir);
+
+    if(arginfos)
+        vec_free(arginfos);
 
     return dst;
 }
@@ -1304,43 +1300,50 @@ static void gen_stack(Code* code)
 static void gen_params(Decl* d, Code* code)
 {
     Type* ret = d->fn.rett;
-    bool stack = param_isstack(ret);
+    const ABIInfo* abi = code->abi;
     uint32_t paramofs = TARGET_PTR_SIZE * 2;
-    uint32_t start = stack ? 1 : 0;
+    uint32_t iidx = 0, fidx = 0;
 
-    if(stack)
+    /* Classify return value */
+    if(abi_isstack(ret))
     {
         VReg* vr = vp_vreg_new(vp_type_ptr(ret));
         vr->flag |= VRF_STACK_PARAM;
         vr->param = REG_NO;
         code->retvr = vr;
+
+        ParamLoc pl = {.cls = PC_IREG, .idx = abi->imap[0]};
+        vec_push(code->plocs, pl);
+        iidx = 1;
+
         /* Stack parameter offset */
         paramofs = ALIGN_UP(paramofs, TARGET_PTR_SIZE);
         paramofs += TARGET_PTR_SIZE;
     }
 
-    /* Count register or stack params */
+    /* Classify each parameter */
     for(uint32_t i = 0; i < vec_len(d->fn.params); i++)
     {
         VarInfo* vi = d->fn.scopes[0]->vars[i];
+        Type* ty = vi->type;
+        uint32_t previidx = iidx, prevfidx = fidx;
+        ParamClass cls = abi_classify(ty, abi, &iidx, &fidx);
+        ParamLoc pl = {.cls = cls};
         VReg* vr = gen_varinfo(vi);
-        if(vr)
+        switch(cls)
         {
-            vr->flag |= VRF_PARAM;
-            uint32_t slot = i + start;
-            if(slot < 4)
-            {
-                if(vrf_flo(vr))
-                {
-                    vr->param = code->fmap[slot];
-                }
-                else
-                {
-                    vr->param = code->imap[slot];
-                }
-            }
-            else
-            {
+            case PC_IREG:
+                vp_assertX(vr, "not scalar param");
+                vr->flag |= VRF_PARAM;
+                vr->param = pl.idx = abi->imap[previidx];
+                break;
+            case PC_FREG:
+                vp_assertX(vr, "not scalar param");
+                vr->flag |= VRF_PARAM;
+                vr->param = pl.idx = abi->fmap[prevfidx];
+                break;
+            case PC_STACK:
+                vp_assertX(vr, "scalar param needs vreg");
                 vr->flag |= VRF_STACK_PARAM;
                 vreg_spill(vr);
                 if(!raf_stackframe(V->ra))
@@ -1348,23 +1351,30 @@ static void gen_params(Decl* d, Code* code)
                     V->ra->flag = RAF_STACK_FRAME;
                 }
                 /* Stack parameter offset */
-                vr->fi.ofs = paramofs = ALIGN_UP(paramofs, TARGET_PTR_SIZE);
+                pl.idx = vr->fi.ofs = paramofs = ALIGN_UP(paramofs, TARGET_PTR_SIZE);
                 paramofs += TARGET_PTR_SIZE;
+                break;
+            case PC_MEM:
+            {
+                vp_assertX(vi->fi, "aggregate param needs frame info");
+                uint32_t size = vp_type_sizeof(ty);
+                uint32_t align = vp_type_alignof(ty);
+                /* Stack parameter offset */
+                pl.idx = vi->fi->ofs = paramofs = ALIGN_UP(paramofs, align);
+                paramofs += ALIGN_UP(size, TARGET_PTR_SIZE);
+                break;
             }
         }
-        else
-        {
-            /* Stack parameter offset */
-            uint32_t size = vp_type_sizeof(vi->type);
-            uint32_t align = vp_type_alignof(vi->type);
-            vi->fi->ofs = paramofs = ALIGN_UP(paramofs, align);
-            paramofs += ALIGN_UP(size, TARGET_PTR_SIZE);
-        }
+
+        vec_push(code->plocs, pl);
     }
 }
 
-static const uint32_t syscall_imap[] = {
-    RN_DI, RN_SI, RN_DX, RN_10, RN_8, RN_9
+static const ABIInfo syscall_abi = {
+    .imap = (uint32_t[]){RN_DI, RN_SI, RN_DX, RN_10, RN_8, RN_9},
+    .fmap = NULL,
+    .imax = 6,
+    .fmax = 0,
 };
 
 /* Generate function body, if present */
@@ -1377,15 +1387,15 @@ static Code* gen_fn(Decl* d)
     code->bbs = NULL;
     code->calls = vec_init(IR*);
     code->slots = vec_init(Slot);
+    code->plocs = vec_init(ParamLoc);
     code->numparams = vec_len(d->fn.params);
     code->scopes = d->fn.scopes;
     code->flags = d->fn.flags;
     code->body = d->fn.body;
-    code->imap = V->T->abi->imap;
-    code->fmap = V->T->abi->fmap;
+    code->abi = V->T->abi;
     if(code->flags & FN_SYSCALL)
     {
-        code->imap = syscall_imap;
+        code->abi = &syscall_abi;
     }
     vp_tab_set(&V->funcs, code->name, code);
 
@@ -1420,7 +1430,7 @@ static Code* gen_fn(Decl* d)
     vp_bb_detect(code->bbs);
     vp_opt(code);
 
-    vp_ir_x64_tweak(code);
+    vp_irX64_tweak(code);
     vp_bb_analyze(code->bbs);
     vp_ra_alloc(ra, code->bbs);
     gen_stack(code);

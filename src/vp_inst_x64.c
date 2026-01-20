@@ -72,7 +72,7 @@ static const EmitAsmFn emitinsttab[] = {
     [SYSCALL] = inst_syscall,
 };
 
-void vp_inst_x64(Inst* inst)
+void vp_instX64(Inst* inst)
 {
     vp_assertX(inst->op < (int)ARRSIZE(emitinsttab), "out of bounds opcode");
     vp_assertX(emitinsttab[inst->op], "empty entry %d", inst->op);

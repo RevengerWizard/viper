@@ -696,7 +696,7 @@ RegAlloc* vp_ra_new(TargetInfo* T)
     ra->fregbits = 0;
     ra->flag = 0;
     /* Register allocator settings */
-    ra->extra = vp_ir_x64_extra;
+    ra->extra = vp_raX64;
     ra->iphysmax = T->arch->imax;
     ra->fphysmax = T->arch->fmax;
     ra->itemp = T->abi->icallee;
