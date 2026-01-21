@@ -23,8 +23,9 @@ typedef struct Slot
 enum
 {
     FN_INLINE = 1 << 0,
-    FN_SYSCALL = 1 << 1,
-    FN_EXPORT = 1 << 2
+    FN_NORETURN = 1 << 1,
+    FN_SYSCALL = 1 << 2,
+    FN_EXPORT = 1 << 3
 };
 
 /* Function code blocks */

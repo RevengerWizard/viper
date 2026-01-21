@@ -488,9 +488,15 @@ int64 <- int32 | uint32 | int16 | uint16 | int8 | uint8 | bool
 | `bitcast`  | Same-size type        | Same size type         | **Unsafe** - Raw reinterpretation                |
 | `ptrcast`  | Pointer, integer      | Pointer, integer       | **Unsafe** - Memory safety concerns              |
 
+---
+
 ### ir
 
+---
 
+### lir
+
+---
 
 ### abi
 

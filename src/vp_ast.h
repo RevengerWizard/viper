@@ -96,6 +96,10 @@ typedef enum ExprKind
     EX_BNOT,
     EX_REF,     /* &x */
     EX_DEREF,   /* *x */
+    EX_PREINC,  /* ++x */
+    EX_PREDEC,  /* --x */
+    EX_POSTINC, /* x++ */
+    EX_POSTDEC, /* x-- */
     EX_SIZEOF,
     EX_ALIGNOF,
     EX_OFFSETOF,
@@ -466,7 +470,7 @@ Stmt* vp_stmt_while(SrcLoc loc, Expr* cond, Stmt* body);
 Stmt* vp_stmt_asm(SrcLoc loc, vec_t(Inst*) insts);
 
 /* Declarations */
-Decl* vp_decl_fn(SrcLoc loc, uint32_t flags, vec_t(Attr) attrs, TypeSpec* ret, Str* name, vec_t(Param) params, Stmt* body);
+Decl* vp_decl_fn(SrcLoc loc, uint32_t flags, uint32_t fnflags, vec_t(Attr) attrs, TypeSpec* ret, Str* name, vec_t(Param) params, Stmt* body);
 Decl* vp_decl_var(SrcLoc loc, DeclKind kind, uint32_t flags, Str* name, TypeSpec* spec, Expr* e);
 Decl* vp_decl_def(SrcLoc loc, uint32_t flags, Str* name, TypeSpec* spec, Expr* e);
 Decl* vp_decl_type(SrcLoc loc, uint32_t flags, Str* name, TypeSpec* spec);

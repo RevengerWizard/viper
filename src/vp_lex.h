@@ -44,6 +44,7 @@
     __(muleq, *=) __(diveq, /=) __(modeq, %=) \
     __(bandeq, &=) __(boreq, |=) __(bxoreq, ^=) \
     __(lshifteq, <<=) __(rshifteq, >>=) \
+    __(inc, ++) __(dec, --) \
     __(dbleft, [[) __(dbright, ]]) \
     __(dcolon, ::) \
     __(name, <name>) __(note, <note>) \

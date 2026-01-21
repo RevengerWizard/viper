@@ -513,12 +513,14 @@ static LexToken lex_scan(LexState* ls, LexValue* val)
             {
                 lex_next(ls);
                 if(ls->c == '=') { lex_next(ls); return TK_pluseq; }
+                if(ls->c == '+') { lex_next(ls); return TK_inc; }
                 return '+';
             }
             case '-':
             {
                 lex_next(ls);
                 if(ls->c == '=') { lex_next(ls); return TK_mineq; }
+                if(ls->c == '-') { lex_next(ls); return TK_dec; }
                 return '-';
             }
             case '*':

@@ -728,7 +728,7 @@ static void dot_ir_label(SBuf* sb, IR* ir)
 static void dot_code(SBuf* sb, Code* code)
 {
     vec_t(BB*) bbs = code->bbs;
-    if(vec_len(bbs) == 0) return;
+    if(!bbs || vec_len(bbs) == 0) return;
 
     vp_buf_putlit(sb, "  subgraph cluster_");
     vp_buf_putstr(sb, code->name);
@@ -1039,6 +1039,22 @@ static void dump_ast_expr(SBuf* sb, Expr* e)
         case EX_BNOT:
             dump_fmt(sb, "%s", ast_unaryname(e->kind));
             dump_ast_expr(sb, e->unary);
+            break;
+        case EX_PREINC:
+            vp_buf_putlit(sb, "++");
+            dump_ast_expr(sb, e->unary);
+            break;
+        case EX_PREDEC:
+            vp_buf_putlit(sb, "--");
+            dump_ast_expr(sb, e->unary);
+            break;
+        case EX_POSTINC:
+            dump_ast_expr(sb, e->unary);
+            vp_buf_putlit(sb, "++");
+            break;
+        case EX_POSTDEC:
+            dump_ast_expr(sb, e->unary);
+            vp_buf_putlit(sb, "--");
             break;
         case EX_ADD:
         case EX_SUB:

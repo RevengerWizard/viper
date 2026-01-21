@@ -311,6 +311,69 @@ static VReg* gen_not(Expr* e)
     return vp_ir_cond(src, zero, cond | flag)->dst;
 }
 
+/* Generate pre/post increment/decrement */
+static VReg* gen_incdec(Expr* e)
+{
+#define ISPOST(e) ((e)->kind >= EX_POSTINC)
+#define ISDEC(e)  (((e)->kind - EX_PREINC) & 1)
+    vp_assertX(e->kind == EX_PREINC || e->kind == EX_POSTINC || e->kind == EX_PREDEC || e->kind == EX_POSTDEC, "not pre/post inc/dec");
+    vp_assertX(e->ty, "no type");
+    Expr* unary = e->unary;
+    VarInfo* vi = NULL;
+    if(unary->kind == EX_NAME && !vp_scope_isglob(unary->scope))
+    {
+        VarInfo* res = vp_scope_find(unary->scope, unary->name, NULL);
+        vp_assertX(res, "name not found");
+        vi = res;
+    }
+
+    VRSize vs = vp_vsize(e->ty);
+    VReg* before = NULL;
+    VReg* lval = NULL;
+    VReg* val;
+    uint8_t irflag = ir_flag(e->ty);
+    if(vi)
+    {
+        val = vi->vreg;
+        if(ISPOST(e))
+        {
+            before = vp_vreg_new(unary->ty);
+            vp_ir_mov(before, val, irflag);
+        }
+    }
+    else
+    {
+        lval = gen_lval(unary);
+        val = vp_ir_load(lval, vs, vp_vflag(e->ty), irflag)->dst;
+        if(ISPOST(e))
+        {
+            before = val;
+        }
+    }
+
+    VReg* addend;
+    if(ty_isflo(unary->ty))
+    {
+        addend = vp_vreg_kf(1, vp_vsize(unary->ty));
+    }
+    else
+    {
+        addend = vp_vreg_ki(ty_isptrlike(e->ty) ? vp_type_sizeof(e->ty) : 1, vs);
+    }
+    VReg* after = vp_ir_binop(ISDEC(e) ? IR_SUB : IR_ADD, val, addend, vs, irflag);
+    if(vi)
+    {
+        vp_ir_mov(vi->vreg, after, irflag);
+    }
+    else
+    {
+        vp_ir_store(lval, after, irflag);
+    }
+    return before ? before : after;
+#undef ISPOST
+#undef ISDEC
+}
+
 /* Generate reference/address */
 static VReg* gen_ref(Expr* e)
 {
@@ -871,6 +934,8 @@ static const GenExprFn genexprtab[] = {
     [EX_MUL] = gen_binop, [EX_DIV] = gen_binop, [EX_MOD] = gen_binop,
     [EX_BAND] = gen_binop, [EX_BOR] = gen_binop, [EX_BXOR] = gen_binop,
     [EX_LSHIFT] = gen_binop, [EX_RSHIFT] = gen_binop,
+    [EX_PREINC] = gen_incdec, [EX_POSTINC] = gen_incdec,
+    [EX_PREDEC] = gen_incdec, [EX_POSTDEC] = gen_incdec,
     [EX_NEG] = gen_unary, [EX_BNOT] = gen_unary, [EX_NOT] = gen_not,
     [EX_EQ] = gen_cond, [EX_NOTEQ] = gen_cond,
     [EX_LE] = gen_cond, [EX_LT] = gen_cond,

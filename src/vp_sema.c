@@ -1119,6 +1119,25 @@ static Operand sema_name(Expr* e, Type* ret)
     }
 }
 
+/* Resolve pre/post increment/decrements */
+static Operand sema_incdec(Expr* e, Type* ret)
+{
+    UNUSED(ret);
+    vp_assertX(e->kind == EX_PREINC || e->kind == EX_POSTINC || e->kind == EX_PREDEC || e->kind == EX_POSTDEC, "not pre/post inc/dec");
+    Operand opr = sema_expr(e->unary, NULL);
+    Type* ty = opr.ty;
+    sym_complete(ty);
+    if(!opr_islval(opr))
+    {
+        vp_err_error(e->loc, "cannot modify non-lvalue");
+    }
+    if(!(ty_isint(ty) || ty_isptr(ty)))
+    {
+        vp_err_error(e->loc, "int or pointers");
+    }
+    return opr_rval(ty);
+}
+
 /* Resolve & reference */
 static Operand sema_ref(Expr* e, Type* ret)
 {
@@ -1749,6 +1768,10 @@ static const SemaExprFn semaexprtab[] = {
     [EX_NAME] = sema_name,
     [EX_REF] = sema_ref,
     /* Unary operators */
+    [EX_PREINC] = sema_incdec,
+    [EX_PREDEC] = sema_incdec,
+    [EX_POSTINC] = sema_incdec,
+    [EX_POSTDEC] = sema_incdec,
     [EX_NEG] = sema_unary,
     [EX_NOT] = sema_unary,
     [EX_BNOT] = sema_unary,

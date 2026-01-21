@@ -323,10 +323,10 @@ Decl* vp_decl_def(SrcLoc loc, uint32_t flags, Str* name, TypeSpec* spec, Expr* e
     return d;
 }
 
-Decl* vp_decl_fn(SrcLoc loc, uint32_t flags, vec_t(Attr) attrs, TypeSpec* ret, Str* name, vec_t(Param) params, Stmt* body)
+Decl* vp_decl_fn(SrcLoc loc, uint32_t flags, uint32_t fnflags, vec_t(Attr) attrs, TypeSpec* ret, Str* name, vec_t(Param) params, Stmt* body)
 {
     Decl* d = decl_new(DECL_FN, loc, flags, name);
-    d->fn.flags = 0;
+    d->fn.flags = fnflags;
     d->fn.attrs = attrs;
     d->fn.rett = NULL;
     d->fn.ret = ret;

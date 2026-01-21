@@ -6,6 +6,7 @@
 #include "vp_parse.h"
 #include "vp_asm.h"
 #include "vp_ast.h"
+#include "vp_codegen.h"
 #include "vp_def.h"
 #include "vp_lex.h"
 #include "vp_err.h"
@@ -199,6 +200,8 @@ static Expr* expr_unary(LexState* ls, SrcLoc loc)
     ExprKind kind = 0;
     switch(tok)
     {
+        case TK_inc: kind = EX_PREINC; break;
+        case TK_dec: kind = EX_PREDEC; break;
         case '&': kind = EX_REF; break;
         case '*': kind = EX_DEREF; break;
         case '-': kind = EX_NEG; break;
@@ -243,6 +246,14 @@ static Expr* expr_binary(LexState* ls, Expr* lhs, SrcLoc loc)
             break;  /* Unreachable */
     }
     return vp_expr_binop(loc, kind, lhs, rhs);
+}
+
+/* Parse post increment/decrement */
+static Expr* expr_post(LexState* ls, Expr* lhs, SrcLoc loc)
+{
+    LexToken tok = ls->prev;
+    ExprKind kind = (tok == TK_inc) ? EX_POSTINC : EX_POSTDEC;
+    return vp_expr_unary(loc, kind, lhs);
 }
 
 static Field expr_field(LexState* ls)
@@ -384,6 +395,9 @@ static ParseRule expr_rule(LexToken t)
             return OPERATOR(expr_binary, PREC_AND);
         case TK_or:
             return OPERATOR(expr_binary, PREC_OR);
+        case TK_inc:
+        case TK_dec:
+            return RULE(expr_unary, expr_post, PREC_CALL);
         /* Casts */
         case TK_bool:
         case TK_uint8:
@@ -986,7 +1000,7 @@ static Decl* parse_enum(LexState* ls, uint32_t flags)
 }
 
 /* Parse 'fn' declaration */
-static Decl* parse_fn(LexState* ls, uint32_t flags, vec_t(Attr) attrs)
+static Decl* parse_fn(LexState* ls, uint32_t flags, uint32_t fnflags, vec_t(Attr) attrs)
 {
     vp_lex_next(ls);    /* Skip 'fn' */
     SrcLoc loc = lex_srcloc(ls);
@@ -1006,7 +1020,7 @@ static Decl* parse_fn(LexState* ls, uint32_t flags, vec_t(Attr) attrs)
     {
         body = parse_block(ls);
     }
-    return vp_decl_fn(loc, flags, attrs, ret, name, params, body);
+    return vp_decl_fn(loc, flags, fnflags, attrs, ret, name, params, body);
 }
 
 /* Parse attribute argument */
@@ -1015,6 +1029,36 @@ static AttrArg parse_attr_arg(LexState* ls)
     SrcLoc loc = lex_srcloc(ls);
     Expr* e = expr(ls);
     return (AttrArg){.loc = loc, .e = e};
+}
+
+/* Parse function modifiers */
+static uint32_t parse_modifs(LexState* ls)
+{
+    uint32_t flags = 0;
+    while(lex_check(ls, TK_inline) || lex_check(ls, TK_noreturn))
+    {
+        SrcLoc loc = lex_srcloc(ls);
+        if(lex_check(ls, TK_inline))
+        {
+            if(flags & FN_INLINE)
+                vp_err_error(loc, "duplicate 'inline' modifier");
+            flags |= FN_INLINE;
+            vp_lex_next(ls);
+        }
+        else if(lex_check(ls, TK_noreturn))
+        {
+            if(flags & FN_NORETURN)
+                vp_err_error(loc, "duplicate 'noreturn' modifier");
+            flags |= FN_NORETURN;
+            vp_lex_next(ls);
+        }
+    }
+    if(flags != 0 && !lex_check(ls, TK_fn))
+    {
+        const char* tokstr = vp_lex_tok2str(ls, ls->curr);
+        vp_err_error(lex_srcloc(ls), "function modifiers cannot be applied to '%s'", tokstr);
+    }
+    return flags;
 }
 
 /* Parse attributes */
@@ -1057,8 +1101,9 @@ static Decl* parse_attr(LexState* ls)
     {
         flags |= DECL_FLAG_PUB;
     }
+    uint32_t fnflags = parse_modifs(ls);
     vp_lex_test(ls, TK_fn);
-    return parse_fn(ls, flags, attrs);
+    return parse_fn(ls, flags, fnflags, attrs);
 }
 
 /* Parse 'def' */
@@ -1170,6 +1215,7 @@ static Stmt* parse_stmt(LexState* ls)
 static Decl* parse_decl(LexState* ls, bool top)
 {
     uint32_t flags = 0;
+    uint32_t fnflags = 0;
     Decl* d = NULL;
     SrcLoc loc = lex_srcloc(ls);
     if(lex_match(ls, TK_pub))
@@ -1181,6 +1227,7 @@ static Decl* parse_decl(LexState* ls, bool top)
             vp_err_error(loc, "'pub' cannot be applied to '%s'", tokstr);
         }
     }
+    fnflags = parse_modifs(ls);
     switch(ls->curr)
     {
         case TK_import:
@@ -1196,7 +1243,7 @@ static Decl* parse_decl(LexState* ls, bool top)
             d = parse_attr(ls);
             break;
         case TK_fn:
-            d = parse_fn(ls, flags, NULL);
+            d = parse_fn(ls, flags, fnflags, NULL);
             break;
         case TK_var:
             d = parse_var(ls, DECL_VAR, flags);
