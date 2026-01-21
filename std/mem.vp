@@ -1,0 +1,10 @@
+fn copy(dst : void*, src : const void*, n : usize) : void*
+{
+    var s : const uint8* = src;
+    var d : uint8* = dst;
+    while n-- > 0
+    {
+        *d++ = *s++;
+    }
+    return dst;
+}
