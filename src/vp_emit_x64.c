@@ -159,6 +159,8 @@ void EMITX64(movRM)(X64Reg dst, X64Mem src)
     uint8_t size = REG_SIZE(dst);
     uint8_t rd = REG_NUM(dst);
     uint8_t rex = rexM(rd, src, (size == 8) ? REX_W : 0);
+    /* Force REX if using SPL/BPL/SIL/DIL or extended regs */
+    if(size == 1 && (rd >= 4 || rex)) rex |= 0x40;
     if(size == 2) emit_u8(V, 0x66);
     if(rex) emit_u8(V, rex);
     uint8_t op = (size == 1) ? 0x8A : 0x8B;
@@ -173,6 +175,8 @@ void EMITX64(movMR)(X64Mem dst, X64Reg src)
     uint8_t size = REG_SIZE(src);
     uint8_t rs = REG_NUM(src);
     uint8_t rex = rexM(rs, dst, (size == 8) ? REX_W : 0);
+    /* Force REX if using SPL/BPL/SIL/DIL or extended regs */
+    if(size == 1 && (rs >= 4 || rex)) rex |= 0x40;
     if(size == 2) emit_u8(V, 0x66);
     if(rex) emit_u8(V, rex);
     uint8_t op = (size == 1) ? 0x88 : 0x89;

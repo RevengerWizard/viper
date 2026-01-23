@@ -1,6 +1,6 @@
 /*
 ** vp_emit.h
-** Instruction emitter interface
+** Emitter interface
 */
 
 #ifndef _VP_EMIT_H

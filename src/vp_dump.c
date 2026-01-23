@@ -1197,7 +1197,7 @@ static void dump_ast_stmt(SBuf* sb, Stmt* st)
             {
                 dump_indent(sb);
                 vp_buf_putlit(sb, "else\n");
-                dump_ast_block(sb, st->ifst.fblock);
+                dump_ast_stmt(sb, st->ifst.fblock);
                 vp_buf_putb(sb, '\n');
             }
             break;
