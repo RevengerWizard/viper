@@ -21,7 +21,7 @@
     _(int8) _(int16) _(int32) _(int64) _(isize) \
     /* Floats */ \
     _(float32) _(float64) \
-    _(ptr) _(func) _(array) \
+    _(ptr) _(fn) _(array) \
     _(struct) _(union) \
     _(void) _(nil) \
 
@@ -137,7 +137,7 @@ static VP_AINLINE bool ty_isptr(const Type* t)
 
 static VP_AINLINE bool ty_isptrlike(const Type* t)
 {
-    return t->kind == TY_ptr || t->kind == TY_func;
+    return t->kind == TY_ptr || t->kind == TY_fn;
 }
 
 static VP_AINLINE bool ty_isarr(const Type* t)
@@ -157,7 +157,7 @@ static VP_AINLINE bool ty_isnil(const Type* t)
 
 static VP_AINLINE bool ty_isscalar(const Type* t)
 {
-    return TY_bool <= t->kind && t->kind <= TY_func;
+    return TY_bool <= t->kind && t->kind <= TY_fn;
 }
 
 static VP_AINLINE bool ty_isaggr(const Type* t)
@@ -165,9 +165,9 @@ static VP_AINLINE bool ty_isaggr(const Type* t)
     return t->kind == TY_struct || t->kind == TY_union;
 }
 
-static VP_AINLINE bool ty_isfunc(const Type* t)
+static VP_AINLINE bool ty_isfn(const Type* t)
 {
-    return t->kind == TY_func;
+    return t->kind == TY_fn;
 }
 
 static VP_AINLINE bool ty_isconst(const Type* t)

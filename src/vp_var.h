@@ -14,7 +14,7 @@
 /* Storage */
 enum
 {
-    VS_GLOBAL = 1 << 0,
+    VS_GLOB = 1 << 0,
     VS_FN = 1 << 1,
     VS_PUB = 1 << 2,
 };
@@ -44,7 +44,7 @@ void vp_scope_end();
 /* Check if variable is local storage */
 static VP_AINLINE bool vp_var_isloc(VarInfo* vi)
 {
-    return !(vi->storage & VS_GLOBAL);
+    return !(vi->storage & VS_GLOB);
 }
 
 /* Check if it's global scope */

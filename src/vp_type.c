@@ -66,7 +66,7 @@ static uint32_t type_rank(Type* t)
         /* Floating */
         case TY_float32: return 12;
         case TY_float64: return 13;
-        default: vp_assertX(0, "rank"); return 0;
+        default: vp_assertX(0, "rank %d", t->kind); return 0;
     }
 }
 
@@ -94,7 +94,7 @@ uint32_t vp_type_sizeof(Type* t)
         case TY_isize:
         case TY_float64:
         case TY_ptr:
-        case TY_func:
+        case TY_fn:
         case TY_nil:
             return 8;
         case TY_array:
@@ -131,7 +131,7 @@ uint32_t vp_type_alignof(Type* t)
         case TY_isize:
         case TY_float64:
         case TY_ptr:
-        case TY_func:
+        case TY_fn:
         case TY_nil:
             return 8;
         case TY_array:
@@ -184,6 +184,10 @@ bool vp_type_isconv(Type* dst, Type* src)
     else if(ty_isflo(dst) && ty_isflo(src))
     {
         return dst == src;
+    }
+    else if(ty_isnilable(dst) && !ty_isnilable(src))
+    {
+        return true;
     }
     else if(ty_isptrlike(dst) && ty_isnil(src) && ty_isnilable(dst))
     {
@@ -405,9 +409,9 @@ Type* vp_type_arr(Type* t, uint32_t len)
 
 Type* vp_type_func(Type* ret, vec_t(Type*) params)
 {
-    for(uint32_t i = 0; i < vec_len(V->cachefunc); i++)
+    for(uint32_t i = 0; i < vec_len(V->cachefn); i++)
     {
-        Type* ct = V->cachefunc[i];
+        Type* ct = V->cachefn[i];
         if(vec_len(ct->fn.params) == vec_len(params) && ct->fn.ret == ret)
         {
             bool match = true;
@@ -423,10 +427,10 @@ Type* vp_type_func(Type* ret, vec_t(Type*) params)
                 return ct;
         }
     }
-    Type* ty = type_alloc(TY_func);
+    Type* ty = type_alloc(TY_fn);
     ty->fn.ret = ret;
     ty->fn.params = params;
-    vec_push(V->cachefunc, ty);
+    vec_push(V->cachefn, ty);
     return ty;
 }
 
@@ -588,7 +592,7 @@ static void type_tostr(Type* ty, SBuf* sb)
             }
             vp_buf_putb(sb, ']');
             break;
-        case TY_func:
+        case TY_fn:
             vp_buf_putlit(sb, "fn(");
             for(uint32_t i = 0; i < vec_len(ty->fn.params); i++)
             {

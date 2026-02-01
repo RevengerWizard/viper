@@ -10,8 +10,8 @@
 #include "vp_codegen.h"
 #include "vp_regalloc.h"
 
-void vp_lowX64_caller_push(vec_t(struct RegSave) saves, uint32_t total);
-void vp_lowX64_caller_pop(vec_t(struct RegSave) saves, uint32_t ofs);
+void vp_lowX64_caller_push(Code* code, vec_t(struct RegSave) saves, uint32_t total);
+void vp_lowX64_caller_pop(Code* code, vec_t(struct RegSave) saves, uint32_t ofs);
 
 void vp_instX64(Inst* inst);
 

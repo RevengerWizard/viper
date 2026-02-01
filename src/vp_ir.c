@@ -3,6 +3,8 @@
 ** Intermediate Representation
 */
 
+#include <string.h>
+
 #include "vp_ir.h"
 #include "vp_mem.h"
 #include "vp_state.h"
@@ -42,11 +44,13 @@ IR* vp_ir_bofs(FrameInfo* fi)
     return ir;
 }
 
-IR* vp_ir_iofs(Str* label, bool isfn, bool isstr)
+IR* vp_ir_iofs(Str* label, bool isfn, bool isstr, bool isglob)
 {
     IR* ir = ir_new(IR_IOFS);
     ir->iofs.isfn = isfn;
     ir->iofs.isstr = isstr;
+    ir->iofs.isglob = isglob;
+    ir->iofs.got = false;
     ir->iofs.ofs = 0;
     ir->iofs.label = label;
     ir->dst = vp_ra_spawn(VRSize8, 0);
@@ -437,7 +441,7 @@ CondKind vp_cond_invert(CondKind cond)
 BB* vp_bb_new()
 {
     BB* bb = vp_arena_alloc(&V->irarena, sizeof(*bb));
-    bb->label = vp_label_new();
+    bb->label = vp_bb_label();
     bb->next = NULL;
     bb->irs = vec_init(IR*);
     bb->ofs = 0;
@@ -593,12 +597,30 @@ void vp_bb_analyze(vec_t(BB*) bbs)
     }
 }
 
-static uint32_t labelno;
+static uint32_t bblabelno;
+static uint32_t strlabelno;
+static uint32_t anonlabelno;
 
-Str* vp_label_new()
+Str* vp_bb_label()
 {
-    labelno++;
+    bblabelno++;
     char buf[2 + sizeof(uint32_t) * 3 + 1];
-    snprintf(buf, sizeof(buf), ".L%04d", labelno);
+    snprintf(buf, sizeof(buf), ".L%04u", bblabelno);
+    return vp_str_newlen(buf);
+}
+
+Str* vp_str_label()
+{
+    strlabelno++;
+    char buf[36];
+    snprintf(buf, sizeof(buf), ".str%u", strlabelno);
+    return vp_str_newlen(buf);
+}
+
+Str* vp_anon_label()
+{
+    anonlabelno++;
+    char buf[36];
+    snprintf(buf, sizeof(buf), ".anon%u", anonlabelno);
     return vp_str_newlen(buf);
 }

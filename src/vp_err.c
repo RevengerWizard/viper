@@ -8,6 +8,7 @@
 
 #include "vp_err.h"
 #include "vp_mod.h"
+#include "vp_buf.h"
 
 /* ANSI color codes */
 #define ANSI_RED     "\033[1;31m"

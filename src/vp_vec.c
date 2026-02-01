@@ -77,7 +77,7 @@ bool vp_vec_contains(const void* vec, const void* elem, uint32_t elemsize)
     return false;
 }
 
-uint32_t vp_vec_find(const void* vec, const void* elem, uint32_t elemsize)
+void vp_vec_find(const void* vec, void* elem, uint32_t elemsize)
 {
     size_t len = vec_len(vec);
     const char* data = (const char*)vec;
@@ -85,9 +85,11 @@ uint32_t vp_vec_find(const void* vec, const void* elem, uint32_t elemsize)
     for(size_t i = 0; i < len; i++)
     {
         if(memcmp(data + i * elemsize, elem, elemsize) == 0)
-            return i;
+        {
+            memcpy(elem, data + i * elemsize, elemsize);
+            break;
+        }
     }
-    return UINT32_MAX;
 }
 
 void vp_vec_concat(void** dst_ptr, const void* src, uint32_t elemsize)

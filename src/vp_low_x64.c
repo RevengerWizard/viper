@@ -10,6 +10,7 @@
 #include "vp_emit_x64.h"
 #include "vp_codegen.h"
 #include "vp_ir.h"
+#include "vp_buf.h"
 #include "vp_target_x64.h"
 
 /* Assign saved param registers */
@@ -53,10 +54,6 @@ static void lowX64_params(Code* code)
         if(!vr)
             continue;
 
-        Type* ty = vi->type;
-        uint32_t size = vp_type_sizeof(ty);
-        VRSize p = vp_msb(size);
-
         switch(pl->cls)
         {
             case PC_IREG:
@@ -70,8 +67,8 @@ static void lowX64_params(Code* code)
                 }
                 else if(pl->idx != vr->phys)
                 {
-                    X64Reg dst = X64REG(vr->phys, RC_GPR, p, SUB_LO);
-                    X64Reg src = X64REG(pl->idx, RC_GPR, p, SUB_LO);
+                    X64Reg dst = X64REG(vr->phys, RC_GPR, 8, SUB_LO);
+                    X64Reg src = X64REG(pl->idx, RC_GPR, 8, SUB_LO);
                     EMITX64(movRR)(dst, src);
                 }
                 break;
@@ -124,8 +121,7 @@ static void lowX64_params(Code* code)
 
 typedef struct RegSave
 {
-    uint32_t reg;
-    bool flo;
+    X64Reg reg;
 } RegSave;
 
 /* Collect caller saved living registers */
@@ -143,7 +139,7 @@ static vec_t(RegSave) lowX64_caller_save(RegSet iliving, RegSet fliving)
     while(isave)
     {
         uint32_t ireg = __builtin_ctzll(isave);
-        RegSave rs = {.reg = ireg};
+        RegSave rs = {.reg = X64REG(ireg, RC_GPR, 8, SUB_LO)};
         vec_push(saves, rs);
         isave &= isave - 1;  /* Clear lowest bit */
     }
@@ -152,7 +148,7 @@ static vec_t(RegSave) lowX64_caller_save(RegSet iliving, RegSet fliving)
     while(fsave)
     {
         uint32_t freg = __builtin_ctzll(fsave);
-        RegSave rs = {.reg = freg, .flo = true};
+        RegSave rs = {.reg = X64REG(freg, RC_XMM, 16, SUB_LO)};
         vec_push(saves, rs);
         fsave &= fsave - 1; /* Clear lowest bit */
     }
@@ -179,40 +175,49 @@ static uint32_t lowX64_call_size(Code* code)
 }
 
 /* Push caller-save registers */
-void vp_lowX64_caller_push(vec_t(RegSave) saves, uint32_t total)
+void vp_lowX64_caller_push(Code* code, vec_t(RegSave) saves, uint32_t total)
 {
-    uint32_t ofs = total;
+    /* Determine ABI to use */
+    const ABIInfo* abi = code ? code->abi : V->T->abi;
+    uint32_t shadow = (abi->flags & ABI_SHADOW) ? 32 : 0;
+
+    uint32_t ofs = total + shadow;
     ofs += vec_len(saves) * TARGET_PTR_SIZE;
     for(uint32_t i = 0; i < vec_len(saves); i++)
     {
         RegSave* rs = &saves[i];
         ofs -= TARGET_PTR_SIZE;
         X64Mem mem = X64MEM(RN_SP, NOREG, 1, ofs, 8);
-        if(rs->flo)
+        if(REG_CLASS(rs->reg) == RC_XMM)
         {
-            EMITX64(movsdMX)(mem, X64REG(rs->reg, RC_XMM, 16, SUB_LO));
+            EMITX64(movsdMX)(mem, rs->reg);
         }
         else
         {
-            EMITX64(movMR)(mem, X64REG(rs->reg, RC_GPR, 8, SUB_LO));
+            EMITX64(movMR)(mem, rs->reg);
         }
     }
 }
 
 /* Pop caller-save registers */
-void vp_lowX64_caller_pop(vec_t(RegSave) saves, uint32_t ofs)
+void vp_lowX64_caller_pop(Code* code, vec_t(RegSave) saves, uint32_t ofs)
 {
+    /* Determine ABI to use */
+    const ABIInfo* abi = code ? code->abi : V->T->abi;
+    uint32_t shadow = (abi->flags & ABI_SHADOW) ? 32 : 0;
+
+    ofs += shadow;
     for(uint32_t i = vec_len(saves); i-- > 0;)
     {
         RegSave* rs = &saves[i];
         X64Mem mem = X64MEM(RN_SP, NOREG, 1, ofs, 8);
-        if(rs->flo)
+        if(REG_CLASS(rs->reg) == RC_XMM)
         {
-            EMITX64(movsdXM)(X64REG(rs->reg, RC_XMM, 16, SUB_LO), mem);
+            EMITX64(movsdXM)(rs->reg, mem);
         }
         else
         {
-            EMITX64(movRM)(X64REG(rs->reg, RC_GPR, 8, SUB_LO), mem);
+            EMITX64(movRM)(rs->reg, mem);
         }
         ofs += TARGET_PTR_SIZE;
     }

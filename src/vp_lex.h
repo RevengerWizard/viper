@@ -6,7 +6,6 @@
 #ifndef _VP_LEX_H
 #define _VP_LEX_H
 
-#include "vp_buf.h"
 #include "vp_state.h"
 #include "vp_str.h"
 
@@ -18,7 +17,7 @@
     _(pub) _(inline) _(noreturn) \
     _(import) _(from) _(as) \
     _(asm) \
-    _(var) _(const) \
+    _(var) _(let) _(const) \
     _(def) \
     _(not) _(and) _(or) \
     _(type) _(alias) \

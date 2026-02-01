@@ -150,7 +150,6 @@ static void dump_vreg_flags(SBuf* sb, uint8_t flag)
 static void dump_vreg(SBuf* sb, VReg* vr)
 {
     vp_assertX(vr, "empty vreg");
-    vp_assertX(!vrf_spill(vr), "spilled vreg");
     if(vrf_const(vr))
     {
         if(vrf_flo(vr))
@@ -171,6 +170,7 @@ static void dump_vreg(SBuf* sb, VReg* vr)
     }
     else if(vr->phys != REG_NO)
     {
+        vp_assertX(!vrf_spill(vr), "spilled vreg");
         char rt = 'r';
         if(vrf_flo(vr))
         {
@@ -665,9 +665,9 @@ static void dump_typecache(SBuf* sb)
         vp_buf_putb(sb, '\n');
     }
     vp_buf_putlit(sb, "\n-- cache func --\n");
-    for(uint32_t i = 0; i < vec_len(V->cachefunc); i++)
+    for(uint32_t i = 0; i < vec_len(V->cachefn); i++)
     {
-        dump_type(sb, V->cachefunc[i]);
+        dump_type(sb, V->cachefn[i]);
         vp_buf_putb(sb, '\n');
     }
     vp_buf_putb(sb, '\n');
@@ -888,7 +888,7 @@ static void dump_typespec(SBuf* sb, TypeSpec* spec)
                 dump_ast_expr(sb, spec->arr.expr);
             vp_buf_putb(sb, ']');
             break;
-        case SPEC_FUNC:
+        case SPEC_FN:
             vp_buf_putlit(sb, "fn(");
             for(uint32_t i = 0; i < vec_len(spec->fn.args); i++)
             {
@@ -1224,7 +1224,10 @@ static void dump_ast_stmt(SBuf* sb, Stmt* st)
         case ST_RETURN:
             dump_indent(sb);
             vp_buf_putlit(sb, "return ");
-            dump_ast_expr(sb, st->expr);
+            if(st->expr)
+            {
+                dump_ast_expr(sb, st->expr);
+            }
             vp_buf_putb(sb, '\n');
             break;
         case ST_BREAK:
@@ -1359,7 +1362,7 @@ static void dump_decl(SBuf* sb, Decl* d)
             break;
         }
         case DECL_VAR:
-        case DECL_CONST:
+        case DECL_LET:
         {
             dump_indent(sb);
             if(d->kind == DECL_VAR)
@@ -1368,7 +1371,7 @@ static void dump_decl(SBuf* sb, Decl* d)
             }
             else
             {
-                vp_buf_putlit(sb, "const ");
+                vp_buf_putlit(sb, "let ");
             }
             vp_buf_putstr(sb, d->name);
             if(d->var.spec)

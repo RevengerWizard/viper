@@ -48,7 +48,7 @@ static Sym* sym_new(SymKind kind, Str* name, Decl* d)
 /* Add symbol to local scope */
 static void sym_add(Str* name, SymKind kind, Type* ty)
 {
-    vp_assertX(kind == SYM_VAR || kind == SYM_CONST, "sym var/const");
+    vp_assertX(kind == SYM_VAR || kind == SYM_LET, "sym var/let");
     Sym* sym = sym_new(kind, name, NULL);
     sym->state = SYM_DONE;
     sym->type = ty;
@@ -139,8 +139,8 @@ static Sym* sym_decl(Decl* d)
         case DECL_FN:
             kind = SYM_FN;
             break;
-        case DECL_CONST:
-            kind = SYM_CONST;
+        case DECL_LET:
+            kind = SYM_LET;
             break;
         case DECL_VAR:
             kind = SYM_VAR;
@@ -970,7 +970,7 @@ static Type* sema_typespec(TypeSpec* spec)
             ty = vp_type_arr(tyarr, len);
             break;
         }
-        case SPEC_FUNC:
+        case SPEC_FN:
         {
             vec_t(Type*) args = vec_init(Type*);
             for(uint32_t i = 0; i < vec_len(spec->fn.args); i++)
@@ -1106,7 +1106,7 @@ static Operand sema_name(Expr* e, Type* ret)
     e->scope = scope;
     switch(sym->kind)
     {
-        case SYM_CONST:
+        case SYM_LET:
         case SYM_VAR:
             return opr_lval(sym->type);
         case SYM_DEF:
@@ -1431,7 +1431,7 @@ static Operand sema_complit(Expr* e, Type* ret)
                     vp_err_error(field->loc, "named field in compound literal does not exist");
                 }
             }
-            if(idx >= numfields)
+            if(idx >= vec_len(ty->st.fields))
             {
                 vp_err_error(field->loc, "field init in struct/union compound literal out of range");
             }
@@ -1613,7 +1613,7 @@ static Operand sema_call(Expr* e, Type* ret)
         }
     }
     Operand fn = sema_expr_rval(e->call.expr, NULL);
-    if(!ty_isfunc(fn.ty))
+    if(!ty_isfn(fn.ty))
     {
         vp_err_error(e->loc, "cannot call non-function value");
     }
@@ -1762,7 +1762,9 @@ static const SemaExprFn semaexprtab[] = {
     [EX_NIL] = sema_nil,
     [EX_TRUE] = sema_bool, [EX_FALSE] = sema_bool,
     [EX_CHAR] = sema_char,
-    [EX_UINTT] = sema_int, [EX_UINT] = sema_int,
+    [EX_INT] = sema_int,
+    [EX_UINTT] = sema_int,
+    [EX_UINT] = sema_int,
     [EX_NUM] = sema_num,
     [EX_STR] = sema_str,
     [EX_NAME] = sema_name,
@@ -1903,9 +1905,9 @@ static bool sema_stmt_assign(Stmt* st, Type* ret)
     if(st->lhs->kind == EX_NAME)
     {
         Sym* sym = sym_name(st->lhs->name);
-        if(sym->kind == SYM_CONST)
+        if(sym->kind == SYM_LET)
         {
-            vp_err_error(st->lhs->loc, "cannot assign to 'const' variable '%s'",
+            vp_err_error(st->lhs->loc, "cannot assign to 'let' variable '%s'",
                                      str_data(sym->name));
         }
     }
@@ -2005,9 +2007,9 @@ static bool sema_stmt_decl(Stmt* st, Type* ret)
 {
     UNUSED(ret);
     Decl* d = st->decl;
-    if(st->decl->kind == DECL_VAR || st->decl->kind == DECL_CONST)
+    if(st->decl->kind == DECL_VAR || st->decl->kind == DECL_LET)
     {
-        SymKind kind = st->decl->kind == DECL_VAR ? SYM_VAR : SYM_CONST;
+        SymKind kind = st->decl->kind == DECL_VAR ? SYM_VAR : SYM_LET;
         Type* ty = sema_var(d);
         sym_add(d->name, kind, ty);
     }
@@ -2204,10 +2206,54 @@ static void sema_fn_body(Sym* sym)
     vp_mod_leave(mod);
 }
 
+/* Resolve global initializers */
+static Operand sema_glob(Expr* e, Type* ty)
+{
+    Operand opr = sema_expr(e, ty);
+    if(opr_isconst(opr))
+    {
+        return opr;
+    }
+    switch(e->kind)
+    {
+        case EX_STR:
+            return sema_str(e, ty);
+        case EX_NAME:
+        {
+            Sym* sym = sym_find(e->name);
+            if(!sym)
+                break;
+
+            if(sym->kind == SYM_FN)
+                return sema_name(e, ty);
+
+            break;
+        }
+        case EX_REF:
+        {
+            Expr* unary = e->unary;
+            if(unary->kind == EX_NAME || unary->kind == EX_COMPLIT)
+            {
+                return sema_ref(e, ty);
+            }
+            break;
+        }
+        case EX_COMPLIT:
+        {
+            return sema_complit(e, ty);
+        }
+        default:
+            break;
+    }
+    vp_err_error(e->loc, "bad global initializer");
+    return opr;
+}
+
 /* Resolve var declaration */
 static Type* sema_var(Decl* d)
 {
-    vp_assertX(d->kind == DECL_VAR || d->kind == DECL_CONST, "var/const declaration");
+    vp_assertX(d->kind == DECL_VAR || d->kind == DECL_LET, "var/let declaration");
+    bool isglob = vp_scope_isglob(V->currscope);
     Type* ty = NULL;
     Type* inferty = NULL;
     if(d->var.spec)
@@ -2216,6 +2262,7 @@ static Type* sema_var(Decl* d)
         sym_complete(declty);
         if(d->var.expr)
         {
+            //Operand res = isglob ? sema_glob(d->var.expr, declty) : sema_init(declty, d->var.expr);
             Operand res = sema_init(declty, d->var.expr);
             inferty = ty = res.ty;
             if(ty_isarr0(declty) && ty_isarr(inferty))
@@ -2230,6 +2277,7 @@ static Type* sema_var(Decl* d)
     else
     {
         vp_assertX(d->var.expr, "expression");
+        //Operand res = isglob ? sema_glob(d->var.expr, NULL) : sema_expr(d->var.expr, NULL);
         Operand res = sema_expr(d->var.expr, NULL);
         inferty = ty = res.ty;
         if(ty_isarr(ty) && d->var.expr->kind != EX_COMPLIT)
@@ -2254,6 +2302,10 @@ static Type* sema_var(Decl* d)
     }
     /* Add variable to current scope */
     d->var.vi = vp_scope_add(V->currscope, d->name, ty);
+    if(isglob)
+    {
+        vec_push(V->mod->sorted, d);
+    }
     return ty;
 }
 
@@ -2359,7 +2411,7 @@ static void sema_resolve(Sym* sym)
             sym->type = sema_type(d);
             break;
         case SYM_VAR:
-        case SYM_CONST:
+        case SYM_LET:
             sym->type = sema_var(d);
             break;
         case SYM_DEF:

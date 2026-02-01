@@ -10,8 +10,6 @@
 
 - [x] `def` declarations
 
-- [X] `const` variable declarations
-
 - [ ] fix casts, conversions
 
 - [X] fix `const` types
@@ -26,7 +24,7 @@
 
 - [X] function prototypes from dynamic (Win32) libraries
 
-- [ ] globals emission
+- [X] globals emission
 
 - [X] strings emission
 
@@ -57,6 +55,12 @@
 - [ ] `packed` for `struct`/`union`
 
 - [ ] unnamed `struct`/`union`/`enum` types
+
+- [ ] `std::io` module
+
+- [ ] memory allocator!
+
+- [ ] switch statement
 
 ---
 
@@ -644,6 +648,8 @@ MessageBoxA(
 `ld out.obj -o out.exe -L. -lkernel32 -ltea00 --subsystem=console -e main`
 
 `ld out.obj -o out.exe --subsystem=console -e main`
+
+`objdump -s -j .data out.obj`
 
 ---
 

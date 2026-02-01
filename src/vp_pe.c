@@ -11,14 +11,13 @@
 #include "vp_str.h"
 #include "vp_link.h"
 
+#if 0
 static uint32_t pe_sec_flags(SectionKind kind)
 {
     switch(kind)
     {
         case SEC_TEXT:
             return IMAGE_SCN_CNT_CODE | IMAGE_SCN_MEM_EXECUTE | IMAGE_SCN_MEM_READ;
-        case SEC_IDATA:
-            return IMAGE_SCN_CNT_INITIALIZED_DATA | IMAGE_SCN_MEM_READ;
         case SEC_DATA:
             return IMAGE_SCN_CNT_INITIALIZED_DATA | IMAGE_SCN_MEM_READ | IMAGE_SCN_MEM_WRITE;
     }
@@ -30,8 +29,6 @@ static Str* pe_sec_names(SectionKind kind)
     {
         case SEC_TEXT:
             return vp_str_newlit(".text");
-        case SEC_IDATA:
-            return vp_str_newlit(".idata");
         case SEC_DATA:
             return vp_str_newlit(".data");
     }
@@ -305,3 +302,4 @@ void vp_emit_exe(VpState* V, SBuf* sb)
         }
     }
 }
+#endif

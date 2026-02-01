@@ -503,7 +503,7 @@ static TypeSpec* parse_typeof(LexState* ls)
 static TypeSpec* parse_type_fn(LexState* ls);
 
 /* Parse an array of functions type */
-static TypeSpec* parse_type_fnarr(LexState* ls)
+static TypeSpec* parse_type_fnarr(LexState* ls, uint8_t qual)
 {
     SrcLoc loc = lex_srcloc(ls);
     vec_t(TypeSpec*) arrdims = vec_init(TypeSpec*);
@@ -517,6 +517,7 @@ static TypeSpec* parse_type_fnarr(LexState* ls)
         vec_push(arrdims, arrspec);
     }
     TypeSpec* spec = parse_type_fn(ls);
+    spec->qual = qual;
     if(arrdims)
     {
         /* Apply array dimensions, innermost first */
@@ -577,14 +578,21 @@ static TypeSpec* parse_type(LexState* ls)
     }
     else if(lex_match(ls, TK_fn))
     {
+        uint8_t qual = 0;
+        if(lex_match(ls, '?'))
+        {
+            qual = SPEC_NILABLE;
+        }
         if(lex_check(ls, '['))
         {
-            spec = parse_type_fnarr(ls);
+            spec = parse_type_fnarr(ls, qual);
         }
         else
         {
             spec = parse_type_fn(ls);
+            spec->qual = qual;
         }
+        return spec;
     }
     else
     {
@@ -775,8 +783,8 @@ static Stmt* parse_for(LexState* ls)
     case TK_var:
         d = parse_var(ls, DECL_VAR, 0);
         break;
-    case TK_const:
-        d = parse_var(ls, DECL_CONST, 0);
+    case TK_let:
+        d = parse_var(ls, DECL_LET, 0);
         break;
     default:
         init = parse_stmt_simple(ls);
@@ -828,8 +836,15 @@ static Stmt* parse_return(LexState* ls)
 {
     vp_lex_next(ls);    /* Skip 'return' */
     SrcLoc loc = lex_srcloc(ls);
-    Expr* e = expr(ls);
-    vp_lex_consume(ls, ';');
+    Expr* e = NULL;
+    if(!lex_match(ls, ';'))
+    {
+        e = expr(ls);
+        vp_lex_consume(ls, ';');
+    }
+    else
+    {
+    }
     return vp_stmt_return(loc, e);
 }
 
@@ -1248,8 +1263,8 @@ static Decl* parse_decl(LexState* ls, bool top)
         case TK_var:
             d = parse_var(ls, DECL_VAR, flags);
             break;
-        case TK_const:
-            d = parse_var(ls, DECL_CONST, flags);
+        case TK_let:
+            d = parse_var(ls, DECL_LET, flags);
             break;
         case TK_def:
             d = parse_def(ls, flags);

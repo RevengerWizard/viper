@@ -3,6 +3,7 @@
 ** Module handling
 */
 
+#include <string.h>
 #include <stdlib.h>
 
 #include "vp_mod.h"

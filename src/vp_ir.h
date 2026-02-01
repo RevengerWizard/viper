@@ -174,6 +174,8 @@ typedef struct IR
             Str* label;
             bool isfn;
             bool isstr;
+            bool isglob;
+            bool got;
         } iofs;
         struct
         {
@@ -226,7 +228,7 @@ extern const char* const vp_ir_name[];
 
 /* IR instructions */
 IR* vp_ir_bofs(FrameInfo* fi);
-IR* vp_ir_iofs(Str* label, bool isfn, bool isstr);
+IR* vp_ir_iofs(Str* label, bool isfn, bool isstr, bool isglob);
 IR* vp_ir_sofs(uint32_t ofs);
 IR* vp_ir_mov(VReg* dst, VReg* src, uint8_t irflag);
 IR* vp_ir_store(VReg* dst, VReg* src, uint8_t irflag);
@@ -265,7 +267,9 @@ void vp_bb_setcurr(BB* bb);
 void vp_bb_detect(vec_t(BB*) bbs);
 void vp_bb_analyze(vec_t(BB*) bbs);
 
-Str* vp_label_new();
+Str* vp_bb_label();
+Str* vp_str_label();
+Str* vp_anon_label();
 
 static VP_AINLINE uint8_t ir_flag(Type* ty)
 {

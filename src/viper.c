@@ -11,6 +11,8 @@
 #include <stdlib.h>
 
 #include "vp_state.h"
+#include "vp_buf.h"
+#include "vp_dump.h"
 
 #include "vp_pe.h"
 
@@ -50,6 +52,8 @@ int main(int argc, char** argv)
         fprintf(stderr, "unable to open out.obj\n");
         return EXIT_FAILURE;
     }
+
+    //vp_dump_dot(V->codes, "out.dot");
 
     vp_state_close(V);
 

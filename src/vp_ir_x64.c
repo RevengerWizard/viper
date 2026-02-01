@@ -4,6 +4,7 @@
 */
 
 #include "vp_asm.h"
+#include "vp_codegen.h"
 #include "vp_emit_x64.h"
 
 #include "vp_link.h"
@@ -13,6 +14,7 @@
 #include "vp_target_x64.h"
 #include "vp_vec.h"
 #include "vp_low.h"
+#include "vp_buf.h"
 
 static const X64Reg irx64R[][X64_IREG] = {
     {AL,  CL,  DL,  BL,  SPL, BPL, SIL, DIL, R8B, R9B, R10B, R11B, R12B, R13B, R14B, R15B},
@@ -34,8 +36,8 @@ static void emit_mov(VReg* dst, VReg* src)
         {
             switch(src->vsize)
             {
-            case VRSize4: EMITX64(movdXR)(irx64X[dst->phys], irx64X[src->phys]); break;
-            case VRSize8: EMITX64(movqXR)(irx64X[dst->phys], irx64X[src->phys]); break;
+            case VRSize4: EMITX64(movdXR)(irx64X[dst->phys], irx64R[VRSize8][src->phys]); break;
+            case VRSize8: EMITX64(movqXR)(irx64X[dst->phys], irx64R[VRSize8][src->phys]); break;
             default: vp_assertX(0, "?"); break;
             }
         }
@@ -79,7 +81,14 @@ static void irX64_iofs(IR* ir)
 {
     Str* label = ir->iofs.label;
     int64_t ofs = ir->iofs.ofs;
-    EMITX64(leaRM)(irx64R[VRSize8][ir->dst->phys], X64MEM_RIP(ofs, 8));
+    if(ir->iofs.got)
+    {
+        EMITX64(movRM)(irx64R[VRSize8][ir->dst->phys], X64MEM_RIP(ofs, 8));
+    }
+    else
+    {
+        EMITX64(leaRM)(irx64R[VRSize8][ir->dst->phys], X64MEM_RIP(ofs, 8));
+    }
     uint32_t patch = sbuf_len(&V->code) - 4;
     if(ir->iofs.isfn)
     {
@@ -87,9 +96,13 @@ static void irX64_iofs(IR* ir)
         vp_assertX(code, "?");
         patchinfo_learel(code, patch);
     }
-    else if(ir->iofs.isstr)
+    else if(ir->iofs.isstr || ir->iofs.isglob)
     {
         patchinfo_leaabs(label, patch);
+    }
+    else
+    {
+        vp_assertX(0, "bad use of IOFS");
     }
 }
 
@@ -229,9 +242,10 @@ static void irX64_pusharg(IR* ir)
 
 static void irX64_call(IR* ir)
 {
+    Code* fn = ir->call->fn;
     uint32_t total = ir->call->stacksize;
     /* Save caller registers */
-    vp_lowX64_caller_push(ir->call->saves, total);
+    vp_lowX64_caller_push(fn, ir->call->saves, total);
 
     if(ir->call->label)
     {
@@ -245,7 +259,7 @@ static void irX64_call(IR* ir)
         {
             uint32_t ofs = sbuf_len(&V->code) + 1;
             EMITX64(callREL32)(0);
-            patchinfo_callrel(ir->call->fn, ofs);
+            patchinfo_callrel(fn, ofs);
         }
     }
     else
@@ -280,7 +294,7 @@ static void irX64_call(IR* ir)
     }
 
     /* Restore caller registers */
-    vp_lowX64_caller_pop(ir->call->saves, total);
+    vp_lowX64_caller_pop(fn, ir->call->saves, total);
 }
 
 static void irX64_cast(IR* ir)

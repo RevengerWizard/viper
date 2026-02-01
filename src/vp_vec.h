@@ -46,7 +46,7 @@ typedef struct VecHeader
     vp_vec_contains((v), &(elem), sizeof(*(v)))
 
 #define vec_find(v, elem) \
-    vp_vec_find((v), &(elem), sizeof(*(v)))
+    vp_vec_find((v), (elem), sizeof(*(v)))
 
 #define vec_concat(dst, src) \
     (vp_vec_concat((void**)&(dst), (src), sizeof(*(dst))))
@@ -60,7 +60,7 @@ void* vp_vec_grow(const void* vec, uint32_t len, uint32_t elemsize);
 void vp_vec_insert(const void* vec, uint32_t idx, uint32_t elemsize);
 void vp_vec_remove_at(const void* vec, uint32_t idx, uint32_t elemsize);
 bool vp_vec_contains(const void* vec, const void* elem, uint32_t elemsize);
-uint32_t vp_vec_find(const void* vec, const void* elem, uint32_t elemsize);
+void vp_vec_find(const void* vec, void* elem, uint32_t elemsize);
 void vp_vec_concat(void** dstp, const void* src, uint32_t elemsize);
 
 #endif

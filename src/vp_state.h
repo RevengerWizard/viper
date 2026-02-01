@@ -16,11 +16,28 @@
 #include "vp_tab.h"
 #include "vp_map.h"
 
+typedef enum DataKind
+{
+    DATA_VAR,
+    DATA_STR,
+    DATA_ANON
+} DataKind;
+
+typedef struct DataEntry
+{
+    DataKind kind;
+    Str* name;
+    uint32_t ofs;   /* Offset in data section */
+    uint32_t size;
+    uint32_t align;
+    uint8_t* data;  /* Data bytes */
+} DataEntry;
+
 typedef enum SectionKind
 {
     SEC_TEXT,
     SEC_DATA,
-    SEC_IDATA
+    SEC_RDATA,
 } SectionKind;
 
 typedef struct
@@ -52,7 +69,7 @@ typedef struct VpState
     SBuf code;
     Map cachequal;
     Map cacheptr;
-    vec_t(Type*) cachefunc;
+    vec_t(Type*) cachefn;
     vec_t(Type*) cachearr;
     Tab strtab;
     Arena instarena;
@@ -64,6 +81,8 @@ typedef struct VpState
     Tab globtab;
     struct Scope* globscope;
     struct Scope* currscope;
+    vec_t(DataEntry*) globdata;
+    vec_t(struct Reloc) relocs;
     BB* bb;
     struct Code* fncode;
     RegAlloc* ra;
@@ -72,8 +91,6 @@ typedef struct VpState
     Tab funcs;
     Tab ifuncs;
     Layout L;
-    vec_t(Str*) strs;
-    vec_t(uint32_t) strofs;
     vec_t(struct PatchInfo) patches;
     const TargetInfo* T;
     vec_t(struct ImportDLL) imports;

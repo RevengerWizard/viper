@@ -31,7 +31,7 @@ static const uint32_t winx64_fmap[] = {
 
 /* Callee-save int registers */
 #define WINX64_ICALLEE \
-    ((1ULL << RN_BX) | (1ULL << RN_SI) | (1ULL << RN_DI) | \
+    ((1ULL << RN_BX) | (1ULL << RN_SI) | (1ULL << RN_DI) | (1ULL << RN_BP) | \
     (1ULL << RN_12) | (1ULL << RN_13) | (1ULL << RN_14) | (1ULL << RN_15))
 
 /* Callee-save float registers */

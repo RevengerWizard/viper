@@ -3,6 +3,8 @@
 ** x64 inline assembler
 */
 
+#include <string.h>
+
 #include "vp_asm.h"
 #include "vp_err.h"
 #include "vp_lex.h"

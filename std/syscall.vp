@@ -1,0 +1,19 @@
+[[syscall]]
+pub fn syswrite(fd : uint32, buf : const uint8*, count : usize) : isize
+{
+    asm
+    {
+        mov eax, 1;
+        syscall;
+    }
+}
+
+[[syscall]]
+pub fn sysexit(status : int32) : void
+{
+    asm
+    {
+        mov eax, 60;
+        syscall;
+    }
+}

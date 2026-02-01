@@ -3,6 +3,7 @@
 ** Register allocation
 */
 
+#include <string.h>
 #include <stdlib.h>
 
 #include "vp_regalloc.h"
@@ -642,6 +643,7 @@ void vp_ra_alloc(RegAlloc *ra, BB** bbs)
         ra_scan(ra, sorted, vreglen);
 
         /* Spill vregs */
+        bool spill = false;
         for(uint32_t i = 0; i < vreglen; i++)
         {
             LiveInterval* li = &intervals[i];
@@ -651,8 +653,12 @@ void vp_ra_alloc(RegAlloc *ra, BB** bbs)
                 if(vrf_spill(vr))
                     continue;
                 vreg_spill(vr);
+                spill = true;
             }
         }
+
+        if(spill)
+            ra->flag |= RAF_STACK_FRAME;
 
         if(ra_spill(ra, bbs) == 0)
             break;

@@ -18,7 +18,7 @@ typedef enum TypeSpecKind
     SPEC_NONE,
     SPEC_TYPE,
     SPEC_NAME,
-    SPEC_FUNC,
+    SPEC_FN,
     SPEC_ARRAY,
     SPEC_PTR,
     SPEC_TYPEOF
@@ -355,7 +355,7 @@ typedef struct ImportItem
 typedef enum DeclKind
 {
     DECL_VAR,
-    DECL_CONST,
+    DECL_LET,
     DECL_DEF,
     DECL_FN,
     DECL_TYPE,

@@ -3,14 +3,19 @@
 ** Code generation (AST -> IR)
 */
 
+#include <stdbool.h>
+#include <string.h>
+
 #include "vp_codegen.h"
 #include "vp_abi.h"
+#include "vp_link.h"
 #include "vp_low.h"
 #include "vp_mem.h"
 #include "vp_opt.h"
 #include "vp_regalloc.h"
 #include "vp_ast.h"
 #include "vp_ir.h"
+#include "vp_state.h"
 #include "vp_str.h"
 #include "vp_tab.h"
 #include "vp_target.h"
@@ -189,6 +194,44 @@ static VReg* gen_flo(Expr* e)
     return vp_vreg_kf(e->f, vp_vsize(e->ty));
 }
 
+static Str* str_data_get(Str* str)
+{
+    Str* sym = NULL;
+    for(uint32_t i = 0; i < vec_len(V->globdata); i++)
+    {
+        DataEntry* de = V->globdata[i];
+        if(de->kind == DATA_STR && de->size == (str->len + 1))
+        {
+            if(memcmp(de->data, str_data(str), str->len) == 0 &&
+                de->data[str->len] == 0)
+            {
+                sym = de->name;
+                break;
+            }
+        }
+    }
+
+    if(!sym)
+    {
+        sym = vp_str_label();
+
+        uint32_t size = str->len + 1; /* + '\0' */
+        DataEntry* de = vp_mem_calloc(1, sizeof(DataEntry));
+        de->kind = DATA_STR;
+        de->name = sym;
+        de->ofs = 0;
+        de->size = size;
+        de->align = 2;
+        de->data = vp_mem_calloc(1, size);
+        memcpy(de->data, str_data(str), str->len);
+        de->data[str->len] = 0;  /* '\0' */
+
+        vec_push(V->globdata, de);
+    }
+
+    return sym;
+}
+
 /* Generate string literal */
 static VReg* gen_str(Expr* e)
 {
@@ -233,18 +276,10 @@ static VReg* gen_str(Expr* e)
     else if(ty_isptr(e->ty))
     {
         vp_assertX(e->ty->p && e->ty->p->kind == TY_uint8, "bad str ptr type");
-        vp_assertX(vec_len(V->strs) == vec_len(V->strofs), "non-matching lens");
 
-        uint32_t ofs = 0;
-        if(vec_len(V->strofs))
-        {
-            Str* last = V->strs[vec_len(V->strs) - 1];
-            ofs = V->strofs[vec_len(V->strofs) - 1] + (last->len + 1);
-        }
-        vec_push(V->strs, str);
-        vec_push(V->strofs, ofs);
+        Str* sym = str_data_get(str);
 
-        return vp_ir_iofs(str, false, true)->dst;
+        return vp_ir_iofs(sym, false, true, false)->dst;
     }
     vp_assertX(0, "bad str type");
     return NULL;
@@ -261,16 +296,15 @@ static VReg* gen_name(Expr* e)
         vp_assertX(vi, "name not found");
         if(!vp_scope_isglob(scope))
         {
-            vp_assertX(vi->vreg, "missing vreg");
+            vp_assertX(vi->vreg, "missing vreg %s", str_data(vi->name));
             return vi->vreg;
         }
         VReg* src = gen_lval(e);
-        if(ty_isfunc(ty))
+        if(ty_isfn(ty))
         {
             return src;
         }
-        VReg* dst = vp_ir_load(src, vp_vsize(ty), vp_vflag(ty), ir_flag(ty))->dst;
-        return dst;
+        return vp_ir_load(src, vp_vsize(ty), vp_vflag(ty), ir_flag(ty))->dst;
     }
     else if(ty_isarr(ty) || ty_isaggr(ty))
     {
@@ -387,7 +421,7 @@ static VReg* gen_ref(Expr* e)
             vp_assertX(vi, "name not found");
             if(vp_scope_isglob(scope))
             {
-                return vp_ir_iofs(name, vi->storage & VS_FN, false)->dst;
+                return vp_ir_iofs(name, vi->storage & VS_FN, false, true)->dst;
             }
             if(!vi->fi)
             {
@@ -395,10 +429,7 @@ static VReg* gen_ref(Expr* e)
                 {
                     vi->vreg->flag |= VRF_REF;
                     vreg_spill(vi->vreg);
-                    if(!raf_stackframe(V->ra))
-                    {
-                        V->ra->flag |= RAF_STACK_FRAME;
-                    }
+                    V->ra->flag |= RAF_STACK_FRAME;
                 }
                 vi->fi = &vi->vreg->fi;
             }
@@ -482,19 +513,30 @@ static VReg* gen_call(Expr* e)
     VReg* freg = NULL;
     Str* label = NULL;
     Code* fn = NULL;
+    VarInfo* vi = NULL;
+    bool isglob = false;
 
     /* Determine if this is a direct or indirect call */
     if(e->call.expr->kind == EX_NAME)
     {
         label = e->call.expr->name;
-        VarInfo* vi = vp_scope_find(e->call.expr->scope, e->call.expr->name, NULL);
+        vi = vp_scope_find(e->call.expr->scope, e->call.expr->name, NULL);
         vp_assertX(vi, "'%s' not found", str_data(e->call.expr->name));
-        vp_assertX(ty_isfunc(vi->type) && (vi->storage & VS_FN), "not a function");
+        vp_assertX(ty_isfn(vi->type), "'%s' not a function", str_data(vi->name));
         fn = vp_tab_get(&V->funcs, label);
+        isglob = (vi->storage & VS_GLOB) && !(vi->storage & VS_FN);
     }
-    else
+
+    if(!label)
     {
         freg = gen_expr(e->call.expr);
+    }
+    else if(isglob)
+    {
+        IR* ir = vp_ir_iofs(label, false, false, true);
+        ir->iofs.got = true;
+        freg = ir->dst;
+        label = NULL;
     }
 
     /* Determine ABI to use */
@@ -564,6 +606,7 @@ static VReg* gen_call(Expr* e)
     /* Generate arguments (in reverse, for stack) */
     for(uint32_t i = argnum; i-- > 0;)
     {
+        Type* argty = e->call.args[i]->ty;
         VReg* src = gen_expr(e->call.args[i]);
         ArgInfo* p = &arginfos[i];
         uint32_t argidx = (fi != NULL) ? i + 1 : i;
@@ -575,14 +618,12 @@ static VReg* gen_call(Expr* e)
                 break;
             case PC_STACK:
             {
-                Type* argty = e->call.args[i]->ty;
                 VReg* dst = vp_ir_sofs(p->idx + shadow)->dst;
                 vp_ir_store(dst, src, ir_flag(argty));
                 break;
             }
             case PC_MEM:
             {
-                Type* argty = e->call.args[i]->ty;
                 VReg* dst = vp_ir_sofs(p->idx + shadow)->dst;
                 gen_memcpy(argty, dst, src);
                 break;
@@ -605,12 +646,9 @@ static VReg* gen_call(Expr* e)
         args[0] = dst;
         regargs++;
     }
-    else
+    if(ret->kind != TY_void)
     {
-        if(ret->kind != TY_void)
-        {
-            dst = vp_vreg_new(ret);
-        }
+        dst = vp_vreg_new(ret);
     }
 
     IRCallInfo* ci = vp_ircallinfo_new(args, argnum, label);
@@ -704,7 +742,7 @@ typedef struct FlatField
 } FlatField;
 
 /* Flatten a compound literal */
-static void flatten_complit(Expr* e, uint32_t base_offset, vec_t(FlatField*) flat_fields)
+static void flatten_complit(Expr* e, uint32_t baseofs, vec_t(FlatField)* flat)
 {
     vp_assertX(e->kind == EX_COMPLIT, "not a compound literal");
 
@@ -722,7 +760,7 @@ static void flatten_complit(Expr* e, uint32_t base_offset, vec_t(FlatField*) fla
             case FIELD_NAME:
             {
                 uint32_t idx = vp_type_fieldidx(compty, field->name);
-                field_offset = base_offset + compty->st.fields[idx].offset;
+                field_offset = baseofs + compty->st.fields[idx].offset;
                 break;
             }
             case FIELD_IDX:
@@ -731,14 +769,14 @@ static void flatten_complit(Expr* e, uint32_t base_offset, vec_t(FlatField*) fla
                 uint32_t idx_val = (field->idx->kind == EX_INT) ? field->idx->i : field->idx->u;
                 Type* elemty = compty->p;
                 uint32_t elemsize = vp_type_sizeof(elemty);
-                field_offset = base_offset + (idx_val * elemsize);
+                field_offset = baseofs + (idx_val * elemsize);
                 break;
             }
             case FIELD_DEFAULT:
             {
                 Type* elemty = compty->p;
                 uint32_t elemsize = vp_type_sizeof(elemty);
-                field_offset = base_offset + (i * elemsize);
+                field_offset = baseofs + (i * elemsize);
                 break;
             }
             default:
@@ -749,7 +787,7 @@ static void flatten_complit(Expr* e, uint32_t base_offset, vec_t(FlatField*) fla
         /* Check if the field initializer is another compound literal */
         if(field->init->kind == EX_COMPLIT)
         {
-            flatten_complit(field->init, field_offset, flat_fields);
+            flatten_complit(field->init, field_offset, flat);
         }
         else
         {
@@ -758,7 +796,7 @@ static void flatten_complit(Expr* e, uint32_t base_offset, vec_t(FlatField*) fla
                 .init = field->init,
                 .type = field->init->ty
             };
-            vec_push(*flat_fields, ff);
+            vec_push(*flat, ff);
         }
     }
 }
@@ -1064,10 +1102,7 @@ static void gen_var_assign(VarInfo* vi, Expr* e)
     {
         Slot sl = {.type = vi->type, .fi = vi->fi};
         vec_push(V->fncode->slots, sl);
-        if(!raf_stackframe(V->ra))
-        {
-            V->ra->flag |= RAF_STACK_FRAME;
-        }
+        V->ra->flag |= RAF_STACK_FRAME;
     }
 
     /* Generate initialization if provided */
@@ -1100,7 +1135,7 @@ static void gen_var(Stmt* st)
 {
     Decl* d = st->decl;
     if(d->kind == DECL_NOTE) return;
-    vp_assertX(d->kind == DECL_VAR || d->kind == DECL_CONST, "var/const");
+    vp_assertX(d->kind == DECL_VAR || d->kind == DECL_LET, "var/let");
 
     gen_var_assign(d->var.vi, d->var.expr);
 }
@@ -1109,11 +1144,11 @@ static void gen_var(Stmt* st)
 static void gen_ret(Stmt* st)
 {
     vp_assertX(st->kind == ST_RETURN, "not return statement");
-    vp_assertX(st->expr->ty, "missing return type");
-    Type* ty = st->expr->ty;
     BB* bb = vp_bb_new();
     if(st->expr)
     {
+        vp_assertX(st->expr->ty, "missing return type");
+        Type* ty = st->expr->ty;
         VReg* vreg = gen_expr(st->expr);
 
         if(ty_isscalar(ty))
@@ -1411,10 +1446,7 @@ static void gen_params(Decl* d, Code* code)
                 vp_assertX(vr, "scalar param needs vreg");
                 vr->flag |= VRF_STACK_PARAM;
                 vreg_spill(vr);
-                if(!raf_stackframe(V->ra))
-                {
-                    V->ra->flag = RAF_STACK_FRAME;
-                }
+                V->ra->flag = RAF_STACK_FRAME;
                 /* Stack parameter offset */
                 pl.idx = vr->fi.ofs = paramofs = ALIGN_UP(paramofs, TARGET_PTR_SIZE);
                 paramofs += TARGET_PTR_SIZE;
@@ -1424,6 +1456,7 @@ static void gen_params(Decl* d, Code* code)
                 vp_assertX(vi->fi, "aggregate param needs frame info");
                 uint32_t size = vp_type_sizeof(ty);
                 uint32_t align = vp_type_alignof(ty);
+                V->ra->flag = RAF_STACK_FRAME;
                 /* Stack parameter offset */
                 pl.idx = vi->fi->ofs = paramofs = ALIGN_UP(paramofs, align);
                 paramofs += ALIGN_UP(size, TARGET_PTR_SIZE);
@@ -1508,6 +1541,161 @@ static Code* gen_fn(Decl* d)
     return code;
 }
 
+static VP_AINLINE void write_int(uint8_t* data, uint32_t offset, uint64_t val, uint32_t size)
+{
+    for(uint32_t i = 0; i < size; i++)
+    {
+        data[offset + i] = (val >> (i * 8)) & 0xFF;
+    }
+}
+
+static void glob_eval(Type* ty, Expr* e, DataEntry* entry, uint32_t baseofs, bool isref)
+{
+    switch(e->kind)
+    {
+        case EX_NIL:
+        {
+            write_int(entry->data, baseofs, 0, vp_type_sizeof(ty));
+            break;
+        }
+        case EX_TRUE:
+        case EX_FALSE:
+        {
+            write_int(entry->data, baseofs, e->b, vp_type_sizeof(ty));
+            break;
+        }
+        case EX_NUM:
+        {
+            union { double d; uint64_t u; } conv = {.d = e->n};
+            write_int(entry->data, baseofs, conv.u, vp_type_sizeof(ty));
+            break;
+        }
+        case EX_FLO:
+        {
+            union { float f; uint32_t u; } conv = {.f = e->f};
+            write_int(entry->data, baseofs, conv.u, vp_type_sizeof(ty));
+            break;
+        }
+        case EX_UINT:
+        case EX_INT:
+        {
+            write_int(entry->data, baseofs, e->i, vp_type_sizeof(ty));
+            break;
+        }
+        case EX_REF:
+        {
+            glob_eval(ty, e->unary, entry, baseofs, true);
+            break;
+        }
+        case EX_NAME:
+        {
+            VarInfo* vi = vp_scope_find(e->scope, e->name, NULL);
+            vp_assertX(vi, "name not found");
+            if(isref || ty_isfn(e->ty))
+            {
+                Reloc rel = {
+                    .entry = entry,
+                    .ofs = baseofs,
+                    .sym = e->name
+                };
+                vec_push(V->relocs, rel);
+                write_int(entry->data, baseofs, 0, TARGET_PTR_SIZE);
+            }
+            break;
+        }
+        case EX_STR:
+        {
+            Str* s = e->str;
+            if(ty_isarr(ty))
+            {
+                memcpy(entry->data + baseofs, str_data(s), s->len);
+            }
+            else
+            {
+                vp_assertX(ty_isptr(ty), "?");
+                Str* sym = str_data_get(s);
+                Reloc rel = {
+                    .entry = entry,
+                    .ofs = baseofs,
+                    .sym = sym,
+                    .isfn = false
+                };
+                vec_push(V->relocs, rel);
+                write_int(entry->data, baseofs, 0, TARGET_PTR_SIZE);
+            }
+            break;
+        }
+        case EX_COMPLIT:
+        {
+            vec_t(FlatField) flat = vec_init(FlatField);
+            flatten_complit(e, 0, &flat);
+            if(isref)
+            {
+                Str* anon = vp_anon_label();
+
+                uint32_t size = vp_type_sizeof(e->ty);
+                DataEntry* newentry = vp_mem_calloc(1, sizeof(DataEntry));
+                newentry->kind = DATA_ANON;
+                newentry->name = anon;
+                newentry->ofs = 0;
+                newentry->size = size;
+                newentry->align = vp_type_alignof(e->ty);
+                newentry->data = vp_mem_calloc(1, size);
+
+                Reloc rel = {
+                    .entry = entry,
+                    .ofs = baseofs,
+                    .sym = anon,
+                };
+                vec_push(V->relocs, rel);
+
+                for(uint32_t i = 0; i < vec_len(flat); i++)
+                {
+                    FlatField* ff = &flat[i];
+                    glob_eval(ff->type, ff->init, newentry, ff->offset, false);
+                }
+                vec_push(V->globdata, newentry);
+
+                write_int(entry->data, baseofs, 0, TARGET_PTR_SIZE);
+                break;
+            }
+            for(uint32_t i = 0; i < vec_len(flat); i++)
+            {
+                FlatField* ff = &flat[i];
+                glob_eval(ff->type, ff->init, entry, baseofs + ff->offset, false);
+            }
+            break;
+        }
+        default:
+            vp_assertX(0, "bad initializer %d\n", e->kind);
+            break;
+    }
+}
+
+static void gen_glob(Decl* d)
+{
+    vp_assertX(d->kind == DECL_VAR || d->kind == DECL_LET, "not a var/let");
+
+    Type* ty = d->var.vi->type;
+    uint32_t size = vp_type_sizeof(ty);
+    uint32_t align = vp_type_alignof(ty);
+
+    uint8_t* data = vp_mem_calloc(1, size);
+    DataEntry* entry = vp_mem_calloc(1, sizeof(DataEntry));
+    entry->kind = DATA_VAR;
+    entry->name = d->name;
+    entry->ofs = 0;
+    entry->size = size;
+    entry->align = align;
+    entry->data = data;
+    vec_push(V->globdata, entry);
+
+    if(d->var.expr)
+    {
+        glob_eval(ty, d->var.expr, entry, 0, false);
+    }
+}
+
 /* Generate code IR for all declarations */
 vec_t(Code*) vp_codegen(vec_t(Decl*) decls)
 {
@@ -1519,6 +1707,10 @@ vec_t(Code*) vp_codegen(vec_t(Decl*) decls)
         {
             Code* code = gen_fn(d);
             vec_push(codes, code);
+        }
+        else if(d && (d->kind == DECL_VAR || d->kind == DECL_LET))
+        {
+            gen_glob(d);
         }
     }
     return codes;

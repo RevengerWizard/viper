@@ -1,5 +1,6 @@
 src/
 ├── viper.c             ← Viper compiler
+├── vp_abi.h            ← ABI interface
 ├── vp_arch.h           ← Target architectures
 ├── vp_asm.h            ← Inline assembler
 ├── vp_asm_x64.c        ← x64 inline assembler
@@ -12,7 +13,7 @@ src/
 ├── vp_def.h            ← Viper common internal definitions
 ├── vp_dump.c/h         ← Data structure print
 ├── vp_elf.c            ← ELF emitter
-├── vp_emit.h           ← Instruction emitter interface
+├── vp_emit.h           ← Emitter interface
 ├── vp_emit_x64.c/h     ← x64 Instruction emitter
 ├── vp_err.c/h          ← Error and warning handling
 ├── vp_inst_x64.c       ← x64 asm instruction handling
@@ -26,6 +27,7 @@ src/
 ├── vp_low_x64.c        ← IR x64 lowering
 ├── vp_map.c/h          ← Map handling
 ├── vp_mem.c/h          ← Memory management
+├── vp_mod.c/h          ← Module handling
 ├── vp_opt.c/h          ← Optimization pass (IR -> (opt) -> IR)
 ├── vp_parse.c/h        ← Syntax analyser
 ├── vp_pe.c/h           ← Windows PE emitter

@@ -1,0 +1,4 @@
+pub fn write(f : FILE, buf : const uint8*, n : usize) : void
+{
+
+}

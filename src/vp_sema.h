@@ -50,7 +50,7 @@ typedef enum SymKind
 {
     SYM_NONE,
     SYM_VAR,
-    SYM_CONST,
+    SYM_LET,
     SYM_FN,
     SYM_DEF,
     SYM_ALIAS,

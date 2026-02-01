@@ -10,7 +10,16 @@
 
 #include "vp_ir.h"
 #include "vp_codegen.h"
+#include "vp_state.h"
 #include "vp_str.h"
+
+typedef struct Reloc
+{
+    DataEntry* entry;
+    uint32_t ofs;   /* Offset in data buffer */
+    Str* sym;   /* Relocation symbol name */
+    bool isfn;
+} Reloc;
 
 typedef struct ImportFunc
 {
@@ -25,7 +34,6 @@ typedef struct ImportDLL
 } ImportDLL;
 
 void vp_layout_init(Layout* L);
-void vp_import_calc_rvas();
 
 typedef enum PatchKind
 {
