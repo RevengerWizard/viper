@@ -1046,25 +1046,32 @@ static AttrArg parse_attr_arg(LexState* ls)
     return (AttrArg){.loc = loc, .e = e};
 }
 
+typedef struct ModifDef
+{
+    LexToken tok;
+    uint32_t flag;
+} ModifDef;
+
+ModifDef modfs[] = {
+    { TK_inline, FN_INLINE },
+    { TK_noreturn, FN_NORETURN },
+    { TK_export, FN_EXPORT },
+    { TK_extern, FN_EXTERN },
+    { 0, 0 }
+};
+
 /* Parse function modifiers */
 static uint32_t parse_modifs(LexState* ls)
 {
     uint32_t flags = 0;
-    while(lex_check(ls, TK_inline) || lex_check(ls, TK_noreturn))
+    for(const ModifDef* m = modfs; m->tok; m++)
     {
-        SrcLoc loc = lex_srcloc(ls);
-        if(lex_check(ls, TK_inline))
+        while(lex_check(ls, m->tok))
         {
-            if(flags & FN_INLINE)
-                vp_err_error(loc, "duplicate 'inline' modifier");
-            flags |= FN_INLINE;
-            vp_lex_next(ls);
-        }
-        else if(lex_check(ls, TK_noreturn))
-        {
-            if(flags & FN_NORETURN)
-                vp_err_error(loc, "duplicate 'noreturn' modifier");
-            flags |= FN_NORETURN;
+            SrcLoc loc = lex_srcloc(ls);
+            if(flags & m->flag)
+                vp_err_error(loc, "duplicate '%s' modifier", vp_lex_tok2str(ls, m->tok));
+            flags |= m->flag;
             vp_lex_next(ls);
         }
     }

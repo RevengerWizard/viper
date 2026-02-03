@@ -2136,6 +2136,11 @@ static void sema_attrs(Decl* d, vec_t(Attr) attrs, Str* funcname)
             vp_err_error(at->loc, "unknown attribute [[%s]]", str_data(name));
         }
     }
+
+    if(d->fn.flags & FN_EXTERN)
+    {
+        vp_tab_set(&V->ifuncs, funcname, funcname);
+    }
 }
 
 /* Resolve fn declaration */

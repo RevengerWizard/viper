@@ -342,7 +342,7 @@ Precision
 
 `alias`
 
-`export` ?
+`export` `extern` ?
 
 `goto` ?
 

@@ -15,6 +15,7 @@
     _(fn) \
     _(struct) _(union) _(enum) \
     _(pub) _(inline) _(noreturn) \
+    _(extern) _(export) \
     _(import) _(from) _(as) \
     _(asm) \
     _(var) _(let) _(const) \

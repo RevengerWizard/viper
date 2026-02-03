@@ -25,7 +25,8 @@ enum
     FN_INLINE = 1 << 0,
     FN_NORETURN = 1 << 1,
     FN_SYSCALL = 1 << 2,
-    FN_EXPORT = 1 << 3
+    FN_EXPORT = 1 << 3,
+    FN_EXTERN = 1 << 4
 };
 
 /* Function code blocks */

@@ -159,15 +159,15 @@ static void coff_build()
     {
         Code* code = V->codes[i];
         Str* name = code->name;
-        if(code->flags & FN_EXPORT)
+        if(code->flags & FN_EXTERN)
         {
             name = vp_buf_cat2str(vp_str_newlit("__imp_"), name);
         }
         COFFSym sym = {
             .name = name,
             .value = code->ofs,
-            .sec = (code->flags & FN_EXPORT) ? 0 /* undefined */ : 1 /* .text */,
-            .type = (code->flags & FN_EXPORT) ? 0 : IMAGE_SYM_DTYPE_FUNCTION,
+            .sec = (code->flags & FN_EXTERN) ? 0 /* undefined */ : 1 /* .text */,
+            .type = (code->flags & FN_EXTERN) ? 0 : IMAGE_SYM_DTYPE_FUNCTION,
             .scl = IMAGE_SYM_CLASS_EXTERNAL
         };
         coff_symadd(sym);
