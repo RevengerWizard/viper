@@ -547,6 +547,36 @@ uint32_t vp_type_offset(Type* ty, Str* name)
     return 0;
 }
 
+static void type_tostr(Type* ty, SBuf* sb);
+
+static void type_arrtostr(Type* ty, SBuf* sb)
+{
+    vp_buf_putb(sb, '[');
+    if(ty->len)
+    {
+        char num[32];
+        int len = snprintf(num, sizeof(num), "%u", ty->len);
+        vp_buf_putmem(sb, num, len);
+    }
+    vp_buf_putb(sb, ']');
+}
+
+static void type_fntostr(Type* ty, SBuf* sb)
+{
+    if(ty_isnilable(ty))
+    {
+        vp_buf_putb(sb, '?');
+    }
+    vp_buf_putb(sb, '(');
+    for(uint32_t i = 0; i < vec_len(ty->fn.params); i++)
+    {
+        if(i > 0) vp_buf_putlit(sb, ", ");
+        type_tostr(ty->fn.params[i], sb);
+    }
+    vp_buf_putlit(sb, ") : ");
+    type_tostr(ty->fn.ret, sb);
+}
+
 static void type_tostr(Type* ty, SBuf* sb)
 {
     if(ty_isconst(ty))
@@ -582,26 +612,47 @@ static void type_tostr(Type* ty, SBuf* sb)
             vp_buf_putb(sb, '*');
             break;
         case TY_array:
-            type_tostr(ty->p, sb);
-            vp_buf_putb(sb, '[');
-            if(ty->len)
+        {
+            Type* base = ty->p;
+            while(ty_isarr(base))
             {
-                char num[32];
-                int len = snprintf(num, sizeof(num), "%u", ty->len);
-                vp_buf_putmem(sb, num, len);
+                base = base->p;
             }
-            vp_buf_putb(sb, ']');
+
+            if(ty_isfn(base))
+            {
+                /* Array of functions */
+                Type* fnty = base;
+                vp_buf_putlit(sb, "fn");
+
+                if(ty_isnilable(fnty))
+                {
+                    vp_buf_putb(sb, '?');
+                }
+
+                /* Render all array subscripts from outermost to innermost */
+                Type* curr = ty;
+                while(curr->kind == TY_array)
+                {
+                    type_arrtostr(curr, sb);
+                    curr = curr->p;
+                }
+
+                /* Render function signature */
+                type_fntostr(fnty, sb);
+            }
+            else
+            {
+                /* Normal array */
+                type_tostr(ty->p, sb);
+                type_arrtostr(ty, sb);
+            }
             break;
+        }
         case TY_fn:
-            vp_buf_putlit(sb, "fn(");
-            for(uint32_t i = 0; i < vec_len(ty->fn.params); i++)
-            {
-                if(i > 0) vp_buf_putlit(sb, ", ");
-                type_tostr(ty->fn.params[i], sb);
-            }
-            vp_buf_putlit(sb, ") : ");
-            type_tostr(ty->fn.ret, sb);
-            break;
+            vp_buf_putlit(sb, "fn");
+            type_fntostr(ty, sb);
+            return;
         case TY_struct:
             vp_buf_putlit(sb, "struct ");
             if(ty->st.name)
@@ -619,7 +670,7 @@ static void type_tostr(Type* ty, SBuf* sb)
             vp_assertX(0, "%d", ty->kind);
             break;
     }
-    if(ty_qual(ty) & TQ_NILABLE)
+    if(ty_isnilable(ty))
     {
         vp_buf_putb(sb, '?');
     }

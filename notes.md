@@ -60,7 +60,11 @@
 
 - [ ] memory allocator!
 
-- [ ] switch statement
+- [ ] `switch` statement
+
+- [ ] `for` loop statement
+
+- [ ] untyped `def` declarations should expand into context type, not default `int32`
 
 ---
 

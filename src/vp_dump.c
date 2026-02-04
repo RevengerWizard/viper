@@ -882,12 +882,60 @@ static void dump_typespec(SBuf* sb, TypeSpec* spec)
             vp_buf_putb(sb, '*');
             break;
         case SPEC_ARRAY:
-            dump_typespec(sb, spec->arr.base);
-            vp_buf_putb(sb, '[');
-            if(spec->arr.expr != NULL)
-                dump_ast_expr(sb, spec->arr.expr);
-            vp_buf_putb(sb, ']');
+        {
+            TypeSpec* base = spec->arr.base;
+            while(base->kind == SPEC_ARRAY)
+            {
+                base = base->arr.base;
+            }
+
+            if(base->kind == SPEC_FN)
+            {
+                /* Array of functions */
+                TypeSpec* fnspec = base;
+                vp_buf_putlit(sb, "fn");
+
+                if(fnspec->qual & SPEC_NILABLE)
+                {
+                    vp_buf_putb(sb, '?');
+                }
+
+                /* Render all array subscripts from outermost to innermost */
+                TypeSpec* curr = spec;
+                while(curr->kind == SPEC_ARRAY)
+                {
+                    vp_buf_putb(sb, '[');
+                    if(curr->arr.expr != NULL)
+                        dump_ast_expr(sb, curr->arr.expr);
+                    vp_buf_putb(sb, ']');
+                    curr = curr->arr.base;
+                }
+
+                /* Render function signature */
+                vp_buf_putb(sb, '(');
+                for(uint32_t i = 0; i < vec_len(fnspec->fn.args); i++)
+                {
+                    TypeSpec* ts = fnspec->fn.args[i];
+                    dump_typespec(sb, ts);
+                    if(i != vec_len(fnspec->fn.args) - 1)
+                    {
+                        vp_buf_putlit(sb, ", ");
+                    }
+                }
+                vp_buf_putlit(sb, ") : ");
+                dump_typespec(sb, fnspec->fn.ret);
+            }
+            else
+            {
+                /* Normal array */
+                dump_typespec(sb, spec->arr.base);
+                vp_buf_putb(sb, '[');
+                if(spec->arr.expr != NULL)
+                    dump_ast_expr(sb, spec->arr.expr);
+                vp_buf_putb(sb, ']');
+            }
             break;
+        }
         case SPEC_FN:
             vp_buf_putlit(sb, "fn(");
             for(uint32_t i = 0; i < vec_len(spec->fn.args); i++)
