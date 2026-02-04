@@ -6,3 +6,6 @@
 *.lib
 *.bin
 .clangd
+*.dot
+*.dll
+*.obj
