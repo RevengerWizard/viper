@@ -291,10 +291,9 @@ static VReg* gen_name(Expr* e)
     Type* ty = e->ty;
     if(ty_isscalar(ty))
     {
-        Scope* scope;
-        VarInfo* vi = vp_scope_find(e->scope, e->name, &scope);
+        VarInfo* vi = e->vi;
         vp_assertX(vi, "name not found");
-        if(!vp_scope_isglob(scope))
+        if(!vs_isglob(vi))
         {
             vp_assertX(vi->vreg, "missing vreg %s", str_data(vi->name));
             return vi->vreg;
@@ -354,11 +353,9 @@ static VReg* gen_incdec(Expr* e)
     vp_assertX(e->ty, "no type");
     Expr* unary = e->unary;
     VarInfo* vi = NULL;
-    if(unary->kind == EX_NAME && !vp_scope_isglob(unary->scope))
+    if(unary->kind == EX_NAME && !vs_isglob(unary->vi))
     {
-        VarInfo* res = vp_scope_find(unary->scope, unary->name, NULL);
-        vp_assertX(res, "name not found");
-        vi = res;
+        vi = unary->vi;
     }
 
     VRSize vs = vp_vsize(e->ty);
@@ -415,11 +412,10 @@ static VReg* gen_ref(Expr* e)
     {
         case EX_NAME:
         {
-            Scope* scope;
             Str* name = e->name;
-            VarInfo* vi = vp_scope_find(e->scope, name, &scope);
+            VarInfo* vi = e->vi;
             vp_assertX(vi, "name not found");
-            if(vp_scope_isglob(scope))
+            if(vs_isglob(vi))
             {
                 return vp_ir_iofs(name, vi->storage & VS_FN, false, true)->dst;
             }
@@ -520,11 +516,11 @@ static VReg* gen_call(Expr* e)
     if(e->call.expr->kind == EX_NAME)
     {
         label = e->call.expr->name;
-        vi = vp_scope_find(e->call.expr->scope, e->call.expr->name, NULL);
+        vi = e->call.expr->vi;
         vp_assertX(vi, "'%s' not found", str_data(e->call.expr->name));
         vp_assertX(ty_isfn(vi->type), "'%s' not a function", str_data(vi->name));
         fn = vp_tab_get(&V->funcs, label);
-        isglob = (vi->storage & VS_GLOB) && !(vi->storage & VS_FN);
+        isglob = vs_isglob(vi) && !vs_isfn(vi);
     }
 
     if(!label)
@@ -560,7 +556,8 @@ static VReg* gen_call(Expr* e)
     } ArgInfo;
 
     vec_t(ArgInfo) arginfos = vec_init(ArgInfo);
-    uint32_t iidx = (fi != NULL) ? 1 : 0;
+    uint32_t argstart = (fi != NULL) ? 1 : 0;
+    uint32_t iidx = argstart;
     uint32_t fidx = 0;
     uint32_t offset = 0;
     uint32_t regargs = 0;
@@ -600,16 +597,22 @@ static VReg* gen_call(Expr* e)
         vec_push(arginfos, p);
     }
 
-    uint32_t argtotal = argnum + (fi != NULL ? 1 : 0);
+    uint32_t argtotal = argnum + argstart;
     VReg** args = argtotal == 0 ? NULL : vp_mem_calloc(argtotal, sizeof(*args));
+
+    /* Pre-compute arguments */
+    for(uint32_t i = 0; i < argnum; i++)
+    {
+        uint32_t vidx = i + argstart;
+        args[vidx] = gen_expr(e->call.args[i]);
+    }
 
     /* Generate arguments (in reverse, for stack) */
     for(uint32_t i = argnum; i-- > 0;)
     {
         Type* argty = e->call.args[i]->ty;
-        VReg* src = gen_expr(e->call.args[i]);
+        VReg* src = args[i + argstart];
         ArgInfo* p = &arginfos[i];
-        uint32_t argidx = (fi != NULL) ? i + 1 : i;
         switch(p->cls)
         {
             case PC_IREG:
@@ -629,8 +632,6 @@ static VReg* gen_call(Expr* e)
                 break;
             }
         }
-
-        args[argidx] = src;
     }
     if(fn && (fn->flags & FN_SYSCALL))
     {
@@ -1052,9 +1053,8 @@ static void gen_comp_assign(Stmt* st)
     Expr* rhs = st->rhs;
     if(lhs->kind == EX_NAME && ty_isscalar(lhs->ty))
     {
-        Scope* scope;
-        VarInfo* vi = vp_scope_find(lhs->scope, lhs->name, &scope);
-        if(vp_var_isloc(vi))
+        VarInfo* vi = lhs->vi;
+        if(vs_isloc(vi))
         {
             vp_assertX(vi->vreg, "empty vreg");
             VReg* vlhs = vi->vreg;
@@ -1081,8 +1081,8 @@ static void gen_assign(Stmt* st)
     VReg* src = gen_expr(rhs);
     if(lhs->kind == EX_NAME && ty_isscalar(lhs->ty))
     {
-        VarInfo* vi = vp_scope_find(lhs->scope, lhs->name, NULL);
-        if(vp_var_isloc(vi))
+        VarInfo* vi = lhs->vi;
+        if(vs_isloc(vi))
         {
             vp_assertX(vi->vreg, "empty vreg");
             vp_ir_mov(vi->vreg, src, ir_flag(rhs->ty));
@@ -1589,7 +1589,7 @@ static void glob_eval(Type* ty, Expr* e, DataEntry* entry, uint32_t baseofs, boo
         }
         case EX_NAME:
         {
-            VarInfo* vi = vp_scope_find(e->scope, e->name, NULL);
+            VarInfo* vi = e->vi;
             vp_assertX(vi, "name not found");
             if(isref || ty_isfn(e->ty))
             {

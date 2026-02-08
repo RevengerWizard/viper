@@ -979,7 +979,7 @@ static Type* sema_typespec(TypeSpec* spec)
                 vec_push(args, targ);
             }
             Type* ret = sema_typespec(spec->fn.ret);
-            ty = vp_type_func(ret, args);
+            ty = vp_type_fn(ret, args);
             break;
         }
         case SPEC_TYPEOF:
@@ -1101,9 +1101,8 @@ static Operand sema_name(Expr* e, Type* ret)
     {
         vp_err_error(e->loc, "unresolved name '%s'", str_data(e->name));
     }
-    Scope* scope;
-    vp_scope_find(V->currscope, e->name, &scope);
-    e->scope = scope;
+    VarInfo* vi = vp_scope_find(V->currscope, e->name, NULL);
+    e->vi = vi;
     switch(sym->kind)
     {
         case SYM_LET:
@@ -1114,7 +1113,7 @@ static Operand sema_name(Expr* e, Type* ret)
         case SYM_FN:
             return opr_rval(sym->type);
         default:
-            vp_err_error(e->loc, "%s must be a var", str_data(e->name));
+            vp_err_error(e->loc, "'%s' must be a var", str_data(e->name));
             return (Operand){};
     }
 }
@@ -2166,7 +2165,11 @@ static Type* sema_fn(Decl* d)
     {
         vp_err_error(d->loc, "function return type cannot be array");
     }
-    return vp_type_func(ret, params);
+    Type* ty = vp_type_fn(ret, params);
+    /* Add function name to global scope */
+    VarInfo* vi = vp_scope_add(V->globscope, d->name, ty);
+    vi->storage |= VS_FN;
+    return ty;
 }
 
 /* Resolve function body */
@@ -2452,9 +2455,6 @@ static void sema_complete()
                     break;
                 case SYM_FN:
                 {
-                    /* Add function name to global scope */
-                    VarInfo* vi = vp_scope_add(V->globscope, sym->name, sym->type);
-                    vi->storage |= VS_FN;
                     if(sym->mod == S.root)
                     {
                         sema_fn_body(sym);

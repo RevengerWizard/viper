@@ -407,7 +407,7 @@ Type* vp_type_arr(Type* t, uint32_t len)
     return ty;
 }
 
-Type* vp_type_func(Type* ret, vec_t(Type*) params)
+Type* vp_type_fn(Type* ret, vec_t(Type*) params)
 {
     for(uint32_t i = 0; i < vec_len(V->cachefn); i++)
     {

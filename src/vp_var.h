@@ -19,6 +19,11 @@ enum
     VS_PUB = 1 << 2,
 };
 
+#define vs_isglob(vi) ((vi)->storage & VS_GLOB)
+#define vs_isfn(vi) ((vi)->storage & VS_FN)
+#define vs_ispub(vi) ((vi)->storage & VS_PUB)
+#define vs_isloc(vi) (!vs_isglob(vi))
+
 typedef struct VarInfo
 {
     uint8_t storage;
@@ -40,12 +45,6 @@ VarInfo* vp_scope_find(Scope* scope, Str* name, vec_t(Scope*) p);
 VarInfo* vp_scope_add(Scope* scope, Str* name, Type* ty);
 Scope* vp_scope_begin();
 void vp_scope_end();
-
-/* Check if variable is local storage */
-static VP_AINLINE bool vp_var_isloc(VarInfo* vi)
-{
-    return !(vi->storage & VS_GLOB);
-}
 
 /* Check if it's global scope */
 static VP_AINLINE bool vp_scope_isglob(Scope* scope)

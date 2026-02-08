@@ -131,6 +131,7 @@ Expr* vp_expr_name(SrcLoc loc, Str* name)
 {
     Expr* expr = expr_new(EX_NAME, loc);
     expr->name = name;
+    expr->vi = NULL;
     return expr;
 }
 

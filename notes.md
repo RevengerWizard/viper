@@ -34,9 +34,11 @@
 
 - [ ] default constant values for `struct`/`union` fields?
 
-- [ ] default constexpr function parameters
+- [ ] default constexpr `fn` parameters
 
-- [X] nil-able types `uint8*?`
+- [X] nil-able types `T*?`
+
+- [ ] not-deferenceable `const T*`
 
 - [X] enums
 
@@ -56,7 +58,10 @@
 
 - [ ] unnamed `struct`/`union`/`enum` types
 
-- [ ] `std::io` module
+- [ ] `std` modules
+    * [ ] `std::io`
+    * [ ] `std::mem`
+    * [ ] `std::math`
 
 - [ ] memory allocator!
 
@@ -65,6 +70,8 @@
 - [ ] `for` loop statement
 
 - [ ] untyped `def` declarations should expand into context type, not default `int32`
+
+- [ ] fix nested function calls in code generation
 
 ---
 
@@ -194,19 +201,13 @@ asm
 ### std
 
 `os::exit(x : uint32)`
-
 `os::getenv`
 
 `io::write(f : FILE*, buf : const uint8*, n : usize) : usize`
-
 `io::read(f : FILE*, buf : uint8*, n : usize) : usize`
-
 `io::flush(f : FILE*)`
-
 `io::fmt`
-
 `io::print`
-
 `io::println`
 
 `str::len(s : const uint8*) : usize`
@@ -216,15 +217,10 @@ asm
 `str::tof64`
 
 `mem::copy(dst : void*, src : const void*, n : usize) : void`
-
 `mem::move(dst : void*, src : const void*, n : usize) : void`
-
 `mem::set(dst : void*, val : uint32, n : usize) : void`
-
 `mem::cmp(a : const void*, b : const void*, n : usize) : int32`
-
 `mem::alloc(n : usize) : void*`
-
 `mem::free(p : void*) : void`
 
 `math::abs`
@@ -244,7 +240,6 @@ asm
 `math::sqrtf64(x : float64) : float64`
 
 `math::min(a : T, b : T) : T`
-
 `math::max(a : T, b : T) : T`
 
 `math::pi : float64`
@@ -340,15 +335,15 @@ Precision
 
 `likely` `unlikely`
 
-`extern "C"`
-
 `aligned(8)`
 
 `alias`
 
-`export` `extern` ?
+`export` `extern` `extern "C"`
 
 `goto` ?
+
+`use` ?
 
 ---
 

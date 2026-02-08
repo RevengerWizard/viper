@@ -152,7 +152,7 @@ typedef struct Expr
         struct
         {
             Str* name;
-            Scope* scope;
+            VarInfo* vi;
         };
         struct
         {
