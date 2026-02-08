@@ -146,6 +146,40 @@ uint32_t vp_type_alignof(Type* t)
     return 0;
 }
 
+/* Get min value of a type */
+int64_t vp_type_min(Type* t)
+{
+    switch(t->kind)
+    {
+    case TY_int8: return INT8_MIN;
+    case TY_int16: return INT16_MIN;
+    case TY_int32: return INT32_MIN;
+    case TY_int64: return INT64_MIN;
+    case TY_uint8:
+    case TY_uint16:
+    case TY_uint32:
+    case TY_uint64: return 0;
+    default: vp_assertX(0, "?"); return -1;
+    }
+}
+
+/* Get max value of a type */
+int64_t vp_type_max(Type* t)
+{
+    switch(t->kind)
+    {
+    case TY_uint8: return UINT8_MAX;
+    case TY_int8: return INT8_MAX;
+    case TY_uint16: return UINT16_MAX;
+    case TY_int16: return INT16_MAX;
+    case TY_uint32: return UINT32_MAX;
+    case TY_int32: return INT32_MAX;
+    case TY_uint64: return UINT64_MAX;
+    case TY_int64: return INT64_MAX;
+    default: vp_assertX(0, "?"); return -1;
+    }
+}
+
 /* Check implicit type cast (dst <- src) is valid */
 bool vp_type_isconv(Type* dst, Type* src)
 {

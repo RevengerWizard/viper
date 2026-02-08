@@ -44,7 +44,7 @@
 
 - [X] incomplete struct/union declarations `struct tea_State;`
 
-- [ ] local `alias`/`type`/`struct`/`union`/`enum` declarations
+- [ ] local `def`/`alias`/`type`/`struct`/`union`/`enum` declarations
 
 - [X] support output of .dot files
 
@@ -72,6 +72,8 @@
 - [ ] untyped `def` declarations should expand into context type, not default `int32`
 
 - [ ] fix nested function calls in code generation
+
+- [ ] `enum E : uint8` must create separate type, not `alias`
 
 ---
 

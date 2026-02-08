@@ -102,6 +102,11 @@ static Expr* expr_tycast(LexState* ls, SrcLoc loc)
 {
     Type* type = tok2type(ls->prev);
     vp_assertX(type, "no type");
+    if(lex_match(ls, TK_dcolon))
+    {
+        Str* attr = lex_name(ls);
+        return vp_expr_access_type(loc, attr, type);
+    }
     TypeSpec* spec = vp_typespec_type(loc, type);
     vp_lex_consume(ls, '(');
     Expr* e = expr(ls);

@@ -1182,6 +1182,10 @@ static void dump_ast_expr(SBuf* sb, Expr* e)
             dump_ast_expr(sb, e->access.expr);
             dump_fmt(sb, "::%s", str_data(e->access.name));
             break;
+        case EX_ACCESS_TYPE:
+            dump_ast_type(sb, e->accessty.ty);
+            dump_fmt(sb, "::%s", str_data(e->accessty.name));
+            break;
         case EX_IDX:
             dump_ast_expr(sb, e->idx.expr);
             vp_buf_putb(sb, '[');

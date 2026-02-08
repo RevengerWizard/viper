@@ -995,7 +995,7 @@ static const GenExprFn genexprtab[] = {
 static VReg* gen_expr(Expr* e)
 {
     vp_assertX(e->ty, "missing type");
-    vp_assertX(e->kind < (int)ARRSIZE(genexprtab), "out of bounds expression kind");
+    vp_assertX(e->kind < (int)ARRSIZE(genexprtab), "out of bounds expression kind %d" , e->kind);
     vp_assertX(genexprtab[e->kind], "empty entry %d", e->kind);
     return (*genexprtab[e->kind])(e);
 }

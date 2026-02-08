@@ -187,6 +187,8 @@ extern const char* const vp_type_names[];
 
 uint32_t vp_type_sizeof(Type* t);
 uint32_t vp_type_alignof(Type* t);
+int64_t vp_type_min(Type* t);
+int64_t vp_type_max(Type* t);
 bool vp_type_isconv(Type* dst, Type* src);
 bool vp_type_iscast(Type* dst, Type* src);
 bool vp_type_isptrcomp(Type* lty, Type* rty);

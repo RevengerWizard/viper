@@ -176,6 +176,14 @@ Expr* vp_expr_access(SrcLoc loc, Expr* e, Str* name)
     return expr;
 }
 
+Expr* vp_expr_access_type(SrcLoc loc, Str* name, Type* ty)
+{
+    Expr* expr = expr_new(EX_ACCESS_TYPE, loc);
+    expr->accessty.name = name;
+    expr->accessty.ty = ty;
+    return expr;
+}
+
 Expr* vp_expr_cast(SrcLoc loc, ExprKind kind, TypeSpec* spec, Expr* e)
 {
     vp_assertX(kind <= EX_CAST || kind <= EX_BITCAST, "not a cast");

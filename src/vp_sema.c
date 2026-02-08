@@ -1523,15 +1523,47 @@ static Operand sema_field(Expr* e, Type* ret)
     return (Operand){};
 }
 
+/* Resolve access type expression */
+static Operand sema_access_type(Expr* e, Type* ret)
+{
+    vp_assertX(e->kind == EX_ACCESS_TYPE, "access type");
+
+    Type* ty = e->accessty.ty;
+    Str* name = e->accessty.name;
+
+    if(!ty_isint(ty))
+    {
+        vp_err_error(e->loc, "type '%s' does not support '::' access", type_str(ty));
+    }
+
+    bool ismax = (name->len == 3 && str_data(name)[0] == 'm' && str_data(name)[1] == 'a' && str_data(name)[2] == 'x');
+    bool ismin = (name->len == 3 && str_data(name)[0] == 'm' && str_data(name)[1] == 'i' && str_data(name)[2] == 'n');
+    if(!(ismax || ismin))
+    {
+        vp_err_error(e->loc, "unknown type property '%s'", str_data(name));
+    }
+
+    Type* rty = ret ? ret : ty;
+    Val val = {0};
+    if(ismax)
+    {
+        val = val_fromtype(e->loc, rty, vp_type_max(ty));
+    }
+    else
+    {
+        val = val_fromtype(e->loc, rty, vp_type_min(ty));
+    }
+    return opr_const(rty, val);
+}
+
 /* Resolve access expression */
 static Operand sema_access(Expr* e, Type* ret)
 {
-    UNUSED(ret);
     vp_assertX(e->kind == EX_ACCESS, "access");
 
     if(e->access.expr->kind != EX_NAME)
     {
-        vp_err_error(e->loc, "left side of '::' must be an enum type name");
+        vp_err_error(e->loc, "left side of '::' must be a name");
     }
 
     Str* name = e->access.name;
@@ -1557,17 +1589,10 @@ static Operand sema_access(Expr* e, Type* ret)
         vp_err_error(e->loc, "enum '%s' has no constant '%s'", str_data(decl->name), str_data(name));
     }
 
-    Operand opr;
-    if(ty_isunsigned(item->ty))
-    {
-        opr = opr_const(item->ty, (Val){.u64 = item->val});
-    }
-    else
-    {
-        opr = opr_const(item->ty, (Val){.i64 = item->val});
-    }
+    Type* ty = ret ? ret : item->ty;
+    Val val = val_fromtype(e->loc, ty, item->val);
     e->access.val = item->val;
-    return opr;
+    return opr_const(item->ty, val);
 }
 
 /* Resolve index expression */
@@ -1723,25 +1748,28 @@ static Operand sema_bitcast(Expr* e, Type* ret)
 /* Resolve sizeof expression */
 static Operand sema_sizeof(Expr* e, Type* ret)
 {
-    UNUSED(ret);
     Type* ty = sema_typespec(e->spec);
     sym_complete(ty);
-    return opr_const(tyusize, (Val){.u64 = vp_type_sizeof(ty)});
+    Type* rty = ret ? ret : tyusize;
+    uint32_t size = vp_type_sizeof(ty);
+    Val val = val_fromtype(e->loc, rty, size);
+    return opr_const(rty, val);
 }
 
 /* Resolve alignof expression */
 static Operand sema_alignof(Expr* e, Type* ret)
 {
-    UNUSED(ret);
     Type* ty = sema_typespec(e->spec);
     sym_complete(ty);
-    return opr_const(tyusize, (Val){.u64 = vp_type_alignof(ty)});
+    Type* rty = ret ? ret : tyusize;
+    uint32_t align = vp_type_alignof(ty);
+    Val val = val_fromtype(e->loc, rty, align);
+    return opr_const(rty, val);
 }
 
 /* Resolve offsetof expression */
 static Operand sema_offsetof(Expr* e, Type* ret)
 {
-    UNUSED(ret);
     Type* ty = sema_typespec(e->spec);
     sym_complete(ty);
     if(!ty_isaggr(ty))
@@ -1753,7 +1781,10 @@ static Operand sema_offsetof(Expr* e, Type* ret)
     {
         vp_err_error(e->loc, "no field '%s' in type", str_data(e->ofst.name));
     }
-    return opr_const(tyusize, (Val){.u64 = ty->st.fields[idx].offset});
+    Type* rty = ret ? ret : tyusize;
+    uint32_t ofs = ty->st.fields[idx].offset;
+    Val val = val_fromtype(e->loc, rty, ofs);
+    return opr_const(rty, val);
 }
 
 typedef Operand (*SemaExprFn)(Expr*, Type*);
@@ -1799,6 +1830,7 @@ static const SemaExprFn semaexprtab[] = {
     [EX_COMPLIT] = sema_complit,
     [EX_FIELD] = sema_field,
     [EX_ACCESS] = sema_access,
+    [EX_ACCESS_TYPE] = sema_access_type,
     [EX_IDX] = sema_idx,
     [EX_CALL] = sema_call,
     [EX_CAST] = sema_cast,

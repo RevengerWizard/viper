@@ -112,6 +112,7 @@ typedef enum ExprKind
     EX_IDX,
     EX_FIELD,
     EX_ACCESS,
+    EX_ACCESS_TYPE,
     EX__MAX
 } ExprKind;
 
@@ -190,6 +191,11 @@ typedef struct Expr
             struct Expr* expr;
             Str* name;
         } access;
+        struct
+        {
+            Type* ty;
+            Str* name;
+        } accessty;
         struct
         {
             TypeSpec* spec;
@@ -452,6 +458,7 @@ Expr* vp_expr_call(SrcLoc loc, Expr* e, vec_t(Expr*) args);
 Expr* vp_expr_idx(SrcLoc loc, Expr* e, Expr* idx);
 Expr* vp_expr_field(SrcLoc loc, Expr* e, Str* name);
 Expr* vp_expr_access(SrcLoc loc, Expr* e, Str* name);
+Expr* vp_expr_access_type(SrcLoc loc, Str* name, Type* ty);
 Expr* vp_expr_cast(SrcLoc loc, ExprKind kind, TypeSpec* spec, Expr* e);
 Expr* vp_expr_sizeof(SrcLoc loc, TypeSpec* spec);
 Expr* vp_expr_alignof(SrcLoc loc, TypeSpec* spec);
