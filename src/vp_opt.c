@@ -10,12 +10,22 @@
 #include "vp_tab.h"
 #include "vp_vec.h"
 
-/* Get last JMP IR, if any */
+/* Get last IR_JMP, if any */
 static IR* ir_lastjmp(BB* bb)
 {
     uint32_t len = vec_len(bb->irs);
     IR* ir;
     if(len > 0 && (ir = bb->irs[len - 1])->kind == IR_JMP)
+        return ir;
+    return NULL;
+}
+
+/* Get last IR_TJMP, if any */
+static IR* ir_lastjtable(BB* bb)
+{
+    uint32_t len = vec_len(bb->irs);
+    IR* ir;
+    if(len > 0 && (ir = bb->irs[len - 1])->kind == IR_TJMP)
         return ir;
     return NULL;
 }
@@ -33,6 +43,15 @@ static void jmp_replace(vec_t(BB*) bbs, BB* dst, BB* src)
         if(ir != NULL && ir->jmp.bb == src)
         {
             ir->jmp.bb = dst;
+        }
+
+        ir = ir_lastjtable(bb);
+        if(ir != NULL)
+        {
+            for(uint32_t j = 0; j < ir->tjmp.len; j++)
+            {
+                if(ir->tjmp.bbs[j] == src) ir->tjmp.bbs[j] = dst;
+            }
         }
     }
 }
@@ -90,6 +109,15 @@ static void bb_remove_unused(vec_t(BB*)* bbs)
             if((irjmp == NULL || irjmp->jmp.cond != COND_ANY) && bb->next != NULL)
             {
                 vp_tab_set(&keep, bb->next->label, bb);
+            }
+
+            irjmp = ir_lastjtable(bb);
+            if(irjmp != NULL)
+            {
+                for(uint32_t j = 0; j < irjmp->tjmp.len; j++)
+                {
+                    vp_tab_set(&keep, irjmp->tjmp.bbs[j]->label, bb);
+                }
             }
 
             if(rem)

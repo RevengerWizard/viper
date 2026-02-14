@@ -5,6 +5,7 @@
 
 #include <stdbool.h>
 #include <string.h>
+#include <stdlib.h>
 
 #include "vp_codegen.h"
 #include "vp_abi.h"
@@ -216,13 +217,7 @@ static Str* str_data_get(Str* str)
         sym = vp_str_label();
 
         uint32_t size = str->len + 1; /* + '\0' */
-        DataEntry* de = vp_mem_calloc(1, sizeof(DataEntry));
-        de->kind = DATA_STR;
-        de->name = sym;
-        de->ofs = 0;
-        de->size = size;
-        de->align = 2;
-        de->data = vp_mem_calloc(1, size);
+        DataEntry* de = vp_data_new(DATA_STR, sym, size, 2);
         memcpy(de->data, str_data(str), str->len);
         de->data[str->len] = 0;  /* '\0' */
 
@@ -1314,6 +1309,166 @@ static void gen_while_stmt(Stmt* st)
     bb_pop_break(breakbb1);
 }
 
+/* Compare cases */
+static int case_compare(const void* pa, const void* pb)
+{
+    const SwitchCase* ca = (const SwitchCase*)pa;
+    const SwitchCase* cb = (const SwitchCase*)pb;
+    if(ca->e == NULL) return 1;
+    if(cb->e == NULL) return -1;
+    int64_t d = ca->val - cb->val;
+    return d > 0 ? 1 : d < 0 ? -1 : 0;
+}
+
+/* Generate switch condition table jump */
+static void gen_tjmp(BB* skipbb, SwitchCase* cases, VReg* vr, uint32_t len, CondKind cond)
+{
+    int64_t min = cases[0].val;
+    int64_t max = cases[len - 1].val;
+    int64_t range = max - min + 1;
+
+    BB** table = vp_mem_alloc(sizeof(*table) * range);
+    for(int64_t i = 0; i < range; i++)
+    {
+        table[i] = skipbb;
+    }
+    for(uint32_t i = 0; i < len; i++)
+    {
+        SwitchCase* cs = &cases[i];
+        table[cs->val - min] = cs->bb;
+    }
+
+    BB* nextbb = vp_bb_new();
+    VReg* val = vr;
+    if(min != 0)
+    {
+        uint8_t irflag = (cond & COND_UNSIGNED) ? IRF_UNSIGNED : 0;
+        val = vp_ir_binop(IR_SUB, vr, vp_vreg_ki(min, vr->vsize), vr->vsize, irflag);
+    }
+    vp_ir_cjmp(val, vp_vreg_ki(max - min, val->vsize), COND_GT | COND_UNSIGNED, skipbb);
+    vp_bb_setcurr(nextbb);
+    vp_ir_tjmp(val, table, range);
+}
+
+/* Generate switch body jumps, recursively */
+static void gen_switch(BB* breakbb, SwitchCase* defst, SwitchCase* cases, VReg* vr, uint32_t len, CondKind cond)
+{
+    if(len <= 2)
+    {
+        for(uint32_t i = 0; i < len; i++)
+        {
+            BB* nextbb = vp_bb_new();
+            SwitchCase* cs = &cases[i];
+            VReg* num = vp_vreg_ki(cs->val, vr->vsize);
+            vp_ir_cjmp(vr, num, COND_EQ | cond, cs->bb);
+            vp_bb_setcurr(nextbb);
+        }
+        vp_ir_jmp(defst ? defst->bb : breakbb);
+    }
+    else
+    {
+        SwitchCase* min = &cases[0];
+        SwitchCase* max = &cases[len - 1];
+        int64_t range = max->val - min->val + 1;
+        if(range >= 4 && len > (range >> 1))
+        {
+            /* range >= 4 and density > 50%: use jump table */
+            gen_tjmp(defst ? defst->bb : breakbb, cases, vr, len, cond);
+            return;
+        }
+
+        BB* bbne = vp_bb_new();
+        uint32_t m = len >> 1;
+        SwitchCase* cs = &cases[m];
+        VReg* num = vp_vreg_ki(cs->val, vr->vsize);
+        vp_ir_cjmp(vr, num, COND_EQ | cond, cs->bb);
+        vp_bb_setcurr(bbne);
+
+        BB* bblt = vp_bb_new();
+        BB* bbgt = vp_bb_new();
+        vp_ir_cjmp(vr, num, COND_GT | cond, bbgt);
+        vp_bb_setcurr(bblt);
+        gen_switch(breakbb, defst, cases, vr, m, cond);
+        vp_bb_setcurr(bbgt);
+        gen_switch(breakbb, defst, cases + (m + 1), vr, len - (m + 1), cond);
+    }
+}
+
+/* Generate switch condition */
+static void gen_switch_cond(Expr* cond, SwitchCase* cases, SwitchCase* defst, BB* breakbb)
+{
+    Type* ty = cond->ty;
+    vp_assertX(ty, "missing switch condition type");
+    VReg* vr = gen_expr(cond);
+    uint32_t len = vec_len(cases);
+    if(vrf_const(vr))
+    {
+        /* Constant expression, just jump */
+        int64_t val = vr->i64;
+        SwitchCase* targ = defst;
+        for(uint32_t i = 0; i < len; i++)
+        {
+            SwitchCase* cs = &cases[i];
+            if(cs->e != NULL && cs->val == val)
+            {
+                targ = cs;
+                break;
+            }
+        }
+
+        BB* nextbb = vp_bb_new();
+        vp_ir_jmp(targ ? targ->bb : breakbb);
+        vp_bb_setcurr(nextbb);
+    }
+    else
+    {
+        vp_assertX(len > 0, "empty switch");
+        /* Sort cases in increasing order */
+        qsort(cases, len, sizeof(*cases), case_compare);
+
+        if(defst != NULL) len--;    /* Ignore default */
+        CondKind cond = ty_isunsigned(ty) ? COND_UNSIGNED : 0;
+        gen_switch(breakbb, defst, cases, vr, len, cond);
+    }
+    vp_bb_setcurr(vp_bb_new());
+}
+
+/* Generate switch statement */
+static void gen_switch_stmt(Stmt* st)
+{
+    vp_assertX(st->kind == ST_SWITCH, "not a switch statement");
+    BB* savebb;
+    BB* breakbb = bb_push_break(&savebb);
+
+    SwitchCase* defst = NULL;
+    for(uint32_t i = 0; i < vec_len(st->swst.cases); i++)
+    {
+        SwitchCase* cs = &st->swst.cases[i];
+        BB* bb = vp_bb_new();
+        cs->bb = bb;
+        if(cs->e == NULL)
+        {
+            defst = cs;
+        }
+    }
+
+    gen_switch_cond(st->swst.cond, st->swst.cases, defst, breakbb);
+
+    /* Generate cases and default (if any) */
+    for(uint32_t i = 0; i < vec_len(st->swst.cases); i++)
+    {
+        SwitchCase* cs = &st->swst.cases[i];
+        vp_bb_setcurr(cs->bb);
+        gen_stmt(cs->body);
+
+        /* Implicitly break at the end of the block */
+        gen_break(NULL);
+    }
+
+    vp_bb_setcurr(breakbb);
+    bb_pop_break(savebb);
+}
+
 /* Generate asm block statement */
 static void gen_asm(Stmt* st)
 {
@@ -1340,6 +1495,7 @@ static const GenStmtFn gensttab[] = {
     [ST_IF] = gen_if_stmt,
     [ST_FOR] = gen_for_stmt,
     [ST_WHILE] = gen_while_stmt,
+    [ST_SWITCH] = gen_switch_stmt,
     [ST_RETURN] = gen_ret,
     [ST_BREAK] = gen_break,
     [ST_CONTINUE] = gen_continue,
@@ -1541,45 +1697,37 @@ static Code* gen_fn(Decl* d)
     return code;
 }
 
-static VP_AINLINE void write_int(uint8_t* data, uint32_t offset, uint64_t val, uint32_t size)
-{
-    for(uint32_t i = 0; i < size; i++)
-    {
-        data[offset + i] = (val >> (i * 8)) & 0xFF;
-    }
-}
-
 static void glob_eval(Type* ty, Expr* e, DataEntry* entry, uint32_t baseofs, bool isref)
 {
     switch(e->kind)
     {
         case EX_NIL:
         {
-            write_int(entry->data, baseofs, 0, vp_type_sizeof(ty));
+            vp_wint(entry->data, baseofs, 0, vp_type_sizeof(ty));
             break;
         }
         case EX_TRUE:
         case EX_FALSE:
         {
-            write_int(entry->data, baseofs, e->b, vp_type_sizeof(ty));
+            vp_wint(entry->data, baseofs, e->b, vp_type_sizeof(ty));
             break;
         }
         case EX_NUM:
         {
             union { double d; uint64_t u; } conv = {.d = e->n};
-            write_int(entry->data, baseofs, conv.u, vp_type_sizeof(ty));
+            vp_wint(entry->data, baseofs, conv.u, vp_type_sizeof(ty));
             break;
         }
         case EX_FLO:
         {
             union { float f; uint32_t u; } conv = {.f = e->f};
-            write_int(entry->data, baseofs, conv.u, vp_type_sizeof(ty));
+            vp_wint(entry->data, baseofs, conv.u, vp_type_sizeof(ty));
             break;
         }
         case EX_UINT:
         case EX_INT:
         {
-            write_int(entry->data, baseofs, e->i, vp_type_sizeof(ty));
+            vp_wint(entry->data, baseofs, e->i, vp_type_sizeof(ty));
             break;
         }
         case EX_REF:
@@ -1593,13 +1741,8 @@ static void glob_eval(Type* ty, Expr* e, DataEntry* entry, uint32_t baseofs, boo
             vp_assertX(vi, "name not found");
             if(isref || ty_isfn(e->ty))
             {
-                Reloc rel = {
-                    .entry = entry,
-                    .ofs = baseofs,
-                    .sym = e->name
-                };
-                vec_push(V->relocs, rel);
-                write_int(entry->data, baseofs, 0, TARGET_PTR_SIZE);
+                vp_reloc_add(entry, baseofs, e->name);
+                vp_wint(entry->data, baseofs, 0, TARGET_PTR_SIZE);
             }
             break;
         }
@@ -1614,14 +1757,8 @@ static void glob_eval(Type* ty, Expr* e, DataEntry* entry, uint32_t baseofs, boo
             {
                 vp_assertX(ty_isptr(ty), "?");
                 Str* sym = str_data_get(s);
-                Reloc rel = {
-                    .entry = entry,
-                    .ofs = baseofs,
-                    .sym = sym,
-                    .isfn = false
-                };
-                vec_push(V->relocs, rel);
-                write_int(entry->data, baseofs, 0, TARGET_PTR_SIZE);
+                vp_reloc_add(entry, baseofs, sym);
+                vp_wint(entry->data, baseofs, 0, TARGET_PTR_SIZE);
             }
             break;
         }
@@ -1632,23 +1769,10 @@ static void glob_eval(Type* ty, Expr* e, DataEntry* entry, uint32_t baseofs, boo
             if(isref)
             {
                 Str* anon = vp_anon_label();
-
                 uint32_t size = vp_type_sizeof(e->ty);
-                DataEntry* newentry = vp_mem_calloc(1, sizeof(DataEntry));
-                newentry->kind = DATA_ANON;
-                newentry->name = anon;
-                newentry->ofs = 0;
-                newentry->size = size;
-                newentry->align = vp_type_alignof(e->ty);
-                newentry->data = vp_mem_calloc(1, size);
-
-                Reloc rel = {
-                    .entry = entry,
-                    .ofs = baseofs,
-                    .sym = anon,
-                };
-                vec_push(V->relocs, rel);
-
+                uint32_t align = vp_type_alignof(e->ty);
+                DataEntry* newentry = vp_data_new(DATA_ANON, anon, size, align);
+                vp_reloc_add(entry, baseofs, anon);
                 for(uint32_t i = 0; i < vec_len(flat); i++)
                 {
                     FlatField* ff = &flat[i];
@@ -1656,7 +1780,7 @@ static void glob_eval(Type* ty, Expr* e, DataEntry* entry, uint32_t baseofs, boo
                 }
                 vec_push(V->globdata, newentry);
 
-                write_int(entry->data, baseofs, 0, TARGET_PTR_SIZE);
+                vp_wint(entry->data, baseofs, 0, TARGET_PTR_SIZE);
                 break;
             }
             for(uint32_t i = 0; i < vec_len(flat); i++)
@@ -1680,14 +1804,7 @@ static void gen_glob(Decl* d)
     uint32_t size = vp_type_sizeof(ty);
     uint32_t align = vp_type_alignof(ty);
 
-    uint8_t* data = vp_mem_calloc(1, size);
-    DataEntry* entry = vp_mem_calloc(1, sizeof(DataEntry));
-    entry->kind = DATA_VAR;
-    entry->name = d->name;
-    entry->ofs = 0;
-    entry->size = size;
-    entry->align = align;
-    entry->data = data;
+    DataEntry* entry = vp_data_new(DATA_VAR, d->name, size, align);
     vec_push(V->globdata, entry);
 
     if(d->var.expr)

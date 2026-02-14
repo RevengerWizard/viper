@@ -295,6 +295,7 @@ static void lowX64_body(Code* code)
         lowX64_params(code);
     }
 
+    V->fncode = code;
     /* Lower basic block IRs */
     for(uint32_t i = 0; i < vec_len(code->bbs); i++)
     {

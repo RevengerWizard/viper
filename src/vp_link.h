@@ -17,8 +17,12 @@ typedef struct Reloc
 {
     DataEntry* entry;
     uint32_t ofs;   /* Offset in data buffer */
-    Str* sym;   /* Relocation symbol name */
-    bool isfn;
+    struct
+    {
+        BB* bb;
+        Str* sym;   /* Relocation symbol name */
+    };
+    bool isbb;
 } Reloc;
 
 typedef struct ImportFunc
@@ -57,6 +61,8 @@ typedef struct PatchInfo
 } PatchInfo;
 
 void vp_link(void);
+DataEntry* vp_data_new(DataKind kind, Str* name, uint32_t size, uint32_t align);
+void vp_reloc_add(DataEntry* de, uint32_t ofs, Str* sym);
 
 static VP_AINLINE void patchinfo_learel(Code* fn, uint32_t ofs)
 {

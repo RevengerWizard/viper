@@ -4,29 +4,45 @@
 
 - [X] `import`, `from`, `as`
 
-- [ ] intrinsics
-
 - [X] `asm` blocks
 
 - [x] `def` declarations
 
-- [ ] fix casts, conversions
-
 - [X] fix `const` types
 
-- [X] object files
-    * [X] COFF
-    * [ ] ELF
+- [X] enums
+
+- [X] incomplete struct/union declarations `struct tea_State;`
+
+- [X] support output of .dot files
+
+- [X] nil-able types `T*?`
+
+- [X] anonymous `struct`/`union`
+
+- [X] strings emission
+
+- [X] globals emission
+
+- [X] function prototypes from dynamic (Win32) libraries
+
+- [X] `for` loop statement
+
+- [X] fix nested function calls in code generation
+
+- [X] `switch` statement
+
+- [ ] intrinsics
+
+- [ ] object files
+    - [X] COFF
+    - [ ] ELF
+
+- [ ] fix casts, conversions
 
 - [ ] linker?
 
 - [ ] length from string literals/arrays
-
-- [X] function prototypes from dynamic (Win32) libraries
-
-- [X] globals emission
-
-- [X] strings emission
 
 - [ ] macros?
 
@@ -36,44 +52,32 @@
 
 - [ ] default constexpr `fn` parameters
 
-- [X] nil-able types `T*?`
-
 - [ ] not-deferenceable `const T*`
 
-- [X] enums
-
-- [X] incomplete struct/union declarations `struct tea_State;`
-
 - [ ] local `def`/`alias`/`type`/`struct`/`union`/`enum` declarations
-
-- [X] support output of .dot files
 
 - [ ] instruction selection: x64, ARM64, RV64
 
 - [ ] multi-target architectures: x64, ARM64, RV64
-
-- [X] anonymous `struct`/`union`
 
 - [ ] `packed` for `struct`/`union`
 
 - [ ] unnamed `struct`/`union`/`enum` types
 
 - [ ] `std` modules
-    * [ ] `std::io`
-    * [ ] `std::mem`
-    * [ ] `std::math`
+    - [ ] `std::io`
+    - [ ] `std::mem`
+    - [ ] `std::math`
 
 - [ ] memory allocator!
 
-- [ ] `switch` statement
-
-- [ ] `for` loop statement
+- [ ] `switch type(x)`
 
 - [ ] untyped `def` declarations should expand into context type, not default `int32`
 
-- [ ] fix nested function calls in code generation
-
 - [ ] `enum E : uint8` must create separate type, not `alias`
+
+- [ ] `sizeof(T)` vs `sizeof(expr)` ?
 
 ---
 
@@ -323,29 +327,33 @@ Precision
 
 `pub`
 
-`typeid`
-
 `typeof` `sizeof` `alignof` `offsetof`
+
+`inline`
+
+`noreturn` `packed`
+
+`alias`
+
+`export` `extern`
+
+---
 
 `lenof`
 
 `unreachable`
 
-`inline` `noinline`
-
-`noreturn` `packed`
-
 `likely` `unlikely`
 
 `aligned(8)`
 
-`alias`
-
-`export` `extern` `extern "C"`
+`extern "C"`
 
 `goto` ?
 
 `use` ?
+
+`typeid` ?
 
 ---
 

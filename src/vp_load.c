@@ -65,7 +65,6 @@ void vp_load(VpState* V, const char* filename)
     vec_t(Code*) codes = vp_codegen(decls);
     V->codes = codes;
     vp_lowX64(codes);
-    vp_layout_init(&V->L);
     vp_link();
     //vp_dump_typecache();
     //vp_dump_code(codes);

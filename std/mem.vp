@@ -1,4 +1,4 @@
-fn copy(dst : void*, src : const void*, n : usize) : void*
+pub fn copy(dst : void*, src : const void*, n : usize) : void*
 {
     var s : const uint8* = src;
     var d : uint8* = dst;
@@ -7,4 +7,123 @@ fn copy(dst : void*, src : const void*, n : usize) : void*
         *d++ = *s++;
     }
     return dst;
+}
+
+from "windows" import *
+
+fn strlen(s : const uint8*) : DWORD
+{
+    var i : DWORD = 0;
+    while s[i] != '\0' { i++; }
+    return i;
+}
+
+fn print(h : HANDLE, s : const uint8*) : void
+{
+    WriteConsoleA(h, s, strlen(s), nil, nil);
+}
+
+def ALIGN : usize = 16;
+
+struct Block
+{
+    next : Block*;
+    size : usize;
+    free : bool;
+}
+
+var heap : Block*? = nil;
+
+fn aligned(size : usize) : usize
+{
+    return (size + ALIGN - 1) & ~(ALIGN - 1);
+}
+
+fn heap_grow(size : usize) : void*?
+{
+    let allocsize = aligned(size + sizeof(Block));
+    let ptr : void* = VirtualAlloc(nil, intcast(uint64, allocsize), MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+    if !ptr { return nil; }
+
+    let block : Block* = cast(Block*, ptr);
+    block.size = allocsize - sizeof(Block);
+    block.next = heap;
+    block.free = true;
+    heap = block;
+    return block;
+}
+
+pub fn alloc(size : usize) : void*?
+{
+    if size == 0 { return nil; }
+
+    var aligned : usize = aligned(size);
+    var block : Block* = heap;
+
+    while block != nil
+    {
+        if block.free and block.size >= aligned
+        {
+            block.free = false;
+
+            if block.size > aligned + sizeof(Block)
+            {
+                let next : Block* = ptrcast(Block*, ptrcast(usize, (block)) + sizeof(Block) + aligned);
+                next.size = block.size - aligned - sizeof(Block);
+                next.free = true;
+                next.next = block.next;
+                block.next = next;
+                block.size = aligned;
+            }
+
+            return ptrcast(void*, ptrcast(usize, (block)) + sizeof(Block));
+        }
+        block = block.next;
+    }
+
+    block = heap_grow(aligned);
+    if block == nil { return nil; }
+
+    block.free = false;
+
+    if block.size > aligned + sizeof(Block)
+    {
+        let next : Block* = ptrcast(Block*, ptrcast(usize, block) + sizeof(Block) + aligned);
+        next.size = block.size - aligned - sizeof(Block);
+        next.free = true;
+        next.next = block.next;
+        block.next = next;
+        block.size = aligned;
+    }
+
+    return ptrcast(void*, ptrcast(usize, block) + sizeof(Block));
+}
+
+pub fn free(p : void*) : void
+{
+    if !p == nil { return; }
+
+    let block : Block* = ptrcast(Block*, ptrcast(usize, p) - sizeof(Block));
+    block.free = true;
+
+    var current : Block* = heap;
+    while current and current.next
+    {
+        if current.free and current.next.free
+        {
+            current.size += sizeof(Block) + current.next.size;
+            current.next = current.next.next;
+        }
+        else
+        {
+            current = current.next;
+        }
+    }
+}
+
+fn main() : int32
+{
+    var p : int32* = alloc(sizeof(int32));
+    *p = 167;
+    return *p;
 }

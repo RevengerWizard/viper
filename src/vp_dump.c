@@ -313,6 +313,17 @@ static void dump_ir(SBuf* sb, IR* ir)
             }
             break;
         }
+        case IR_TJMP:
+        {
+            dump_vreg(sb, ir->src1);
+            for(uint32_t i = 0; i < ir->tjmp.len; i++)
+            {
+                if(i == 0) vp_buf_putlit(sb, ", ["); else vp_buf_putlit(sb, ", ");
+                vp_buf_putstr(sb, ir->tjmp.bbs[i]->label);
+            }
+            vp_buf_putb(sb, ']');
+            break;
+        }
         case IR_PUSHARG:
         {
             dump_fmt(sb, "r%d, ", ir->arg.idx);
@@ -1273,6 +1284,32 @@ static void dump_ast_stmt(SBuf* sb, Stmt* st)
             dump_ast_block(sb, st->whst.body);
             vp_buf_putb(sb, '\n');
             break;
+        case ST_SWITCH:
+        {
+            dump_indent(sb);
+            vp_buf_putlit(sb, "switch ");
+            dump_ast_type(sb, st->swst.cond->ty);
+            dump_ast_expr(sb, st->swst.cond);
+            vp_buf_putb(sb, '\n');
+            for(uint32_t i = 0; i < vec_len(st->swst.cases); i++)
+            {
+                SwitchCase* cs = &st->swst.cases[i];
+                dump_indent(sb);
+                if(cs->e == NULL)
+                {
+                    vp_buf_putlit(sb, "default");
+                }
+                else
+                {
+                    vp_buf_putlit(sb, "case ");
+                    dump_ast_type(sb, cs->e->ty);
+                    dump_ast_expr(sb, cs->e);
+                }
+                dump_ast_stmt(sb, cs->body);
+            }
+            vp_buf_putb(sb, '\n');
+            break;
+        }
         case ST_RETURN:
             dump_indent(sb);
             vp_buf_putlit(sb, "return ");

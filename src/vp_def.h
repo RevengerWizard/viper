@@ -93,6 +93,15 @@ static VP_AINLINE uint32_t vp_msb(uint32_t x)
     }
 }
 
+/* Write int */
+static VP_AINLINE void vp_wint(uint8_t* data, uint32_t offset, uint64_t val, uint32_t size)
+{
+    for(uint32_t i = 0; i < size; i++)
+    {
+        data[offset + i] = (val >> (i * 8)) & 0xFF;
+    }
+}
+
 #if defined(VIPER_USE_ASSERT)
 void vp_assert_fail(const char* file, int line, const char* func, const char* fmt, ...);
 #endif

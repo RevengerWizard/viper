@@ -82,20 +82,23 @@ typedef struct VReg
     _(LOAD, d12)    /* dst = [src1] */ \
     _(STORE_S, ___) /* [src2 (spill)] = src1 */ \
     _(LOAD_S, ___)  /* dst = [src1 (spill)] */ \
-    _(RET, src1) \
-    _(COND, d12) \
+    _(RET, src1) /* ret = src1 */ \
+    _(COND, d12) /* dst = src1 cond src2 ? 1 : 0 */ \
     _(JMP, d12) \
+    _(TJMP, d12) \
     _(PUSHARG, d12) \
     _(CALL, d12) \
-    _(CAST, d12) \
-    _(KEEP, d12) \
+    _(CAST, d12) /* dst <- cast(src1) */ \
+    _(KEEP, d12) /* keep dst, src1, src2 */ \
     _(ASM, d12) \
     /* Binary operators */ \
+    /* dst = src1 op src2 */ \
     _(ADD, d12) _(SUB, d12) \
     _(MUL, d12) _(DIV, d12) _(MOD, d12) \
     _(BAND, d12) _(BOR, d12) _(BXOR, d12) \
     _(LSHIFT, d12) _(RSHIFT, d12) \
     /* Unary operators */ \
+    /* dst = op src1 */ \
     _(NEG, d12) \
     _(BNOT, d12)
 
@@ -193,6 +196,11 @@ typedef struct IR
         } jmp;
         struct
         {
+            struct BB** bbs;
+            uint32_t len;
+        } tjmp;
+        struct
+        {
             uint32_t size;
         } mem;
         struct
@@ -239,6 +247,7 @@ IR* vp_ir_ret(VReg* src, uint8_t irflag);
 IR* vp_ir_cond(VReg* src1, VReg* src2, CondKind cond);
 IR* vp_ir_jmp(BB* bb);
 void vp_ir_cjmp(VReg* src1, VReg* src2, CondKind cond, BB* bb);
+void vp_ir_tjmp(VReg* src1, BB** bbs, uint32_t len);
 IR* vp_ir_pusharg(VReg* src, uint32_t idx);
 IR* vp_ir_call(IRCallInfo* ci, VReg* dst, VReg* freg);
 IR* vp_ir_cast(VReg* src, bool srcunsigned, VRSize dstsize, uint8_t vflag);

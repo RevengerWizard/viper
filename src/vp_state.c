@@ -27,7 +27,6 @@ VpState* vp_state_open()
     V->patches = vec_init(PatchInfo);
     V->imports = vec_init(ImportDLL);
     V->mods = vec_init(Module*);
-    V->L.secs = vec_init(Section);
     V->globscope = vp_scope_new(NULL);
     V->currscope = V->globscope;
     V->globdata = vec_init(DataEntry*);
@@ -35,6 +34,8 @@ VpState* vp_state_open()
     const TargetInfo* target = vp_target_init(TARGET_X64_WINDOWS);
     vp_assertX(target, "empty target");
     V->T = target;
+    V->L.secs = vec_init(Section);
+    vp_layout_init(&V->L);
     return V;
 }
 

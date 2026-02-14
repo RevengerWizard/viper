@@ -663,6 +663,16 @@ void EMITX64(jmpREL32)(int32_t rel)
     emit_im32(V, rel);
 }
 
+/* JMP [mem] */
+void EMITX64(jmpM)(X64Mem mem)
+{
+    vp_assertX(MEM_SIZE(mem) == 8, "invalid X64Mem");
+    uint8_t rex = rexM(0, mem, 0);
+    if(rex) emit_u8(V, rex);
+    emit_u8(V, 0xFF);
+    emit_mem(V, 4, mem);
+}
+
 /* Jcc rel32 */
 void EMITX64(jccREL32)(X64CC cc, int32_t rel)
 {

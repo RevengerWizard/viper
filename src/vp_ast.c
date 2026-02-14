@@ -295,6 +295,14 @@ Stmt* vp_stmt_while(SrcLoc loc, Expr* cond, Stmt* body)
     return st;
 }
 
+Stmt* vp_stmt_switch(SrcLoc loc, Expr* e, vec_t(SwitchCase) cases)
+{
+    Stmt* st = stmt_new(ST_SWITCH, loc);
+    st->swst.cond = e;
+    st->swst.cases = cases;
+    return st;
+}
+
 Stmt* vp_stmt_asm(SrcLoc loc, vec_t(Inst*) insts)
 {
     Stmt* st = stmt_new(ST_ASM, loc);

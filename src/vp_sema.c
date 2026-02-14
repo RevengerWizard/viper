@@ -2024,6 +2024,75 @@ static bool sema_while(Stmt* st, Type* ret)
     return false;
 }
 
+/* Resolve switch statement */
+static bool sema_switch(Stmt* st, Type* ret)
+{
+    UNUSED(ret);
+    vp_assertX(st->kind == ST_SWITCH, "not a switch");
+    Operand res = sema_expr(st->swst.cond, NULL);
+    if(!ty_isint(res.ty))
+    {
+        vp_err_error(st->swst.cond->loc,
+            "switch expression must have integer type, got '%s'",
+            type_str(res.ty));
+    }
+    opr_fold(st->loc, &st->swst.cond, res);
+    /* Track all case values to detect duplicates */
+    vec_t(int64_t) case_vals = vec_init(int64_t);
+    bool has_default = false;
+    bool all_return = true;  /* Track if all paths return */
+
+    /* Analyze each case */
+    for(uint32_t i = 0; i < vec_len(st->swst.cases); i++)
+    {
+        SwitchCase* cs = &st->swst.cases[i];
+        if(cs->e == NULL)
+        {
+            /* Default case */
+            if(has_default)
+            {
+                vp_err_error(cs->loc, "duplicate default case in switch");
+            }
+            has_default = true;
+        }
+        else
+        {
+            Operand copr = sema_constexpr(cs->e, NULL);
+            if(!ty_isint(copr.ty))
+            {
+                vp_err_error(cs->e->loc,
+                    "case expression must have integer type");
+            }
+
+            /* Check for duplicate case values */
+            int64_t val = copr.val.i64;
+            for(uint32_t j = 0; j < vec_len(case_vals); j++)
+            {
+                if(case_vals[j] == val)
+                {
+                    vp_err_error(cs->e->loc,
+                        "duplicate case value %lld in switch", val);
+                }
+            }
+            vec_push(case_vals, val);
+
+            /* Fold case expression */
+            opr_fold(cs->e->loc, &cs->e, copr);
+            cs->val = val;
+        }
+
+        bool case_returns = sema_stmt(cs->body, ret);
+        if(!case_returns)
+        {
+            all_return = false;
+        }
+    }
+
+    /* Switch only guarantees return if all cases (including default) have returns */
+    /* and there's a default case to catch unmatched values */
+    return has_default && all_return;
+}
+
 /* Resolve expression statement */
 static bool sema_stmt_expr(Stmt* st, Type* ret)
 {
@@ -2073,6 +2142,7 @@ static const SemaStmtFn semastfn[] = {
     [ST_ASM] = sema_st,
     [ST_BREAK] = sema_st,
     [ST_WHILE] = sema_while,
+    [ST_SWITCH] = sema_switch,
     [ST_FOR] = sema_for,
     [ST_IF] = sema_if,
     [ST_CONTINUE] = sema_st,

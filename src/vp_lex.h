@@ -34,6 +34,7 @@
     _(true) _(false) _(nil) \
     _(if) _(else) \
     _(for) _(while) \
+    _(switch) _(case) _(default) \
     _(break) _(continue) \
     _(return) \
     /* Symbols */ \

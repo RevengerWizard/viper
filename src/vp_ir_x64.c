@@ -251,15 +251,13 @@ static void irX64_call(IR* ir)
     {
         if(ir->call->export)
         {
-            uint32_t ofs = sbuf_len(&V->code) + 2;
             EMITX64(callRIP)(0);
-            patchinfo_callabs(ir->call->label, ofs);
+            patchinfo_callabs(ir->call->label, sbuf_len(&V->code) - 4);
         }
         else
         {
-            uint32_t ofs = sbuf_len(&V->code) + 1;
             EMITX64(callREL32)(0);
-            patchinfo_callrel(fn, ofs);
+            patchinfo_callrel(fn, sbuf_len(&V->code) - 4);
         }
     }
     else
@@ -551,18 +549,69 @@ static void irX64_jmp(IR* ir)
 
     if(cond == COND_ANY)
     {
-        uint32_t patch = sbuf_len(&V->code) + 1;
         EMITX64(jmpREL32)(0);
-        patchinfo_jmprel(ir->jmp.bb, patch);
+        patchinfo_jmprel(ir->jmp.bb, sbuf_len(&V->code) - 4);
         return;
     }
 
     cmp_vregs(src1, src2, cond);
 
-    uint32_t patch = sbuf_len(&V->code) + 2;
     X64CC cc = cond2cc(cond);
     EMITX64(jccREL32)(cc, 0);
-    patchinfo_jmprel(ir->jmp.bb, patch);
+    patchinfo_jmprel(ir->jmp.bb, sbuf_len(&V->code) - 4);
+}
+
+static void irX64_tjmp(IR* ir)
+{
+    vp_assertX(!vrf_const(ir->src1), "const src1");
+    uint32_t phys = ir->src1->phys;
+    uint32_t vs = ir->src1->vsize;
+    vp_assertX(vs < 4, "invalid vsize");
+
+    /* Zero-extend the index if needed (8-byte table entries) */
+    if(vs < VRSize8)
+    {
+        if(vs == VRSize4)
+        {
+            EMITX64(movRR)(irx64R[vs][phys], irx64R[vs][phys]);
+        }
+        else
+        {
+            /* VRSize1: zero-extend */
+            EMITX64(movzxRR)(irx64R[VRSize8][phys], irx64R[vs][phys]);
+        }
+    }
+
+    /* Scale index by entry size (8 bytes) and load from table */
+    vp_assertX(ir->src2, "src2 must be allocated for table");
+    uint32_t tab = ir->src2->phys;
+
+    /* Create jump table */
+    Str* jtname = vp_anon_label();
+    uint32_t jtsize = ir->tjmp.len * TARGET_PTR_SIZE;
+
+    vp_assertX(V->fncode, "no code");
+    DataEntry* entry = vp_data_new(DATA_ANON, jtname, jtsize, 8);
+    vec_push(V->globdata, entry);
+
+    for(uint32_t i = 0; i < ir->tjmp.len; i++)
+    {
+        BB* bb = ir->tjmp.bbs[i];
+        uint32_t ofs = i * TARGET_PTR_SIZE;
+        Reloc rel = {
+            .entry = entry,
+            .ofs = ofs,
+            .bb = bb,
+            .isbb = true
+        };
+        vec_push(V->relocs, rel);
+    }
+
+    EMITX64(leaRM)(irx64R[VRSize8][tab], X64MEM_RIP(0, 8));
+    patchinfo_leaabs(jtname, sbuf_len(&V->code) - 4);
+
+    X64Mem indirect = X64MEM(tab, phys, 8, 0, 8);
+    EMITX64(jmpM)(indirect);
 }
 
 static void irX64_add(IR* ir)
@@ -942,6 +991,7 @@ static const IRX64Fn irx64tab[] = {
     [IR_RET] = irX64_ret,
     [IR_COND] = irX64_cond,
     [IR_JMP] = irX64_jmp,
+    [IR_TJMP] = irX64_tjmp,
     [IR_PUSHARG] = irX64_pusharg,
     [IR_CALL] = irX64_call,
     [IR_CAST] = irX64_cast,
@@ -1081,6 +1131,17 @@ void vp_irX64_tweak(Code* code)
                     ir_tmp_mov(&ir->src2, &bb->irs, j++, ir->flag);
                 }
                 break;
+            case IR_TJMP:
+            {
+                vp_assertX(!vrf_const(ir->src1), "const src1");
+                /* Allocate src2 to hold jump table */
+                VReg* tmp = vp_ra_spawn(VRSize8, 0);
+                IR *keep = vp_ir_keep(tmp, NULL, NULL);
+                vec_insert(bb->irs, j, keep); j++;
+                vp_assertX(ir->src2 == NULL, "src2 not NULL");
+                ir->src2 = tmp;
+                break;
+            }
             case IR_CALL:
                 if(ir->src1 && vrf_const(ir->src1))
                 {

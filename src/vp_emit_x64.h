@@ -74,6 +74,7 @@ void EMITX64(popR)(X64Reg reg);
 void EMITX64(callR)(X64Reg reg);
 void EMITX64(callREL32)(int32_t rel);
 void EMITX64(callRIP)(int32_t rel);
+void EMITX64(jmpM)(X64Mem mem);
 void EMITX64(jmpREL32)(int32_t rel);
 void EMITX64(jccREL32)(X64CC cc, int32_t rel);
 void EMITX64(setcc)(X64CC cc, X64Reg reg);

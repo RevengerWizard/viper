@@ -750,13 +750,27 @@ static Stmt* parse_block(LexState* ls)
     return vp_stmt_block(loc, stmts);
 }
 
+/* Parse shorthand 'return'/'break'/'continue' */
+static Stmt* parse_short(LexState* ls)
+{
+    switch(ls->curr)
+    {
+    case TK_break:
+    case TK_continue:
+    case TK_return:
+        return parse_stmt(ls);
+    default:
+        return parse_block(ls);
+    }
+}
+
 /* Parse 'if' statement */
 static Stmt* parse_if(LexState* ls)
 {
     vp_lex_next(ls);    /* Skip 'if' */
     SrcLoc loc = lex_srcloc(ls);
     Expr* cond = expr(ls);
-    Stmt* tblock = parse_block(ls);
+    Stmt* tblock = parse_short(ls);
     Stmt* fblock = NULL;
     if(lex_match(ls, TK_else))
     {
@@ -766,7 +780,7 @@ static Stmt* parse_if(LexState* ls)
         }
         else
         {
-            fblock = parse_block(ls);
+            fblock = parse_short(ls);
         }
     }
     return vp_stmt_if(loc, cond, tblock, fblock);
@@ -819,6 +833,43 @@ static Stmt* parse_while(LexState* ls)
     Stmt* body = parse_block(ls);
     loopcount--;
     return vp_stmt_while(loc, cond, body);
+}
+
+/* Parse 'case' or 'default' */
+static SwitchCase parse_case(LexState* ls)
+{
+    SrcLoc loc = lex_srcloc(ls);
+    Expr* e = NULL;
+    switch(ls->curr)
+    {
+    case TK_case:
+        vp_lex_next(ls);    /* Skip 'case' */
+        e = expr(ls);
+        break;
+    case TK_default:    /* Skip 'default' */
+        vp_lex_next(ls);
+        break;
+    default:
+        vp_assertX(0, "expected 'case' or 'default'");
+        break;
+    }
+    Stmt* body = parse_short(ls);
+    return (SwitchCase){.loc = loc, .e = e, .body = body};
+}
+
+/* Parse 'switch' statement */
+static Stmt* parse_switch(LexState* ls)
+{
+    vp_lex_next(ls);    /* Skip 'switch' */
+    SrcLoc loc = lex_srcloc(ls);
+    Expr* cond = expr(ls);
+    vec_t(SwitchCase) cases = vec_init(SwitchCase);
+    while(lex_check(ls, TK_case) || lex_check(ls, TK_default))
+    {
+        SwitchCase cs = parse_case(ls);
+        vec_push(cases, cs);
+    }
+    return vp_stmt_switch(loc, cond, cases);
 }
 
 /* Parse 'break' or 'continue' statement */
@@ -1216,6 +1267,9 @@ static Stmt* parse_stmt(LexState* ls)
             break;
         case TK_while:
             st = parse_while(ls);
+            break;
+        case TK_switch:
+            st = parse_switch(ls);
             break;
         case TK_break:
         case TK_continue:

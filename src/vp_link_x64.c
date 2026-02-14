@@ -53,6 +53,21 @@ static void layout_data()
 
     vp_assertX(datasec && rdatasec, "missing data sections");
 
+    /* Fix relocations */
+    Str* textsym = vp_str_newlit(".text");
+    for(uint32_t i = 0; i < vec_len(V->relocs); i++)
+    {
+        Reloc* r = &V->relocs[i];
+        if(r->isbb)
+        {
+            /* Store the absolute offset in the data */
+            uint64_t addr = (uint64_t)r->bb->ofs;
+            vp_wint(r->entry->data, r->ofs, addr, TARGET_PTR_SIZE);
+            r->sym = textsym;
+            r->isbb = false;
+        }
+    }
+
     /* Sort globals: variables in .data, strings in .rdata */
     for(uint32_t i = 0; i < vec_len(V->globdata); i++)
     {
@@ -61,15 +76,16 @@ static void layout_data()
         /* Select target section based on kind */
         switch(entry->kind)
         {
-            case DATA_VAR:
-            case DATA_ANON:
-                sec = datasec;
-                break;
-            case DATA_STR:
-                sec = rdatasec;
-                break;
-            default:
-                vp_assertX(0, "unknown data kind");
+        case DATA_VAR:
+        case DATA_ANON:
+            sec = datasec;
+            break;
+        case DATA_STR:
+            sec = rdatasec;
+            break;
+        default:
+            vp_assertX(0, "unknown data kind");
+            break;
         }
 
         /* Align current section offset */
@@ -86,12 +102,6 @@ static void layout_data()
         entry->ofs = offset;
         vp_assertX(entry->name, "no entry name");
 
-        printf("OFFSET %s (kind=%d) IS %u in section %s\n",
-            str_data(entry->name),
-            entry->kind,
-            offset,
-            sec == datasec ? ".data" : ".rdata");
-
         /* Emit data */
         vp_buf_putmem(&sec->sb, entry->data, entry->size);
     }
@@ -105,7 +115,6 @@ void vp_link(void)
         PatchInfo* p = &V->patches[i];
         int32_t from = p->ofs;
         int32_t rel = 0;
-
         switch(p->kind)
         {
             case PATCH_JMP_REL:
@@ -133,4 +142,26 @@ void vp_link(void)
     char* p = vp_buf_need(&sec->sb, csize);
     memcpy(p, V->code.b, csize);
     sec->sb.w = p + csize;
+}
+
+DataEntry* vp_data_new(DataKind kind, Str* name, uint32_t size, uint32_t align)
+{
+    DataEntry* entry = vp_mem_calloc(1, sizeof(DataEntry));
+    entry->kind = kind;
+    entry->name = name;
+    entry->ofs = 0;
+    entry->size = size;
+    entry->align = align;
+    entry->data = vp_mem_calloc(1, size);
+    return entry;
+}
+
+void vp_reloc_add(DataEntry* de, uint32_t ofs, Str* sym)
+{
+    Reloc rel = {
+        .entry = de,
+        .ofs = ofs,
+        .sym = sym
+    };
+    vec_push(V->relocs, rel);
 }

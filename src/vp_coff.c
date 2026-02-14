@@ -8,8 +8,8 @@
 #include "vp_pe.h"
 #include "vp_state.h"
 #include "vp_codegen.h"
-#include "vp_map.h"
 #include "vp_str.h"
+#include "vp_tab.h"
 
 /* COFF relocation */
 typedef struct
@@ -33,18 +33,18 @@ static vec_t(COFFReloc) textrelocs;
 static vec_t(COFFReloc) datarelocs;
 static vec_t(COFFReloc) rdatarelocs;
 static vec_t(COFFSym) syms;
-static Map symsmap;
+static Tab symsmap;
 
 static uint32_t coff_secflags(SectionKind kind)
 {
     switch(kind)
     {
-        case SEC_TEXT:
-            return IMAGE_SCN_CNT_CODE | IMAGE_SCN_MEM_EXECUTE | IMAGE_SCN_MEM_READ;
-        case SEC_RDATA:
-            return IMAGE_SCN_CNT_INITIALIZED_DATA | IMAGE_SCN_MEM_READ;
-        case SEC_DATA:
-            return IMAGE_SCN_CNT_INITIALIZED_DATA | IMAGE_SCN_MEM_READ | IMAGE_SCN_MEM_WRITE;
+    case SEC_TEXT:
+        return IMAGE_SCN_CNT_CODE | IMAGE_SCN_MEM_EXECUTE | IMAGE_SCN_MEM_READ;
+    case SEC_RDATA:
+        return IMAGE_SCN_CNT_INITIALIZED_DATA | IMAGE_SCN_MEM_READ;
+    case SEC_DATA:
+        return IMAGE_SCN_CNT_INITIALIZED_DATA | IMAGE_SCN_MEM_READ | IMAGE_SCN_MEM_WRITE;
     }
 }
 
@@ -52,28 +52,28 @@ static Str* coff_secname(SectionKind kind)
 {
     switch(kind)
     {
-        case SEC_TEXT:
-            return vp_str_newlit(".text");
-        case SEC_RDATA:
-            return vp_str_newlit(".rdata");
-        case SEC_DATA:
-            return vp_str_newlit(".data");
+    case SEC_TEXT:
+        return vp_str_newlit(".text");
+    case SEC_RDATA:
+        return vp_str_newlit(".rdata");
+    case SEC_DATA:
+        return vp_str_newlit(".data");
     }
 }
 
 static uint32_t coff_symadd(COFFSym sym)
 {
-    uint32_t idx = vec_len(syms);
+    uint32_t idx = vec_len(syms) + 1;   /* 1-based */
     vec_push(syms, sym);
-    vp_map_put(&symsmap, sym.name, (void*)(uintptr_t)idx);
+    vp_tab_set(&symsmap, sym.name, (void*)(uintptr_t)idx);
     return idx;
 }
 
 static uint32_t coff_symfind(Str* name)
 {
-    void* idx = vp_map_get(&symsmap, name);
+    void* idx = vp_tab_get(&symsmap, name);
     if(idx)
-        return (uint32_t)(uintptr_t)idx;
+        return (uint32_t)(uintptr_t)idx - 1;
     return (uint32_t)-1;
 }
 
@@ -99,32 +99,26 @@ static void coff_build()
     {
         DataEntry* de = V->globdata[i];
         int16_t secnum = 0;
+        SectionKind kind;
         switch(de->kind)
         {
-            case DATA_VAR:
-            case DATA_ANON:
-                for(uint32_t j = 0; j < vec_len(V->L.secs); j++)
-                {
-                    if(V->L.secs[j].kind == SEC_DATA)
-                    {
-                        secnum = j + 1;  /* 1-based */
-                        break;
-                    }
-                }
+        case DATA_VAR:
+        case DATA_ANON:
+            kind = SEC_DATA;
+            break;
+        case DATA_STR:
+            kind = SEC_RDATA;
+            break;
+        }
+        for(uint32_t j = 0; j < vec_len(V->L.secs); j++)
+        {
+            if(V->L.secs[j].kind == kind)
+            {
+                secnum = j + 1;  /* 1-based */
                 break;
-            case DATA_STR:
-                for(uint32_t j = 0; j < vec_len(V->L.secs); j++)
-                {
-                    if(V->L.secs[j].kind == SEC_RDATA)
-                    {
-                        secnum = j + 1;  /* 1-based */
-                        break;
-                    }
-                }
-                break;
+            }
         }
         vp_assertX(secnum > 0, "section not found for data entry");
-
         COFFSym sym = {
             .name = de->name,
             .value = de->ofs,
@@ -185,25 +179,21 @@ static void coff_build()
         Str* sym = NULL;
         switch(p->kind)
         {
-            case PATCH_JMP_REL:
-            case PATCH_LEA_REL:
-                continue;
-            case PATCH_CALL_REL:
-                sym = p->code->name;
-                break;
-            case PATCH_LEA_ABS:
-                sym = p->label;
-                break;
-            case PATCH_CALL_ABS:
-                sym = vp_buf_cat2str(vp_str_newlit("__imp_"), p->label);
-                break;
+        case PATCH_JMP_REL:
+        case PATCH_LEA_REL:
+            continue;
+        case PATCH_CALL_REL:
+            sym = p->code->name;
+            break;
+        case PATCH_LEA_ABS:
+            sym = p->label;
+            break;
+        case PATCH_CALL_ABS:
+            sym = vp_buf_cat2str(vp_str_newlit("__imp_"), p->label);
+            break;
         }
         rel.symidx = coff_symfind(sym);
         vp_assertX(rel.symidx != (uint32_t)-1, "symbol %s not found in patch %d", str_data(sym), p->kind);
-
-        printf("Data relocation: at offset %u\n",
-                       rel.vaddr);
-
         vec_push(textrelocs, rel);
     }
 
@@ -216,7 +206,7 @@ static void coff_build()
             .symidx = coff_symfind(r->sym),
             .type = IMAGE_REL_AMD64_ADDR64
         };
-        vp_assertX(rel.symidx != (uint32_t)-1, "reloc symbol not found");
+        vp_assertX(rel.symidx != (uint32_t)-1, "reloc symbol '%s' not found", str_data(r->sym));
         if(r->entry->kind == DATA_STR)
         {
             vec_push(rdatarelocs, rel);
@@ -225,9 +215,6 @@ static void coff_build()
         {
             vec_push(datarelocs, rel);
         }
-
-        printf("Data relocation: %s at offset %u (entry kind=%d)\n",
-            str_data(r->sym), rel.vaddr, r->entry->kind);
     }
 }
 

@@ -146,6 +146,16 @@ void vp_ir_cjmp(VReg* src1, VReg* src2, CondKind cond, BB* bb)
     ir->jmp.cond = cond;
 }
 
+/* Table jump */
+void vp_ir_tjmp(VReg* src1, BB** bbs, uint32_t len)
+{
+    vp_assertX(vec_len(bbs) > 0, "empty bbs");
+    IR* ir = ir_new(IR_TJMP);
+    ir->src1 = src1;
+    ir->tjmp.bbs = bbs;
+    ir->tjmp.len = len;
+}
+
 IR* vp_ir_pusharg(VReg* src, uint32_t idx)
 {
     IR* ir = ir_new(IR_PUSHARG);
@@ -502,6 +512,16 @@ void vp_bb_detect(vec_t(BB*) bbs)
                 vec_push(unchecked, dst);
                 if(ir->jmp.cond == COND_ANY)
                     continue;   /* Next BB is not reachable */
+            }
+            else if(ir->kind == IR_TJMP)
+            {
+                for(uint32_t j = 0; j < ir->tjmp.len; j++)
+                {
+                    BB* nbb = ir->tjmp.bbs[j];
+                    vec_push(nbb->frombbs, bb);
+                    vec_push(unchecked, nbb);
+                }
+                continue;
             }
         }
         BB* next = bb->next;
