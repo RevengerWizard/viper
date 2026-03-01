@@ -18,7 +18,7 @@ VpState* V;
 
 VpState* vp_state_open()
 {
-    V = (VpState*)vp_mem_alloc(sizeof(*V));
+    V = (VpState*)vp_mem_calloc(1, sizeof(*V));
     memset(V, 0, sizeof(*V));
     vp_lex_init();
     V->cachefn = vec_init(Type*);
@@ -36,6 +36,7 @@ VpState* vp_state_open()
     V->T = target;
     V->L.secs = vec_init(Section);
     vp_layout_init(&V->L);
+    V->astmem = 0;
     return V;
 }
 

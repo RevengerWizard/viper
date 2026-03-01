@@ -1,27 +1,44 @@
+pub fn set(buf : void*, val : uint8, size : usize) : void*
+{
+    var p : uint8* = buf;
+    for var i : usize = 0; i < size; i++ { *p++ = val; }
+    return buf;
+}
+
 pub fn copy(dst : void*, src : const void*, n : usize) : void*
 {
     var s : const uint8* = src;
     var d : uint8* = dst;
-    while n-- > 0
+    while n-- > 0 { *d++ = *s++; }
+    return dst;
+}
+
+pub fn move(dst : void*, src : const void*, n : usize) : void*
+{
+    var s : const uint8* = src;
+    var d : uint8* = dst;
+    if s < d and s + n > d
     {
-        *d++ = *s++;
+        s += n;
+        d += n;
+        while n-- > 0 { *--d = *--s; }
+    }
+    else
+    {
+        while n-- > 0 { *d++ = *s++; }
     }
     return dst;
 }
 
-from "windows" import *
-
-fn strlen(s : const uint8*) : DWORD
+pub fn cmp(buf1 : const void*, buf2 : const void*, n : usize) : isize
 {
-    var i : DWORD = 0;
-    while s[i] != '\0' { i++; }
-    return i;
+    var p : const uint8* = buf1;
+    var q : const uint8* = buf2;
+    var d : int32 = 0;
+    //for var i : usize = 0; i < n; i++
 }
 
-fn print(h : HANDLE, s : const uint8*) : void
-{
-    WriteConsoleA(h, s, strlen(s), nil, nil);
-}
+from windows import *
 
 def ALIGN : usize = 16;
 
@@ -43,7 +60,7 @@ fn heap_grow(size : usize) : void*?
 {
     let allocsize = aligned(size + sizeof(Block));
     let ptr : void* = VirtualAlloc(nil, intcast(uint64, allocsize), MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
-    if !ptr { return nil; }
+    if !ptr return nil;
 
     let block : Block* = cast(Block*, ptr);
     block.size = allocsize - sizeof(Block);
@@ -55,7 +72,7 @@ fn heap_grow(size : usize) : void*?
 
 pub fn alloc(size : usize) : void*?
 {
-    if size == 0 { return nil; }
+    if size == 0 return nil;
 
     var aligned : usize = aligned(size);
     var block : Block* = heap;
@@ -82,7 +99,7 @@ pub fn alloc(size : usize) : void*?
     }
 
     block = heap_grow(aligned);
-    if block == nil { return nil; }
+    if block == nil return nil;
 
     block.free = false;
 
@@ -99,9 +116,26 @@ pub fn alloc(size : usize) : void*?
     return ptrcast(void*, ptrcast(usize, block) + sizeof(Block));
 }
 
+pub fn realloc(p : void*, size : usize) : void*
+{
+    if size == 0
+    {
+        free(p);
+        return nil;
+    }
+
+    if p == nil return alloc(size);
+
+    let buf : void* = alloc(size);
+    if buf != nil
+    {
+
+    }
+}
+
 pub fn free(p : void*) : void
 {
-    if !p == nil { return; }
+    if p == nil return;
 
     let block : Block* = ptrcast(Block*, ptrcast(usize, p) - sizeof(Block));
     block.free = true;
@@ -119,11 +153,4 @@ pub fn free(p : void*) : void
             current = current.next;
         }
     }
-}
-
-fn main() : int32
-{
-    var p : int32* = alloc(sizeof(int32));
-    *p = 167;
-    return *p;
 }

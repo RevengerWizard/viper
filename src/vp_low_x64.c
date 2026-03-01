@@ -45,11 +45,6 @@ static void lowX64_params(Code* code)
     {
         VarInfo* vi = code->scopes[0]->vars[i];
         ParamLoc* pl = &code->plocs[i + start];
-
-        /* Skip memory parameters (already on stack) */
-        if(pl->cls == PC_MEM)
-            continue;
-
         VReg* vr = vi->vreg;
         if(!vr)
             continue;
@@ -111,6 +106,7 @@ static void lowX64_params(Code* code)
                 break;
             }
             case PC_STACK:
+            case PC_MEM:
                 /* Already on stack */
                 break;
             default:

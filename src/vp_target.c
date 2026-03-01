@@ -125,9 +125,9 @@ static const TargetInfo targets[] = {
         TARGET_X64_LINUX,
         OS_LINUX,
         ARCH_X64,
-        ABI_WIN_X64,
+        ABI_SYSV_X64,
         "x64-linux",
-        &abis[ABI_WIN_X64],
+        &abis[ABI_SYSV_X64],
         &archs[ARCH_X64]
     }
 };

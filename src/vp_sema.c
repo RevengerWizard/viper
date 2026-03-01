@@ -19,8 +19,6 @@
 #include "vp_mod.h"
 #include "vp_link.h"
 
-#include "vp_dump.h"
-
 /* Semantic state */
 typedef struct
 {
@@ -1114,7 +1112,7 @@ static Operand sema_name(Expr* e, Type* ret)
             return opr_rval(sym->type);
         default:
             vp_err_error(e->loc, "'%s' must be a var", str_data(e->name));
-            return (Operand){};
+            return opr_nil;
     }
 }
 
@@ -1191,182 +1189,183 @@ static Operand sema_unary(Expr* e, Type* ret)
             vp_assertX(0, "not a unary expression");
             break;
     }
-    return (Operand){};
+    return opr_nil;
 }
 
-/* Resolve binary expression operator */
-static Operand sema_expr_binop(SrcLoc loc, ExprKind op, Operand lop, Operand rop, Type* ret)
+/* Prologue for binary operators */
+#define SEMA_BINOP(e, ret, lopr_out, ropr_out) \
+    do \
+    { \
+        (lopr_out) = sema_expr_rval((e)->binop.lhs, (ret)); \
+        (ropr_out) = sema_expr_rval((e)->binop.rhs, (ret)); \
+        opr_fold((e)->loc, &(e)->binop.lhs, (lopr_out)); \
+        opr_fold((e)->loc, &(e)->binop.rhs, (ropr_out)); \
+    } \
+    while(false)
+
+/* Resolve binary + */
+static Operand sema_binary_add(Expr* e, Type* ret)
 {
-    const char* opname = ast_binname(op);
-    switch(op)
+    SrcLoc loc = e->loc;
+    Operand lop, rop;
+    SEMA_BINOP(e, ret, lop, rop);
+    if(ty_isnum(lop.ty) && ty_isnum(rop.ty))
     {
-        case EX_ADD:
-            if(ty_isnum(lop.ty) && ty_isnum(rop.ty))
-            {
-                return opr_binop(loc, op, lop, rop, ret);
-            }
-            else if(ty_isptr(lop.ty) && ty_isint(rop.ty))
-            {
-                sym_complete(lop.ty->p);
-                return opr_rval(lop.ty);
-            }
-            else if(ty_isint(lop.ty) && ty_isptr(rop.ty))
-            {
-                sym_complete(rop.ty->p);
-                return opr_rval(rop.ty);
-            }
-            else
-            {
-                vp_err_error(loc, "operands of '+' must both have arithmetic type, or pointer and integer type");
-            }
-            break;
-        case EX_SUB:
-            if(ty_isnum(lop.ty) && ty_isnum(rop.ty))
-            {
-                return opr_binop(loc, op, lop, rop, ret);
-            }
-            else if(ty_isptr(lop.ty) && ty_isint(rop.ty))
-            {
-                return opr_rval(lop.ty);
-            }
-            else if(ty_isptr(lop.ty) && ty_isptr(rop.ty))
-            {
-                if(!vp_type_isptrcomp(lop.ty, rop.ty))
-                {
-                    vp_err_error(loc, "cannot subtract pointers of different types");
-                }
-                return opr_rval(tyuint64);
-            }
-            else
-            {
-                vp_err_error(loc, "operands of '-' must both have arithmetic type, pointer and integer, or compatible pointer types");
-            }
-            break;
-        case EX_MUL:
-        case EX_DIV:
-            if(!ty_isnum(lop.ty))
-            {
-                vp_err_error(loc, "left operand of '%s' must have arithmetic type", opname);
-            }
-            if(!ty_isnum(rop.ty))
-            {
-                vp_err_error(loc, "right operand of '%s' must have arithmetic type", opname);
-            }
-            return opr_binop(loc, op, lop, rop, ret);
-        case EX_MOD:
-            if(!ty_isint(lop.ty))
-            {
-                vp_err_error(loc, "left operand of '%%' must have integer type");
-            }
-            if(!ty_isint(rop.ty))
-            {
-                vp_err_error(loc, "right operand of '%%' must have integer type");
-            }
-            return opr_binop(loc, op, lop, rop, ret);
-        case EX_LE:
-        case EX_LT:
-        case EX_GE:
-        case EX_GT:
-            if(ty_isnum(lop.ty) && ty_isnum(rop.ty))
-            {
-                Operand res = opr_binop(loc, op, lop, rop, ret);
-                opr_cast(&res, tybool);
-                return res;
-            }
-            else if(ty_isptr(lop.ty) && ty_isptr(rop.ty))
-            {
-                if(lop.ty->p != rop.ty->p)
-                {
-                    vp_err_error(loc, "cannot compare pointers of different types");
-                }
-                return opr_rval(tybool);
-            }
-            else
-            {
-                vp_err_error(loc, "operands of '%s' must be arithmetic types or compatible pointer types", opname);
-            }
-            break;
-        case EX_EQ:
-        case EX_NOTEQ:
-            if(ty_isnum(lop.ty) && ty_isnum(rop.ty))
-            {
-                Operand res = opr_binop(loc, op, lop, rop, ret);
-                opr_cast(&res, tybool);
-                return res;
-            }
-            else if(ty_isptr(lop.ty) && ty_isptr(rop.ty))
-            {
-                if(lop.ty->p != rop.ty->p)
-                {
-                    vp_err_error(loc, "cannot compare pointers of different types");
-                }
-                return opr_rval(tybool);
-            }
-            else if((ty_isnil(lop.ty) && ty_isptr(rop.ty)) ||
-                    (ty_isptr(lop.ty) && ty_isnil(rop.ty)))
-            {
-                return opr_rval(tybool);
-            }
-            else
-            {
-                vp_err_error(loc, "operands of '%s' must be arithmetic types or compatible pointer types", opname);
-            }
-            break;
-        case EX_BAND:
-        case EX_BOR:
-        case EX_BXOR:
-            if(ty_isint(lop.ty) && ty_isint(rop.ty))
-            {
-                return opr_binop(loc, op, lop, rop, ret);
-            }
-            else
-            {
-                vp_err_error(loc, "operands of '%s' must have arithmetic types", opname);
-            }
-            break;
-        case EX_LSHIFT:
-        case EX_RSHIFT:
-            if(ty_isint(lop.ty) && ty_isint(rop.ty))
-            {
-                Type* ty = lop.ty;
-                Operand res = opr_binop(loc, op, lop, rop, ret);
-                opr_cast(&res, ty);
-                return res;
-            }
-            else
-            {
-                vp_err_error(loc, "operands of '%s' must both have integer types", opname);
-            }
-            break;
-        case EX_AND:
-        case EX_OR:
-            if(ty_isscalar(lop.ty) && ty_isscalar(rop.ty))
-            {
-                Operand res = opr_binop(loc, op, lop, rop, ret);
-                res.ty = tybool;
-                return res;
-            }
-            else
-            {
-                vp_err_error(loc, "operands of '%s' must have scalar types", opname);
-            }
-            break;
-        default:
-            vp_assertX(0, "not a binary expression");
-            break;
+        return opr_binop(loc, EX_ADD, lop, rop, ret);
     }
-    return (Operand){};
+    else if(ty_isptr(lop.ty) && ty_isint(rop.ty))
+    {
+        sym_complete(lop.ty->p);
+        return opr_rval(lop.ty);
+    }
+    else if(ty_isint(lop.ty) && ty_isptr(rop.ty))
+    {
+        sym_complete(rop.ty->p);
+        return opr_rval(rop.ty);
+    }
+    vp_err_error(loc, "operands of '+' must both have arithmetic type, or pointer and integer type");
+    return opr_nil;
 }
 
-/* Resolve a binary expression */
-static Operand sema_binary(Expr* e, Type* ret)
+/* Resolve binary - */
+static Operand sema_binary_sub(Expr* e, Type* ret)
 {
-    Operand lop = sema_expr_rval(e->binop.lhs, ret);
-    Operand rop = sema_expr_rval(e->binop.rhs, ret);
-    opr_fold(e->loc, &e->binop.lhs, lop);
-    opr_fold(e->loc, &e->binop.rhs, rop);
-    ExprKind op = e->kind;
-    return sema_expr_binop(e->loc, op, lop, rop, ret);
+    SrcLoc loc = e->loc;
+    Operand lop, rop;
+    SEMA_BINOP(e, ret, lop, rop);
+    if(ty_isnum(lop.ty) && ty_isnum(rop.ty))
+    {
+        return opr_binop(loc, EX_SUB, lop, rop, ret);
+    }
+    else if(ty_isptr(lop.ty) && ty_isint(rop.ty))
+    {
+        return opr_rval(lop.ty);
+    }
+    else if(ty_isptr(lop.ty) && ty_isptr(rop.ty))
+    {
+        if(!vp_type_isptrcomp(lop.ty, rop.ty))
+        {
+            vp_err_error(loc, "cannot subtract pointers of different types");
+        }
+        return opr_rval(tyuint64);
+    }
+    vp_err_error(loc, "operands of '-' must both have arithmetic type, pointer and integer, or compatible pointer types");
+    return opr_nil;
+}
+
+/* Resolve binary * */
+static Operand sema_binary_mul(Expr* e, Type* ret)
+{
+    Operand lop, rop;
+    SEMA_BINOP(e, ret, lop, rop);
+    if(!ty_isnum(lop.ty))
+        vp_err_error(e->loc, "left operand of '*' must have arithmetic type");
+    if(!ty_isnum(rop.ty))
+        vp_err_error(e->loc, "right operand of '*' must have arithmetic type");
+    return opr_binop(e->loc, EX_MUL, lop, rop, ret);
+}
+
+/* Resolve binary / */
+static Operand sema_binary_div(Expr* e, Type* ret)
+{
+    Operand lop, rop;
+    SEMA_BINOP(e, ret, lop, rop);
+    if(!ty_isnum(lop.ty))
+        vp_err_error(e->loc, "left operand of '/' must have arithmetic type");
+    if(!ty_isnum(rop.ty))
+        vp_err_error(e->loc, "right operand of '/' must have arithmetic type");
+    return opr_binop(e->loc, EX_DIV, lop, rop, ret);
+}
+
+/* Resolve binary % */
+static Operand sema_binary_mod(Expr* e, Type* ret)
+{
+    Operand lop, rop;
+    SEMA_BINOP(e, ret, lop, rop);
+    if(!ty_isint(lop.ty))
+        vp_err_error(e->loc, "left operand of '%%' must have integer type");
+    if(!ty_isint(rop.ty))
+        vp_err_error(e->loc, "right operand of '%%' must have integer type");
+    return opr_binop(e->loc, EX_MOD, lop, rop, ret);
+}
+
+/* Resolve binary bitwise & | ^ */
+static Operand sema_binary_bitwise(Expr* e, Type* ret)
+{
+    Operand lop, rop;
+    SEMA_BINOP(e, ret, lop, rop);
+    if(!ty_isint(lop.ty) || !ty_isint(rop.ty))
+        vp_err_error(e->loc, "operands of '%s' must have arithmetic types", ast_binname(e->kind));
+    return opr_binop(e->loc, e->kind, lop, rop, ret);
+}
+
+/* Resolve shift operators << >> */
+static Operand sema_binary_shift(Expr* e, Type* ret)
+{
+    Operand lop, rop;
+    SEMA_BINOP(e, ret, lop, rop);
+    if(!ty_isint(lop.ty) || !ty_isint(rop.ty))
+        vp_err_error(e->loc, "operands of '%s' must both have integer types", ast_binname(e->kind));
+    return opr_binop(e->loc, e->kind, lop, rop, ret);
+}
+
+/* Resolve ordered comparisons < <= > >= */
+static Operand sema_binary_relcmp(Expr* e, Type* ret)
+{
+    Operand lop, rop;
+    SEMA_BINOP(e, ret, lop, rop);
+    if(ty_isnum(lop.ty) && ty_isnum(rop.ty))
+    {
+        Operand res = opr_binop(e->loc, e->kind, lop, rop, NULL);
+        opr_cast(&res, tybool);
+        return res;
+    }
+    else if(ty_isptr(lop.ty) && ty_isptr(rop.ty))
+    {
+        if(lop.ty->p != rop.ty->p)
+            vp_err_error(e->loc, "cannot compare pointers of different types");
+        return opr_rval(tybool);
+    }
+    vp_err_error(e->loc, "operands of '%s' must be arithmetic types or compatible pointer types", ast_binname(e->kind));
+    return opr_nil;
+}
+
+/* Resolve equality comparisons ==, != */
+static Operand sema_binary_eqcmp(Expr* e, Type* ret)
+{
+    Operand lop, rop;
+    SEMA_BINOP(e, ret, lop, rop);
+    if(ty_isnum(lop.ty) && ty_isnum(rop.ty))
+    {
+        Operand res = opr_binop(e->loc, e->kind, lop, rop, NULL);
+        opr_cast(&res, tybool);
+        return res;
+    }
+    else if(ty_isptrlike(lop.ty) && ty_isptrlike(rop.ty))
+    {
+        if(lop.ty->p != rop.ty->p)
+            vp_err_error(e->loc, "cannot compare pointers of different types");
+        return opr_rval(tybool);
+    }
+    else if((ty_isnil(lop.ty) && ty_isptrlike(rop.ty)) ||
+            (ty_isptrlike(lop.ty) && ty_isnil(rop.ty)))
+    {
+        return opr_rval(tybool);
+    }
+    vp_err_error(e->loc, "operands of '%s' must be arithmetic types or compatible pointer types", ast_binname(e->kind));
+    return opr_nil;
+}
+
+/* Resolve logical and or */
+static Operand sema_binary_logical(Expr* e, Type* ret)
+{
+    Operand lop, rop;
+    SEMA_BINOP(e, ret, lop, rop);
+    if(!ty_isscalar(lop.ty) || !ty_isscalar(rop.ty))
+        vp_err_error(e->loc, "operands of '%s' must have scalar types", ast_binname(e->kind));
+    Operand res = opr_binop(e->loc, e->kind, lop, rop, NULL);
+    res.ty = tybool;
+    return res;
 }
 
 /* Resolve variable or compound initializer */
@@ -1520,7 +1519,7 @@ static Operand sema_field(Expr* e, Type* ret)
         }
     }
     vp_err_error(e->loc, "no field named '%s'", str_data(e->field.name));
-    return (Operand){};
+    return opr_nil;
 }
 
 /* Resolve access type expression */
@@ -1556,19 +1555,55 @@ static Operand sema_access_type(Expr* e, Type* ret)
     return opr_const(rty, val);
 }
 
+static Module* sym_mod(Expr* e)
+{
+    if(e->kind == EX_NAME)
+    {
+        Sym* sym = sym_name(e->name);
+        if(sym && sym->kind == SYM_MODULE)
+        {
+            return sym->mod;
+        }
+    }
+    else if(e->kind == EX_ACCESS)
+    {
+        Module* mod = sym_mod(e->access.expr);
+        if(mod)
+        {
+            Sym* sym = vp_tab_get(&mod->symstab, e->access.name);
+            if(sym && sym->kind == SYM_MODULE)
+            {
+                return sym->mod;
+            }
+        }
+    }
+    return NULL;
+}
+
 /* Resolve access expression */
 static Operand sema_access(Expr* e, Type* ret)
 {
     vp_assertX(e->kind == EX_ACCESS, "access");
-
     if(e->access.expr->kind != EX_NAME)
     {
         vp_err_error(e->loc, "left side of '::' must be a name");
     }
 
     Str* name = e->access.name;
+    Module* mod = sym_mod(e->access.expr);
+    if(mod)
+    {
+        Module* oldm = vp_mod_enter(mod);
+        Expr* ename = vp_expr_name(e->access.expr->loc, name);
+        Operand opr = sema_name(ename, NULL);
+        vp_mod_leave(oldm);
+        e->access.expr = ename;
+        e->access.expr->ty = ename->vi->type;
+        return opr;
+    }
+
     Decl* decl = sym_find(e->access.expr->name)->decl;
-    if (decl->kind != DECL_ENUM)
+    if(decl->kind != DECL_ENUM)
     {
         vp_err_error(e->loc, "'%s' is not an enum and does not support '::' access", str_data(name));
     }
@@ -1809,24 +1844,24 @@ static const SemaExprFn semaexprtab[] = {
     [EX_BNOT] = sema_unary,
     [EX_DEREF] = sema_unary,
     /* Binary operators */
-    [EX_ADD] = sema_binary,
-    [EX_SUB] = sema_binary,
-    [EX_MUL] = sema_binary,
-    [EX_DIV] = sema_binary,
-    [EX_MOD] = sema_binary,
-    [EX_BAND] = sema_binary,
-    [EX_BOR] = sema_binary,
-    [EX_BXOR] = sema_binary,
-    [EX_LSHIFT] = sema_binary,
-    [EX_RSHIFT] = sema_binary,
-    [EX_EQ] = sema_binary,
-    [EX_NOTEQ] = sema_binary,
-    [EX_LT] = sema_binary,
-    [EX_LE] = sema_binary,
-    [EX_GT] = sema_binary,
-    [EX_GE] = sema_binary,
-    [EX_AND] = sema_binary,
-    [EX_OR] = sema_binary,
+    [EX_ADD] = sema_binary_add,
+    [EX_SUB] = sema_binary_sub,
+    [EX_MUL] = sema_binary_mul,
+    [EX_DIV] = sema_binary_div,
+    [EX_MOD] = sema_binary_mod,
+    [EX_BAND] = sema_binary_bitwise,
+    [EX_BOR] = sema_binary_bitwise,
+    [EX_BXOR] = sema_binary_bitwise,
+    [EX_LSHIFT] = sema_binary_shift,
+    [EX_RSHIFT] = sema_binary_shift,
+    [EX_EQ] = sema_binary_eqcmp,
+    [EX_NOTEQ] = sema_binary_eqcmp,
+    [EX_LT] = sema_binary_relcmp,
+    [EX_LE] = sema_binary_relcmp,
+    [EX_GT] = sema_binary_relcmp,
+    [EX_GE] = sema_binary_relcmp,
+    [EX_AND] = sema_binary_logical,
+    [EX_OR] = sema_binary_logical,
     [EX_COMPLIT] = sema_complit,
     [EX_FIELD] = sema_field,
     [EX_ACCESS] = sema_access,
@@ -1896,7 +1931,7 @@ static void sema_note(Note* note)
 }
 
 static bool sema_stmt(Stmt* st, Type* ret);
-static Type* sema_var(Decl* d);
+static Type* sema_var(Sym* sym, Decl* d);
 
 /* Resolve a condition expression */
 static void sema_cond(Expr* e)
@@ -1936,6 +1971,10 @@ static bool sema_stmt_assign(Stmt* st, Type* ret)
     if(st->lhs->kind == EX_NAME)
     {
         Sym* sym = sym_name(st->lhs->name);
+        if(!sym)
+        {
+            vp_err_error(st->lhs->loc, "unresolved name '%s'", str_data(st->lhs->name));
+        }
         if(sym->kind == SYM_LET)
         {
             vp_err_error(st->lhs->loc, "cannot assign to 'let' variable '%s'",
@@ -1951,14 +1990,25 @@ static bool sema_stmt_assign(Stmt* st, Type* ret)
     {
         vp_err_error(st->loc, "cannot assign to array");
     }
-    Operand rop = sema_expr_rval(st->rhs, lop.ty);
     if(st->kind != ST_ASSIGN)
     {
         ExprKind kind = st->kind - ST_ADD_ASSIGN + EX_ADD;
-        rop = sema_expr_binop(st->loc, kind, lop, rop, lop.ty);
+        /* Semantically check binary lhs and rhs assignment */
+        Expr tmp = {
+            .kind   = kind,
+            .loc    = st->loc,
+            .binop  = { .lhs = st->lhs, .rhs = st->rhs },
+        };
+        sema_expr(&tmp, NULL);
+        st->lhs = tmp.binop.lhs;
+        st->rhs = tmp.binop.rhs;
     }
-    opr_conv(st->loc, &rop, lop.ty);
-    opr_fold(st->loc, &st->rhs, rop);
+    else
+    {
+        Operand res = sema_expr(st->rhs, lop.ty);
+        opr_conv(st->loc, &res, lop.ty);
+        opr_fold(st->loc, &st->rhs, res);
+    }
     return false;
 }
 
@@ -2110,7 +2160,7 @@ static bool sema_stmt_decl(Stmt* st, Type* ret)
     if(st->decl->kind == DECL_VAR || st->decl->kind == DECL_LET)
     {
         SymKind kind = st->decl->kind == DECL_VAR ? SYM_VAR : SYM_LET;
-        Type* ty = sema_var(d);
+        Type* ty = sema_var(NULL, d);
         sym_add(d->name, kind, ty);
     }
     else if(st->decl->kind == DECL_NOTE)
@@ -2271,6 +2321,14 @@ static Type* sema_fn(Decl* d)
     /* Add function name to global scope */
     VarInfo* vi = vp_scope_add(V->globscope, d->name, ty);
     vi->storage |= VS_FN;
+    if(d->fn.flags & FN_EXTERN)
+    {
+        vi->storage |= VS_EXTERN;
+    }
+    if(declflag_pub(d))
+    {
+        vi->storage |= VS_PUB;
+    }
     return ty;
 }
 
@@ -2299,7 +2357,6 @@ static void sema_fn_body(Sym* sym)
             Param* param = &d->fn.params[i];
             Type* pty = sema_typespec(param->spec);
             sym_add(param->name, SYM_VAR, pty);
-
             vp_scope_add(V->currscope, param->name, pty);
         }
         ret = sema_typespec(d->fn.ret);
@@ -2360,7 +2417,7 @@ static Operand sema_glob(Expr* e, Type* ty)
 }
 
 /* Resolve var declaration */
-static Type* sema_var(Decl* d)
+static Type* sema_var(Sym* sym, Decl* d)
 {
     vp_assertX(d->kind == DECL_VAR || d->kind == DECL_LET, "var/let declaration");
     bool isglob = vp_scope_isglob(V->currscope);
@@ -2415,6 +2472,11 @@ static Type* sema_var(Decl* d)
     if(isglob)
     {
         vec_push(V->mod->sorted, d);
+        /* Distinguish from externally defined variables */
+        if(sym && sym->mod != S.root)
+        {
+            d->var.vi->storage |= VS_MOD;
+        }
     }
     return ty;
 }
@@ -2436,7 +2498,7 @@ static Type* sema_def(Decl* d, Val* val)
     }
     opr_conv(d->loc, &res, ty);
     opr_fold(d->loc, &d->def.expr, res);
-    d->var.expr->ty = ty;
+    d->def.expr->ty = ty;
     *val = res.val;
     return ty;
 }
@@ -2522,7 +2584,7 @@ static void sema_resolve(Sym* sym)
             break;
         case SYM_VAR:
         case SYM_LET:
-            sym->type = sema_var(d);
+            sym->type = sema_var(sym, d);
             break;
         case SYM_DEF:
             sym->type = sema_def(d, &sym->val);
@@ -2597,7 +2659,7 @@ void vp_sema_imports(vec_t(Decl*) decls)
 
             if(d->imp.wildcard)
             {
-                /* from "file" import * */
+                /* from mod import * */
                 for(uint32_t j = 0; j < vec_len(mod->syms); j++)
                 {
                     Sym* sym = mod->syms[j];
@@ -2607,9 +2669,9 @@ void vp_sema_imports(vec_t(Decl*) decls)
                     }
                 }
             }
-            else if(d->imp.items)
+            else if(d->imp.items && vec_len(d->imp.items) > 0)
             {
-                /* from "file" import foo, bar as b */
+                /* from mod import foo, bar as b */
                 for(uint32_t j = 0; j < vec_len(d->imp.items); j++)
                 {
                     ImportItem* item = &d->imp.items[j];
@@ -2629,23 +2691,11 @@ void vp_sema_imports(vec_t(Decl*) decls)
             }
             else if(d->imp.alias)
             {
-                /* import "file" as mod */
+                /* import mod as m */
                 Sym* modsym = sym_new(SYM_MODULE, d->imp.alias, d);
                 modsym->state = SYM_DONE;
                 modsym->mod = mod;
                 sym_glob_put(d->imp.alias, modsym);
-            }
-            else
-            {
-                /* import "file" - import all public symbols */
-                for(uint32_t j = 0; j < vec_len(mod->syms); j++)
-                {
-                    Sym* sym = mod->syms[j];
-                    if(sym->mod == mod && declflag_pub(sym->decl))
-                    {
-                        sym_glob_put(sym->name, sym);
-                    }
-                }
             }
         }
     }
@@ -2694,11 +2744,6 @@ vec_t(Decl*) vp_sema(Str* name)
         sema_mod(V->mods[i]);
     }
     sema_complete();
-
-    for(uint32_t i = 0; i < vec_len(root->decls); i++)
-    {
-        vp_dump_decl(root->decls[i]);
-    }
 
     return root->sorted;
 }

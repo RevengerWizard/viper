@@ -3,6 +3,8 @@
 ** Syntax analyser
 */
 
+#include <string.h>
+
 #include "vp_parse.h"
 #include "vp_asm.h"
 #include "vp_ast.h"
@@ -644,17 +646,44 @@ static Stmt* parse_stmt(LexState* ls);
 static Stmt* parse_stmt_simple(LexState* ls);
 static Decl* parse_var(LexState* ls, DeclKind kind, uint32_t flags);
 
+static Str* parse_mod_path(LexState* ls, Str** out_path)
+{
+    char buf[1024];
+    size_t len = 0;
+    Str* last = NULL;
+
+    do
+    {
+        Str* seg = lex_name(ls);
+        last = seg;
+        if(len + seg->len + 1 >= sizeof(buf))
+            vp_err_error(lex_srcloc(ls), "module path too long");
+        if(len > 0)
+            buf[len++] = '/';
+        memcpy(buf + len, str_data(seg), seg->len);
+        len += seg->len;
+    }
+    while(lex_match(ls, TK_dcolon));
+
+    *out_path = vp_str_new(buf, len);
+    return last;
+}
+
 /* Parse 'import' */
 static Decl* parse_import(LexState* ls)
 {
     SrcLoc loc = lex_srcloc(ls);
     vp_lex_next(ls);    /* Skip 'import' */
-    vp_lex_consume(ls, TK_string);
-    Str* path = ls->val.name;
+    Str* path = NULL;
+    Str* last = parse_mod_path(ls, &path);
     Str* alias = NULL;
     if(lex_match(ls, TK_as))
     {
         alias = lex_name(ls);
+    }
+    else
+    {
+        alias = last;
     }
     return vp_decl_import(loc, path, alias);
 }
@@ -664,35 +693,28 @@ static Decl* parse_from(LexState* ls)
 {
     SrcLoc loc = lex_srcloc(ls);
     vp_lex_next(ls);    /* Skip 'from' */
-    vp_lex_consume(ls, TK_string);
-    Str* path = ls->val.name;
+    Str* path = NULL;
+    parse_mod_path(ls, &path);
     vp_lex_consume(ls, TK_import);
-    bool wildcard = false;
     vec_t(ImportItem) items = vec_init(ImportItem);
-    if(lex_match(ls, '*'))
-    {
-        wildcard = true;
-    }
-    else
+    bool wildcard = lex_match(ls, '*');
+    if(!wildcard)
     {
         do
         {
             SrcLoc itemloc = lex_srcloc(ls);
             Str* name = lex_name(ls);
             Str* alias = NULL;
-
             if(lex_match(ls, TK_as))
             {
                 alias = lex_name(ls);
             }
-
             ImportItem item = {.loc = itemloc, .name = name, .alias = alias};
             vec_push(items, item);
         }
         while(lex_match(ls, ','));
     }
-
-    return vp_decl_from(loc, path, NULL, items, wildcard);
+    return vp_decl_from(loc, path, items, wildcard);
 }
 
 /* Parse note argument */

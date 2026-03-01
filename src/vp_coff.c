@@ -10,6 +10,7 @@
 #include "vp_codegen.h"
 #include "vp_str.h"
 #include "vp_tab.h"
+#include "vp_var.h"
 
 /* COFF relocation */
 typedef struct
@@ -45,6 +46,9 @@ static uint32_t coff_secflags(SectionKind kind)
         return IMAGE_SCN_CNT_INITIALIZED_DATA | IMAGE_SCN_MEM_READ;
     case SEC_DATA:
         return IMAGE_SCN_CNT_INITIALIZED_DATA | IMAGE_SCN_MEM_READ | IMAGE_SCN_MEM_WRITE;
+    default:
+        vp_assertX(false, "?");
+        return 0;
     }
 }
 
@@ -58,6 +62,9 @@ static Str* coff_secname(SectionKind kind)
         return vp_str_newlit(".rdata");
     case SEC_DATA:
         return vp_str_newlit(".data");
+    default:
+        vp_assertX(false, "?");
+        return NULL;
     }
 }
 
@@ -124,24 +131,29 @@ static void coff_build()
             .value = de->ofs,
             .sec = secnum,  /* (1-based) */
             .type = 0,
-            .scl = IMAGE_SYM_CLASS_STATIC
+            .scl = de->ispub ? IMAGE_SYM_CLASS_EXTERNAL : IMAGE_SYM_CLASS_STATIC
         };
         coff_symadd(sym);
     }
 
-    /* Add externel function symbols */
+    /* Add externel symbols */
     for(uint32_t i = 0; i < V->ifuncs.size; i++)
     {
         TabEntry* entry = &V->ifuncs.entries[i];
         Str* name = entry->key;
-        if(entry->key != NULL && entry->val == NULL)
+        if(entry->key != NULL)
         {
-            name = vp_buf_cat2str(vp_str_newlit("__imp_"), name);
+            VarInfo* vi = (VarInfo*)entry->val;
+            vp_assertX(vi, "no var");
+            if(vi->storage & VS_EXTERN)
+            {
+                name = vp_buf_cat2str(vp_str_newlit("__imp_"), name);
+            }
             COFFSym sym = {
                 .name = name,
                 .value = 0,
                 .sec = 0 /* undefined */,
-                .type = 0,
+                .type = (vi->storage & VS_EXTERN) ? 0 : IMAGE_SYM_DTYPE_FUNCTION,
                 .scl = IMAGE_SYM_CLASS_EXTERNAL
             };
             coff_symadd(sym);
@@ -157,12 +169,15 @@ static void coff_build()
         {
             name = vp_buf_cat2str(vp_str_newlit("__imp_"), name);
         }
+        uint8_t scl = (code->flags & (FN_EXPORT | FN_EXTERN | FN_PUB))
+                                ? IMAGE_SYM_CLASS_EXTERNAL
+                                : IMAGE_SYM_CLASS_STATIC;
         COFFSym sym = {
             .name = name,
             .value = code->ofs,
             .sec = (code->flags & FN_EXTERN) ? 0 /* undefined */ : 1 /* .text */,
             .type = (code->flags & FN_EXTERN) ? 0 : IMAGE_SYM_DTYPE_FUNCTION,
-            .scl = IMAGE_SYM_CLASS_EXTERNAL
+            .scl = scl
         };
         coff_symadd(sym);
     }
@@ -183,7 +198,7 @@ static void coff_build()
         case PATCH_LEA_REL:
             continue;
         case PATCH_CALL_REL:
-            sym = p->code->name;
+            sym = p->label;
             break;
         case PATCH_LEA_ABS:
             sym = p->label;
@@ -193,7 +208,7 @@ static void coff_build()
             break;
         }
         rel.symidx = coff_symfind(sym);
-        vp_assertX(rel.symidx != (uint32_t)-1, "symbol %s not found in patch %d", str_data(sym), p->kind);
+        vp_assertX(rel.symidx != (uint32_t)-1, "symbol '%s' not found in patch %d", str_data(sym), p->kind);
         vec_push(textrelocs, rel);
     }
 

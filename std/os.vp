@@ -1,0 +1,6 @@
+from windows import ExitProcess
+
+pub noreturn fn exit(x : uint32) : void
+{
+    ExitProcess(x);
+}

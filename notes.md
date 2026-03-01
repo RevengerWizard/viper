@@ -18,8 +18,6 @@
 
 - [X] nil-able types `T*?`
 
-- [X] anonymous `struct`/`union`
-
 - [X] strings emission
 
 - [X] globals emission
@@ -31,6 +29,8 @@
 - [X] fix nested function calls in code generation
 
 - [X] `switch` statement
+
+- [ ] only allow `bool` type evaluated expressions in conditions, i.e. `if x != nil` instead of `if x`
 
 - [ ] intrinsics
 
@@ -57,12 +57,20 @@
 - [ ] local `def`/`alias`/`type`/`struct`/`union`/`enum` declarations
 
 - [ ] instruction selection: x64, ARM64, RV64
+    - [ ] x64
+    - [ ] ARM64
+    - [ ] RV64
 
 - [ ] multi-target architectures: x64, ARM64, RV64
+    - [ ] x64
+    - [ ] ARM64
+    - [ ] RV64
 
 - [ ] `packed` for `struct`/`union`
 
-- [ ] unnamed `struct`/`union`/`enum` types
+- [ ] `aligned(n)` | `aligned(T)`
+
+- [ ] anonymous `struct`/`union`/`enum` types
 
 - [ ] `std` modules
     - [ ] `std::io`
@@ -79,6 +87,9 @@
 
 - [ ] `sizeof(T)` vs `sizeof(expr)` ?
 
+- [ ] explicit uninitialized variables with ` = undefined`
+    - [ ] zero initialization by default
+    
 ---
 
 ### integer literals
@@ -115,7 +126,7 @@
 
 custom-width integer types
 
-`bit{n}` -> `bit7` `bit24`, `bit16`
+`bit{n}` -> `bit7`, `bit24`, `bit16`
 
 ---
 
@@ -128,6 +139,7 @@ custom-width integer types
 6. IR -> regalloc
 7. IR -> emit -> ISA
 
+---
 
 1. lex
 2. parse -> AST
@@ -143,25 +155,60 @@ custom-width integer types
 
 ### cmd
 
-`vxc [mode] [options] [file]`
+`vxc <mode> [options] [file]`
 
+- `check`
 - `comp`
 - `build`
 - `link`
-- `doc`
-- `check`
+- `doc` ?
 
-`--nostd`
+`-` - stdout
+
+`-o <file>` - output
+`-I <dir>` - import path
+`-W<level>` - warnings
+`-D <name[=val]>` - define
+
+---
+
+`--stats=mem`
+`--stats=time`
+
+```
+== stats ==
+lex:     120 KB
+parse:   340 KB
+sema:    1.2 MB
+ir:      2.8 MB
+ra:      900 KB
+total:   5.4 MB
+time:    42 ms
+```
+
+---
+
+`--nostd` - exclude std library
 `--version`
-`-I`
-`-W`
-`-D`
 `--entry <sym>`
 `--sanitize`
 `--help`
+`--stats=<kind>`
 `--arch=<kind>`
-`--emit=<kind>` -  `obj | asm | ir | exe | bin`
-`--target=<kind>`
+`--target=<kind>` - target
+`--dump=<kind>` - dump compiler internals
+
+`--subsystem=<kind>` - Windows subsystem?
+`--subsystem=console`
+
+---
+
+`--dump=ast`
+`--dump=ir`
+`--dump=cfg`
+`--dump=dot`
+`--dump=li`
+`--dump=typecache`
 
 ---
 
@@ -206,51 +253,127 @@ asm
 
 ### std
 
-`os::exit(x : uint32)`
-`os::getenv`
+- `io`
+- `fmt`
+- `str`
+- `mem`
+- `os`
+- `conv` ?
 
-`io::write(f : FILE*, buf : const uint8*, n : usize) : usize`
-`io::read(f : FILE*, buf : uint8*, n : usize) : usize`
-`io::flush(f : FILE*)`
-`io::fmt`
-`io::print`
-`io::println`
+---
 
-`str::len(s : const uint8*) : usize`
+### std::os
 
-`str::toi32`
-`str::toi64`
-`str::tof64`
+```vp
+noreturn fn exit(x : uint32) : void;
+fn getenv() : void;
+```
 
-`mem::copy(dst : void*, src : const void*, n : usize) : void`
-`mem::move(dst : void*, src : const void*, n : usize) : void`
-`mem::set(dst : void*, val : uint32, n : usize) : void`
-`mem::cmp(a : const void*, b : const void*, n : usize) : int32`
-`mem::alloc(n : usize) : void*`
-`mem::free(p : void*) : void`
+---
 
-`math::abs`
-`math::absi64(x : int64) : int64`
-`math::absf64(x : float64) : float64`
+### std::io
 
-`math::sin`
-`math::sinf32(x : float32) : float32`
-`math::sinf64(x : float64) : float64`
+```vp
+//io::stdout, io::stdin, io::stderr
 
-`math::cos`
-`math::cosf32(x : float32) : float32`
-`math::cosf64(x : float64) : float64`
+fn open(path : const uint8*, flags : OpenFlags, err : IOError*) : FILE*;
+fn close(FILE* f, ) : void;
+fn write(f : FILE*, buf : const uint8*, n : usize) : usize;
+fn read(f : FILE*, buf : uint8*, n : usize) : usize;
+fn flush(f : FILE*) : void;
+fn seek(f : FILE*) : void;
+```
 
-`math::sqrt`
-`math::sqrtf32(x : float32) : float32`
-`math::sqrtf64(x : float64) : float64`
+---
 
-`math::min(a : T, b : T) : T`
-`math::max(a : T, b : T) : T`
+### std::str
 
-`math::pi : float64`
+- base `2`-`36` ?
+- base `0` auto-detect base (`0x`, `0b`, `0o`)
+- on conversion error, always return `0`
 
-`math::e : float64`
+```vp
+fn isalpha(c : uint8) : bool;
+fn isdigit(c : uint8) : bool;
+```
+
+```vp
+fn len(s : const uint8*) : usize;   // str::len
+
+enum ConvError : uint32
+{
+    OK,
+    EMPTY,
+    INVALID,
+    OVERFLOW,
+    UNDERFLOW,
+    INVALID_BASE
+}
+
+fn tou8(s : const uint8*, len : usize, base : Base, err : ConvError*?) : int8;   // str::tou8
+fn toi8(s : const uint8*, len : usize, base : Base, err : ConvError*?) : uint8;   // str::toi8
+
+fn tou16(s : const uint8*, len : usize, base : Base, err : ConvError*?) : int16;   // str::tou16
+fn toi16(s : const uint8*, len : usize, base : Base, err : ConvError*?) : uint16;   // str::toi16
+
+fn tou32(s : const uint8*, len : usize, base : Base, err : ConvError*?) : uint32;   // str::tou32
+fn toi32(s : const uint8*, len : usize, base : Base, err : ConvError*?) : int32;  // str::toi32
+
+fn tou64(s : const uint8*, len : usize, base : Base, err : ConvError*?) : uint64;   // str::tou64
+fn toi64(s : const uint8*, len : usize, base : Base, err : ConvError*?) : int64;   // str::toi64
+
+fn tof32(s : const uint8*, len : usize, err : ConvError*?) : float32;   // str::tof32
+fn tof64(s : const uint8*, len : usize, err : ConvError*?) : float64;   // str::tof64
+
+fn tobool(s : const uint8*, len : usize, err : ConvError*?) : bool; // str::tobool
+```
+
+---
+
+### std::fmt
+
+---
+
+### std::mem
+
+```vp
+fn copy(dst : void*, src : const void*, n : usize) : void;
+fn move(dst : void*, src : const void*, n : usize) : void;
+fn set(dst : void*, val : uint8, n : usize) : void;
+fn cmp(a : const void*, b : const void*, n : usize) : int32;
+
+fn alloc(n : usize) : void*;
+fn realloc(p : void*, n : usize) : void*;
+fn free(p : void*) : void;
+```
+
+---
+
+### std::math
+
+```vp
+// math::abs
+fn absi64(x : int64) : int64;
+fn absf64(x : float64) : float64;
+
+// math::sin
+fn sinf32(x : float32) : float32;
+fn sinf64(x : float64) : float64;
+
+// math::cos
+fn cosf32(x : float32) : float32;
+fn cosf64(x : float64) : float64;
+
+// math::sqrt
+fn sqrtf32(x : float32) : float32;
+fn sqrtf64(x : float64) : float64;
+
+// math::min(a : T, b : T) : T
+// math::max(a : T, b : T) : T
+
+//math::pi : float64;
+//math::e : float64;
+```
 
 ---
 
@@ -349,37 +472,51 @@ Precision
 
 `extern "C"`
 
+---
+
+`undefined` ?
+
 `goto` ?
 
 `use` ?
 
 `typeid` ?
 
+`defer` ?
+
 ---
 
 ### import
 
-```
-import "file" as mod
-from "file" import *
-from "file" import foo, bar, baz
-from "file" as mod import foo
-from "file" import foo as f, bar as b, baz as z
+```vp
+import mod
+from mod import *
+from mod import foo, bar, baz
+from mod import foo
+from mod import foo as f, bar as b, baz as z
 
 mod::thing
 
 import std::math
 from std::math import *
 from std::math import pi
-//from std import math::pi
 from std::math import sinf32 as sin
 
 std::math::pi
 ```
 
+```vp
+import windows as win
+```
+
 ---
 
 ### macros
+
+- single time evaluation of arguments
+- macro declarations cannot shadow other declaration kinds
+- macro name cannot shadow other already declared identifiers
+- macro expressions
 
 ```
 struct VecHeader
@@ -393,6 +530,13 @@ macro len(v) = hdr(v).len;
 macro size(v) = hdr(v).size;
 macro end(v) = v + len(v);
 macro hdr(v) = cast(VecHeader*, cast(uint8*, v - offset(VecHeader, data)));
+```
+
+```
+macro min(a, b) = b < a ? b : a;
+macro max(a, b) = b > a ? b : a;
+macro clamp(x, a, b) = max(a, min(x, b));
+macro lerp(bits, a, b, p) = a + ((b - a) * p) >> bits;
 ```
 
 ---
@@ -438,8 +582,6 @@ macro hdr(v) = cast(VecHeader*, cast(uint8*, v - offset(VecHeader, data)));
 ### attributes
 
 `[[lib("kernel32")]]`
-
-`[[export]]`
 
 `[[used]]`
 
@@ -508,6 +650,9 @@ int64 <- int32 | uint32 | int16 | uint16 | int8 | uint8 | bool
 ---
 
 ### lir
+
+- lower level IR
+- instruction selection
 
 ---
 
@@ -633,6 +778,41 @@ noreturn fn sysexit(status : int32) : void
 }
 ```
 
+---
+
+`packed struct` | `packed union`
+
+- eliminate padding
+- reduces alignment to 1
+
+---
+
+`aligned(n)` | `aligned(T)`
+
+- `struct`, `union` types
+- fields?
+- variables?
+- `aligned(0)` not allowed
+- power of 2
+
+`aligned(16) struct Vec { ... }`
+
+```
+struct S
+{
+    aligned(16) x : float64;
+}
+```
+
+`aligned(64) var buf : uint8[1024]`;
+
+---
+
+`var x : int64 = undefined;`
+`var x : int64;   // = 0`
+
+---
+
 # win32 API
 
 ```c
@@ -750,7 +930,7 @@ var y : struct { int32; bool; } = {13, true};
 var e : enum : int32 { STOP, RUN, END } = e::STOP;
 ```
 
-```
+```vp
 union StatusReg
 {
     raw : uint8;

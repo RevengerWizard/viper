@@ -17,6 +17,8 @@ enum
     VS_GLOB = 1 << 0,
     VS_FN = 1 << 1,
     VS_PUB = 1 << 2,
+    VS_EXTERN = 1 << 3,
+    VS_MOD = 1 << 4,
 };
 
 #define vs_isglob(vi) ((vi)->storage & VS_GLOB)

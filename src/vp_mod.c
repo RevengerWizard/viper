@@ -6,6 +6,9 @@
 #include <string.h>
 #include <stdlib.h>
 
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+
 #include "vp_mod.h"
 #include "vp_str.h"
 #include "vp_err.h"
@@ -56,6 +59,16 @@ static bool readable(const char* filename)
     return false;
 }
 
+static const char* mod_execdir(char* buf, size_t buflen)
+{
+    if(!GetModuleFileNameA(NULL, buf, (DWORD)buflen))
+        return NULL;
+    char* sep = strrchr(buf, '\\');
+    if(sep)
+        *sep = '\0';
+    return buf;
+}
+
 Module* vp_mod_enter(Module* mod)
 {
     Module* old = V->mod;
@@ -68,21 +81,42 @@ void vp_mod_leave(Module* mod)
     V->mod = mod;
 }
 
+static Str* mod_resolve(SrcLoc loc, Str* relpath)
+{
+    /* Ensure .vp extension */
+    Str* withext = relpath;
+    if(!strstr(str_data(relpath), ".vp"))
+        withext = mod_addext(relpath, ".vp");
+
+    /* 1. Try as-is (absolute or cwd-relative) */
+    if(readable(str_data(withext)))
+    {
+        Str* abs = mod_abspath(str_data(withext));
+        if(abs) return abs;
+    }
+
+    /* 2. Search relative to compiler executable directory */
+    char execbuf[4096];
+    const char* execdir = mod_execdir(execbuf, sizeof(execbuf));
+    if(execdir)
+    {
+        char trybuf[4096];
+        int n = snprintf(trybuf, sizeof(trybuf), "%s/%s", execdir, str_data(withext));
+        if(n > 0 && n < (int)sizeof(trybuf) && readable(trybuf))
+        {
+            Str* abs = mod_abspath(trybuf);
+            if(abs) return abs;
+        }
+    }
+
+    vp_err_error(loc, "cannot resolve module '%s'", str_data(relpath));
+    return NULL; /* unreachable */
+}
+
 /* Get cached module or create new */
 Module* vp_mod_get(SrcLoc loc, Str* name)
 {
-    Str* path = name;
-    if(!strstr(str_data(name), ".vp"))
-    {
-        path = mod_addext(name, ".vp");
-    }
-
-    path = mod_abspath(str_data(path));
-    if(!readable(str_data(path)))
-    {
-        vp_err_error(loc, "cannot resolve path '%s'", str_data(path));
-    }
-
+    Str* path = mod_resolve(loc, name);
     Module* mod = vp_tab_get(&V->modules, path);
     if(!mod)
     {

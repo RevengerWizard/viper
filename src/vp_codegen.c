@@ -25,8 +25,6 @@
 #include "vp_var.h"
 #include "vp_vec.h"
 
-#include "vp_dump.h"
-
 /* Generate storage location for variable */
 static VReg* gen_varinfo(VarInfo* vi)
 {
@@ -183,6 +181,12 @@ static VReg* gen_uint(Expr* e)
     return vp_vreg_ki(e->u, vp_vsize(e->ty));
 }
 
+/* Generate typed integer constant */
+static VReg* gen_uintt(Expr* e)
+{
+    return vp_vreg_ki(e->uintt.u, vp_vsize(e->ty));
+}
+
 /* Generate double constant */
 static VReg* gen_num(Expr* e)
 {
@@ -283,11 +287,17 @@ static VReg* gen_str(Expr* e)
 /* Generate name reference */
 static VReg* gen_name(Expr* e)
 {
+    vp_assertX(e->kind == EX_NAME, "not a name");
+    vp_assertX(e->ty, "missing type");
     Type* ty = e->ty;
     if(ty_isscalar(ty))
     {
         VarInfo* vi = e->vi;
-        vp_assertX(vi, "name not found");
+        vp_assertX(vi, "name '%s' not found %d", str_data(e->name), e->loc.line);
+        if(vi->storage & VS_MOD && !vp_tab_get(&V->ifuncs, vi->name))
+        {
+            vp_tab_set(&V->ifuncs, vi->name, vi);
+        }
         if(!vs_isglob(vi))
         {
             vp_assertX(vi->vreg, "missing vreg %s", str_data(vi->name));
@@ -495,6 +505,13 @@ static VReg* gen_idx(Expr* e)
     return addr;
 }
 
+/* Generate access (name) */
+static VReg* gen_access(Expr* e)
+{
+    vp_assertX(e->kind == EX_ACCESS, "not an access expression");
+    return gen_name(e->access.expr);
+}
+
 /* Generate function call */
 static VReg* gen_call(Expr* e)
 {
@@ -512,7 +529,15 @@ static VReg* gen_call(Expr* e)
     {
         label = e->call.expr->name;
         vi = e->call.expr->vi;
-        vp_assertX(vi, "'%s' not found", str_data(e->call.expr->name));
+    }
+    else if(e->call.expr->kind == EX_ACCESS)
+    {
+        label = e->call.expr->access.expr->name;
+        vi = e->call.expr->access.expr->vi;
+    }
+    if(label)
+    {
+        vp_assertX(vi, "'%s' not found", str_data(label));
         vp_assertX(ty_isfn(vi->type), "'%s' not a function", str_data(vi->name));
         fn = vp_tab_get(&V->funcs, label);
         isglob = vs_isglob(vi) && !vs_isfn(vi);
@@ -656,8 +681,14 @@ static VReg* gen_call(Expr* e)
         ci->fn = fn;
         if(!ci->fn)
         {
-            vp_tab_set(&V->ifuncs, label, NULL);
-            ci->export = true;
+            if(vi && (vi->storage & VS_EXTERN))
+            {
+                ci->export = true;
+            }
+            if(vi)
+            {
+                vp_tab_set(&V->ifuncs, label, vi);
+            }
         }
     }
 
@@ -762,7 +793,7 @@ static void flatten_complit(Expr* e, uint32_t baseofs, vec_t(FlatField)* flat)
             case FIELD_IDX:
             {
                 vp_assertX(field->idx->kind == EX_INT || field->idx->kind == EX_UINT, "not constexpr");
-                uint32_t idx_val = (field->idx->kind == EX_INT) ? field->idx->i : field->idx->u;
+                uint64_t idx_val = field->idx->u;
                 Type* elemty = compty->p;
                 uint32_t elemsize = vp_type_sizeof(elemty);
                 field_offset = baseofs + (idx_val * elemsize);
@@ -960,7 +991,7 @@ static const GenExprFn genexprtab[] = {
     [EX_NIL] = gen_nil,
     [EX_TRUE] = gen_true, [EX_FALSE] = gen_false,
     [EX_CHAR] = gen_int,
-    [EX_INT] = gen_int, [EX_UINT] = gen_uint,
+    [EX_INT] = gen_int, [EX_UINT] = gen_uint, [EX_UINTT] = gen_uintt,
     [EX_NUM] = gen_num, [EX_FLO] = gen_flo,
     [EX_STR] = gen_str,
     [EX_NAME] = gen_name,
@@ -978,6 +1009,7 @@ static const GenExprFn genexprtab[] = {
     [EX_AND] = gen_logical, [EX_OR] = gen_logical,
     [EX_COMPLIT] = gen_complit,
     [EX_FIELD] = gen_field, [EX_IDX] = gen_idx,
+    [EX_ACCESS] = gen_access,
     [EX_CALL] = gen_call,
     [EX_CAST] = gen_cast,
     [EX_INTCAST] = gen_cast,
@@ -998,6 +1030,7 @@ static VReg* gen_expr(Expr* e)
 /* Inline body of a function */
 static VReg* gen_inline(Expr* e, Type* ret, Stmt* body, Code* code)
 {
+    UNUSED(ret);
     vp_assertX(body->kind == ST_BLOCK, "not a block");
 
     if(e)
@@ -1647,6 +1680,10 @@ static Code* gen_fn(Decl* d)
     code->flags = d->fn.flags;
     code->body = d->fn.body;
     code->abi = V->T->abi;
+    if(declflag_pub(d))
+    {
+        code->flags |= FN_PUB;
+    }
     if(code->flags & FN_SYSCALL)
     {
         code->abi = &syscall_abi;
@@ -1688,8 +1725,6 @@ static Code* gen_fn(Decl* d)
     vp_bb_analyze(code->bbs);
     vp_ra_alloc(ra, code->bbs);
     gen_stack(code);
-
-    vp_dump_bbs(code);
 
     V->fncode = NULL;
     V->ra = NULL;
@@ -1805,6 +1840,7 @@ static void gen_glob(Decl* d)
     uint32_t align = vp_type_alignof(ty);
 
     DataEntry* entry = vp_data_new(DATA_VAR, d->name, size, align);
+    entry->ispub = declflag_pub(d);
     vec_push(V->globdata, entry);
 
     if(d->var.expr)

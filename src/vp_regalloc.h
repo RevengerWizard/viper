@@ -49,6 +49,8 @@ typedef struct RegAlloc
     uint32_t fphysmax;  /* Max physical float registers */
     RegSet itemp; /* Temporary integer registers (bitmask) */
     RegSet ftemp; /* Temporary float registers (bitmask) */
+    RegSet ibroke; /* Caller saved integer registers (bitmask) */
+    RegSet fbroke; /* Caller saved float registers (bitmask) */
 } RegAlloc;
 
 /* Virtual registers */

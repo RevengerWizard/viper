@@ -46,6 +46,8 @@ typedef struct Operand
     uint8_t flags;
 } Operand;
 
+#define opr_nil ((Operand){})
+
 typedef enum SymKind
 {
     SYM_NONE,

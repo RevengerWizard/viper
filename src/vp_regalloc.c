@@ -119,7 +119,7 @@ static void live_expire(PhysRegSet* p, uint32_t start)
     for(j = 0; j < len; j++)
     {
         LiveInterval* li = p->active[j];
-        if(li->end > start)
+        if((li->end == REG_NO || start == REG_NO) || li->end > start)
             break;
         uint32_t phys = li->phys;
         usebits &= ~(1ULL << phys);
@@ -162,7 +162,7 @@ static void live_spill(RegAlloc* ra, LiveInterval** active, uint32_t len, LiveIn
 {
     vp_assertX(len > 0, "empty active list");
     LiveInterval* spill = active[len - 1];
-    if(spill->end > li->end)
+    if(spill->end == REG_NO || spill->end > li->end)
     {
         li->phys = spill->phys;
         spill->phys = ra->iphysmax;
@@ -248,9 +248,9 @@ static void live_detect(RegAlloc* ra, BB** bbs, uint32_t vreglen, LiveInterval**
             }
             else if(ir->kind == IR_CALL)
             {
-                /* Call instruction breaks temporary registers */
-                RegSet ibroke = ra->itemp;
-                RegSet fbroke = ra->ftemp;
+                /* Call instruction breaks caller registers */
+                RegSet ibroke = ra->ibroke;
+                RegSet fbroke = ra->fbroke;
                 live_occupy(ra, actives, ibroke, fbroke);
                 iargset = fargset = 0;
             }
@@ -298,6 +298,7 @@ static void live_set_inout(vec_t(VReg*) vregs, LiveInterval* intervals, uint32_t
 /* Build live intervals by scanning the IR instructions */
 static void live_build(RegAlloc* ra, BB** bbs, uint32_t vreglen, LiveInterval* intervals)
 {
+    UNUSED(ra);
     /* Initialize all intervals */
     for(uint32_t i = 0; i < vreglen; i++)
     {
@@ -308,16 +309,6 @@ static void live_build(RegAlloc* ra, BB** bbs, uint32_t vreglen, LiveInterval* i
         li->virt = i;
         li->phys = REG_NO;
         li->regbits = 0;
-        /* Spill invervals */
-        VReg* vr = ra->vregs[i];
-        if(vr == NULL)
-            continue;
-        vp_assertX(!vrf_const(vr), "const vreg");
-        if(vrf_spill(vr))
-        {
-            li->state = LI_SPILL;
-            li->phys = vr->phys;
-        }
     }
 
     uint32_t nip = 0;   /* IR position */
@@ -480,9 +471,9 @@ static void ra_scan(RegAlloc* ra, LiveInterval** sorted, uint32_t vreglen)
         }
         if(regno == REG_NO)
         {
-            for(uint32_t j = 0; j < prsp->physmax; j++)
+            if(useall)
             {
-                if(useall)
+                for(uint32_t j = 0; j < prsp->physmax; j++)
                 {
                     if(!(occupied & (1ULL << j)))
                     {
@@ -490,9 +481,12 @@ static void ra_scan(RegAlloc* ra, LiveInterval** sorted, uint32_t vreglen)
                         break;
                     }
                 }
-                else
+            }
+            else
+            {
+                for(uint32_t j = 0; j < prsp->physmax; j++)
                 {
-                    if(mask & (1ULL << j))
+                    if(!(occupied & (1ULL << j)) && (mask & (1ULL << j)))
                     {
                         regno = j;
                         break;
@@ -599,7 +593,7 @@ static void ra_living(RegAlloc* ra, vec_t(BB*) bbs)
                     break;
                 if(li->state != LI_NORMAL)
                     continue;
-                if(li->start != REG_NO && nip == li->start)
+                if(nip == li->start)
                 {
                     vp_assertX(VREGFOR(ra, li) != NULL, "?");
                     if(vrf_flo(VREGFOR(ra, li)))
@@ -618,6 +612,9 @@ static void ra_living(RegAlloc* ra, vec_t(BB*) bbs)
     }
 
 #undef VREGFOR
+
+    vp_mem_free(ilivings);
+    vp_mem_free(flivings);
 }
 
 /* Allocate physical registers */
@@ -631,6 +628,20 @@ void vp_ra_alloc(RegAlloc *ra, BB** bbs)
     while(true)
     {
         live_build(ra, bbs, vreglen, intervals);
+        for(uint32_t i = 0; i < vreglen; i++)
+        {
+            /* Spill invervals */
+            LiveInterval* li = &intervals[i];
+            VReg* vr = ra->vregs[i];
+            if(vr == NULL)
+                continue;
+            vp_assertX(!vrf_const(vr), "const vreg");
+            if(vrf_spill(vr))
+            {
+                li->state = LI_SPILL;
+                li->phys = vr->phys;
+            }
+        }
 
         /* Sort by start, end */
         for(uint32_t i = 0; i < vreglen; i++)
@@ -638,6 +649,7 @@ void vp_ra_alloc(RegAlloc *ra, BB** bbs)
             sorted[i] = &intervals[i];
         }
         qsort(sorted, vreglen, sizeof(*sorted), live_sort);
+        ra->sorted = sorted;
 
         live_detect(ra, bbs, vreglen, sorted);
         ra_scan(ra, sorted, vreglen);
@@ -707,6 +719,8 @@ RegAlloc* vp_ra_new(TargetInfo* T)
     ra->fphysmax = T->arch->fmax;
     ra->itemp = T->abi->icallee;
     ra->ftemp = T->abi->fcallee;
+    ra->ibroke = T->abi->icaller;
+    ra->fbroke = T->abi->fcaller;
     return ra;
 }
 

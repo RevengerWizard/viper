@@ -26,6 +26,7 @@ typedef enum DataKind
 typedef struct DataEntry
 {
     DataKind kind;
+    bool ispub;
     Str* name;
     uint32_t ofs;   /* Offset in data section */
     uint32_t size;
@@ -87,6 +88,7 @@ typedef struct VpState
     struct Code* fncode;
     RegAlloc* ra;
     vec_t(struct Code*) codes;
+    vec_t(struct Decl*) decls;
     SBuf tmpbuf;
     Tab funcs;
     Tab ifuncs;
@@ -95,9 +97,10 @@ typedef struct VpState
     const TargetInfo* T;
     vec_t(struct ImportDLL) imports;
     uint32_t importsize;
-    Tab modules;
-    vec_t(struct Module*) mods;
+    Tab modules;    /* Table of modules */
+    vec_t(struct Module*) mods; /* List of modules */
     struct Module* mod; /* Current module */
+    uint64_t astmem;    /* AST memory usage */
 } VpState;
 
 #define TARGET_PTR_SIZE (8)
@@ -105,6 +108,7 @@ typedef struct VpState
 extern VpState* V;
 
 vec_t(struct Decl*) vp_load_file(VpState* V, const char* filename);
+void vp_check(VpState* V, const char* filename);
 void vp_load(VpState* V, const char* filename);
 
 VpState* vp_state_open();

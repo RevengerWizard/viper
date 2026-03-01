@@ -20,7 +20,6 @@
 #include "vp_codegen.h"
 #include "vp_low.h"
 #include "vp_link.h"
-#include "vp_dump.h"
 #include "vp_buf.h"
 
 typedef struct FileReaderCtx
@@ -58,14 +57,17 @@ vec_t(Decl*) vp_load_file(VpState* V, const char* filename)
     return decls;
 }
 
+void vp_check(VpState* V, const char* filename)
+{
+    Str* name = vp_str_newlen(filename);
+    V->decls = vp_sema(name);
+}
+
 void vp_load(VpState* V, const char* filename)
 {
     Str* name = vp_str_newlen(filename);
-    vec_t(Decl*) decls = vp_sema(name);
-    vec_t(Code*) codes = vp_codegen(decls);
-    V->codes = codes;
+    vec_t(Decl*) decls = V->decls = vp_sema(name);
+    vec_t(Code*) codes = V->codes = vp_codegen(decls);
     vp_lowX64(codes);
     vp_link();
-    //vp_dump_typecache();
-    //vp_dump_code(codes);
 }

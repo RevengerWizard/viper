@@ -29,6 +29,7 @@ static void* ast_alloc(uint32_t size)
     vp_assertX(size != 0, "0 size");
     void* p = vp_arena_alloc(&V->astarena, size);
     memset(p, 0, size);
+    V->astmem += size;
     return p;
 }
 
@@ -398,10 +399,10 @@ Decl* vp_decl_import(SrcLoc loc, Str* name, Str* alias)
     return d;
 }
 
-Decl* vp_decl_from(SrcLoc loc, Str* name, Str* alias, vec_t(ImportItem) items, bool wildcard)
+Decl* vp_decl_from(SrcLoc loc, Str* name, vec_t(ImportItem) items, bool wildcard)
 {
     Decl* d = decl_new(DECL_IMPORT, loc, 0, name);
-    d->imp.alias = alias;
+    d->imp.alias = NULL;
     d->imp.items = items;
     d->imp.wildcard = wildcard;
     return d;

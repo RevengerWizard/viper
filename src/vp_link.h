@@ -82,9 +82,9 @@ static VP_AINLINE void patchinfo_jmprel(BB* bb, uint32_t ofs)
     vec_push(V->patches, pi);
 }
 
-static VP_AINLINE void patchinfo_callrel(Code* fn, uint32_t ofs)
+static VP_AINLINE void patchinfo_callrel(Str* label, uint32_t ofs)
 {
-    PatchInfo pi = {.kind = PATCH_CALL_REL, .ofs = ofs, .code = fn};
+    PatchInfo pi = {.kind = PATCH_CALL_REL, .ofs = ofs, .label = label};
     vec_push(V->patches, pi);
 }
 

@@ -1,4 +1,327 @@
-pub fn write(f : FILE, buf : const uint8*, n : usize) : void
-{
+from windows import *
 
+pub enum IOError : uint32
+{
+    OK,
+    EOF,
+    NOT_FOUND,
+    ACCESS_DENIED,
+    INVALID,
+    UNKNOWN
+}
+
+pub enum OpenMode : uint32
+{
+    READ   = 1 << 0,
+    WRITE  = 1 << 1,
+    APPEND = 1 << 2,
+    CREATE = 1 << 3,
+    TRUNC  = 1 << 4,
+    BINARY = 1 << 5
+}
+
+pub enum SeekPos : uint32
+{
+    SET, CUR, END
+}
+
+// Internal FILE flags
+def FF_STD : uint32 = 1 << 0;  // handle is stdin/stdout/stderr
+def FF_APPEND : uint32 = 1 << 1;  // opened in append mode
+def FF_EOF : uint32 = 1 << 2;  // end-of-file reached
+def FF_CONSOLE : uint32 = 1 << 3;  // handle is a real console (not redirected)
+
+pub struct FILE
+{
+    h : HANDLE?;
+    flags : uint32;
+}
+
+var _stdin_file : FILE = {h = nil, flags = FF_STD};
+var _stdout_file : FILE = {h = nil, flags = FF_STD};
+var _stderr_file : FILE = {h = nil, flags = FF_STD};
+
+pub let stdin : FILE* = &_stdin_file;
+pub let stdout : FILE* = &_stdout_file;
+pub let stderr : FILE* = &_stderr_file;
+
+pub fn init() : void
+{
+    stdin.h = GetStdHandle(STD_INPUT_HANDLE);
+    stdout.h = GetStdHandle(STD_OUTPUT_HANDLE);
+    stderr.h = GetStdHandle(STD_ERROR_HANDLE);
+
+    if GetFileType(stdin.h) == FILE_TYPE_CHAR { stdin.flags |= FF_CONSOLE; }
+    if GetFileType(stdout.h) == FILE_TYPE_CHAR { stdout.flags |= FF_CONSOLE; }
+    if GetFileType(stderr.h) == FILE_TYPE_CHAR { stderr.flags |= FF_CONSOLE; }
+}
+
+fn map_ioerror(err : DWORD) : IOError
+{
+    switch err
+    case ERROR_FILE_NOT_FOUND return IOError::NOT_FOUND;
+    case ERROR_PATH_NOT_FOUND return IOError::NOT_FOUND;
+    case ERROR_ACCESS_DENIED return IOError::ACCESS_DENIED;
+    case ERROR_HANDLE_EOF return IOError::EOF;
+    default return IOError::UNKNOWN;
+}
+
+fn set_err(res : IOError*?, err : IOError) : void
+{
+    if res { *res = err; }
+}
+
+pub fn open(path : const uint8*, mode : OpenMode, res : IOError*?) : FILE*?
+{
+    var access : DWORD = 0;
+    if mode & OpenMode::READ
+    {
+        access |= GENERIC_READ_FLAG;
+    }
+
+    if mode & OpenMode::APPEND
+    {
+        access |= GENERIC_APPEND_FLAG;
+    }
+    else if mode & OpenMode::WRITE
+    {
+        access |= GENERIC_WRITE_FLAG;
+    }
+
+    var disp : DWORD = OPEN_EXISTING;
+    if mode & OpenMode::CREATE and mode & OpenMode::TRUNC
+    {
+        disp = CREATE_ALWAYS_D;
+    }
+    else if mode & OpenMode::CREATE
+    {
+        disp = OPEN_ALWAYS;
+    }
+    else if mode & OpenMode::TRUNC and mode & OpenMode::WRITE
+    {
+        disp = TRUNCATE_EXISTING;
+    }
+
+    var share : DWORD = FILE_SHARE_READ_FLAG;
+    var h : HANDLE = CreateFileA(
+        path,
+        access,
+        share,
+        nil,
+        disp,
+        FILE_ATTRIBUTE_NORMAL,
+        nil
+    );
+    if h == ptrcast(HANDLE, -1)
+    {
+        set_err(res, map_ioerror(GetLastError()));
+        return nil;
+    }
+
+    let f : FILE*? = VirtualAlloc(nil, sizeof(FILE), MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+    if f == nil
+    {
+        CloseHandle(h);
+        set_err(res, IOError::UNKNOWN);
+        return nil;
+    }
+
+    f.h     = h;
+    f.flags = 0;
+    if mode & OpenMode::APPEND
+    {
+        f.flags = FF_APPEND;
+    }
+
+    set_err(res, IOError::OK);
+    return f;
+}
+
+pub fn close(f : FILE*, res : IOError*?) : void
+{
+    if f.flags & FF_STD
+    {
+        set_err(res, IOError::INVALID);
+        return;
+    }
+
+    var ok : BOOL = CloseHandle(f.h);
+    if ok == 0
+    {
+        set_err(res, map_ioerror(GetLastError()));
+    }
+    else
+    {
+        set_err(res, IOError::OK);
+    }
+
+    VirtualFree(ptrcast(LPVOID, f), 0, MEM_RELEASE);
+}
+
+pub fn write(f : FILE*, buf : const uint8*, n : usize, res : IOError*?) : usize
+{
+    if f.flags & FF_APPEND
+    {
+        SetFilePointer(f.h, 0, nil, FILE_END_D);
+    }
+
+    var written : DWORD = 0;
+
+    // Use WriteConsoleA only when the handle is a real console
+    // WriteConsoleA fails on redirected handles (pipe/file), so fall through
+    // to WriteFile for those, which works for both files and redirected stds
+    if f.flags & FF_CONSOLE
+    {
+        var ok : bool = WriteConsoleA(f.h, buf, intcast(DWORD, n), &written, nil);
+        if !ok
+        {
+            set_err(res, map_ioerror(GetLastError()));
+            return cast(usize, written);
+        }
+        set_err(res, IOError::OK);
+        return cast(usize, written);
+    }
+
+    var ok : BOOL = WriteFile(f.h, ptrcast(LPCVOID, buf), intcast(DWORD, n), &written, nil);
+    if ok == 0
+    {
+        set_err(res, map_ioerror(GetLastError()));
+        return cast(usize, written);
+    }
+
+    set_err(res, IOError::OK);
+    return cast(usize, written);
+}
+
+pub fn read(f : FILE*, buf : uint8*, n : usize, res : IOError*?) : usize
+{
+    // Use ReadConsoleA only when the handle is a real console,
+    // for proper line-editing and echo. Fall through to ReadFile otherwise
+    if f.flags & FF_CONSOLE
+    {
+        var chars_read : DWORD = 0;
+        var ok : BOOL = ReadConsoleA(f.h, ptrcast(LPVOID, buf), intcast(DWORD, n), &chars_read, nil);
+        if ok == 0
+        {
+            set_err(res, map_ioerror(GetLastError()));
+            return cast(usize, chars_read);
+        }
+        if chars_read == 0
+        {
+            f.flags |= FF_EOF;
+            set_err(res, IOError::EOF);
+            return 0;
+        }
+        set_err(res, IOError::OK);
+        return cast(usize, chars_read);
+    }
+
+    var bytes_read : DWORD = 0;
+    var ok : BOOL = ReadFile(f.h, ptrcast(LPVOID, buf), intcast(DWORD, n), &bytes_read, nil);
+    if ok == 0
+    {
+        var err : DWORD = GetLastError();
+        if err == ERROR_HANDLE_EOF or err == ERROR_BROKEN_PIPE
+        {
+            f.flags |= FF_EOF;
+            set_err(res, IOError::EOF);
+        }
+        else
+        {
+            set_err(res, map_ioerror(err));
+        }
+        return cast(usize, bytes_read);
+    }
+
+    if bytes_read == 0
+    {
+        f.flags |= FF_EOF;
+        set_err(res, IOError::EOF);
+        return 0;
+    }
+
+    set_err(res, IOError::OK);
+    return cast(usize, bytes_read);
+}
+
+pub fn seek(f : FILE*, ofs : isize, pos : SeekPos, res : IOError*?) : usize
+{
+    if f.flags & FF_STD
+    {
+        set_err(res, IOError::INVALID);
+        return 0;
+    }
+
+    var method : DWORD = FILE_BEGIN;
+    switch pos
+    case SeekPos::SET { method = FILE_BEGIN; }
+    case SeekPos::CUR { method = FILE_CURRENT; }
+    case SeekPos::END { method = FILE_END_D; }
+
+    // Split the 64-bit signed offset into low/high LONG parts.
+    // Two's complement means this is uniform for positive and negative values.
+    var low : LONG = intcast(LONG, ofs & 0xFFFFFFFFiz);
+    var high : LONG = intcast(LONG, (ofs >> 32iz) & 0xFFFFFFFFiz);
+
+    var result : DWORD = SetFilePointer(f.h, low, &high, method);
+    if result == INVALID_SET_FILE_POINTER and GetLastError() != 0
+    {
+        set_err(res, map_ioerror(GetLastError()));
+        return 0;
+    }
+
+    // Clear EOF flag after a successful seek.
+    f.flags &= ~FF_EOF;
+
+    var new_pos : usize = cast(usize, result) | (cast(usize, intcast(uint32, high)) << 32);
+    set_err(res, IOError::OK);
+    return new_pos;
+}
+
+pub fn tell(f : FILE*, res : IOError*?) : usize
+{
+    if f.flags & FF_STD
+    {
+        set_err(res, IOError::INVALID);
+        return 0;
+    }
+
+    // Seek 0 bytes from current position to query the pointer without moving it.
+    var high   : LONG  = 0;
+    var result : DWORD = SetFilePointer(f.h, 0, &high, FILE_CURRENT);
+
+    if result == INVALID_SET_FILE_POINTER and GetLastError() != 0
+    {
+        set_err(res, map_ioerror(GetLastError()));
+        return 0;
+    }
+
+    set_err(res, IOError::OK);
+    var pos : usize = cast(usize, result) | (cast(usize, intcast(uint32, high)) << 32);
+    return pos;
+}
+
+pub fn flush(f : FILE*, res : IOError*?) : void
+{
+    if f.flags & FF_STD
+    {
+        set_err(res, IOError::OK);
+        return;
+    }
+
+    var ok : BOOL = FlushFileBuffers(f.h);
+    if ok == 0
+    {
+        set_err(res, map_ioerror(GetLastError()));
+    }
+    else
+    {
+        set_err(res, IOError::OK);
+    }
+}
+
+pub fn eof(f : FILE*) : bool
+{
+    return false;
+    //return (f.flags & FF_EOF) != 0;
 }

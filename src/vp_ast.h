@@ -503,7 +503,7 @@ Decl* vp_decl_aggr(SrcLoc loc, DeclKind kind, uint32_t flags, Str* name, Aggrega
 Decl* vp_decl_note(SrcLoc loc, Note note);
 Decl* vp_decl_enum(SrcLoc loc, uint32_t flags, Str* name, TypeSpec* spec, vec_t(EnumItem) items);
 Decl* vp_decl_import(SrcLoc loc, Str* name, Str* alias);
-Decl* vp_decl_from(SrcLoc loc, Str* name, Str* alias, vec_t(ImportItem) items, bool wildcard);
+Decl* vp_decl_from(SrcLoc loc, Str* name, vec_t(ImportItem) items, bool wildcard);
 
 Aggregate* vp_aggr_new(SrcLoc loc, AggregateKind kind, AggregateItem* items);
 

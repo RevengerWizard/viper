@@ -11,6 +11,7 @@
 #include "vp_ir.h"
 #include "vp_regalloc.h"
 #include "vp_state.h"
+#include "vp_str.h"
 #include "vp_target_x64.h"
 #include "vp_vec.h"
 #include "vp_low.h"
@@ -244,20 +245,21 @@ static void irX64_call(IR* ir)
 {
     Code* fn = ir->call->fn;
     uint32_t total = ir->call->stacksize;
+    Str* label = ir->call->label;
     /* Save caller registers */
     vp_lowX64_caller_push(fn, ir->call->saves, total);
 
-    if(ir->call->label)
+    if(label)
     {
         if(ir->call->export)
         {
             EMITX64(callRIP)(0);
-            patchinfo_callabs(ir->call->label, sbuf_len(&V->code) - 4);
+            patchinfo_callabs(label, sbuf_len(&V->code) - 4);
         }
         else
         {
             EMITX64(callREL32)(0);
-            patchinfo_callrel(fn, sbuf_len(&V->code) - 4);
+            patchinfo_callrel(label, sbuf_len(&V->code) - 4);
         }
     }
     else

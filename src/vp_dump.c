@@ -16,7 +16,7 @@
 #include "vp_vec.h"
 #include "vp_tab.h"
 
-static int indent = 0;
+static uint32_t indent = 0;
 
 static void dump_fmt(SBuf* sb, const char* fmt, ...)
 {
@@ -540,6 +540,14 @@ void vp_dump_bbs(Code* code)
     fflush(stdout);
 }
 
+void vp_dump_ir(SBuf* sb, vec_t(Code*) codes)
+{
+    for(uint32_t i = 0; i < vec_len(codes); i++)
+    {
+        dump_bbs(sb, codes[i]);
+    }
+}
+
 static void dump_inst(SBuf* sb, void* p, uint32_t size)
 {
     /* Windows temp file */
@@ -599,9 +607,9 @@ static void dump_codes(SBuf* sb, vec_t(Code*) codes)
         for(uint32_t j = 0; j < vec_len(bbs); j++)
         {
             BB* bb = bbs[j];
-            uint32_t start = bb->ofs;
-            uint32_t end = (j + 1 < vec_len(bbs)) ? bbs[j + 1]->ofs : ((i + 1 < vec_len(codes)) ? codes[i + 1]->ofs : sbuf_len(&V->code));
-            uint32_t size = end - start;
+            int32_t start = bb->ofs;
+            int32_t end = (j + 1 < vec_len(bbs)) ? bbs[j + 1]->ofs : ((i + 1 < vec_len(codes)) ? codes[i + 1]->ofs : (int32_t)sbuf_len(&V->code));
+            int32_t size = end - start;
             if(size == 0) continue;
 
             dump_fmt(sb, "\n%.*s: (offset=%d, size=%d)\n",
@@ -818,25 +826,9 @@ static void dot_graphs(SBuf* sb, vec_t(Code*) codes)
 }
 
 /* Dump functions as DOT graph */
-void vp_dump_dot(vec_t(Code*) codes, const char* filename)
+void vp_dump_dot(SBuf* sb, vec_t(Code*) codes)
 {
-    SBuf* sb = vp_buf_tmp_(V);
     dot_graphs(sb, codes);
-
-    if(filename)
-    {
-        FILE* f = fopen(filename, "w");
-        if(f)
-        {
-            fwrite(sb->b, 1, sbuf_len(sb), f);
-            fclose(f);
-        }
-    }
-    else
-    {
-        fwrite(sb->b, 1, sbuf_len(sb), stdout);
-        fflush(stdout);
-    }
 }
 
 /* -- AST dump ------------------------------------------------------ */
@@ -1253,7 +1245,7 @@ static void dump_ast_stmt(SBuf* sb, Stmt* st)
             vp_buf_putlit(sb, "if ");
             dump_ast_expr(sb, st->ifst.cond);
             vp_buf_putb(sb, '\n');
-            dump_ast_block(sb, st->ifst.tblock);
+            dump_ast_stmt(sb, st->ifst.tblock);
             vp_buf_putb(sb, '\n');
             /* Else block, if any */
             if(st->ifst.fblock)
@@ -1572,4 +1564,12 @@ void vp_dump_decl(Decl* d)
     dump_decl(&sb, d);
     fwrite(sb.b, 1, sbuf_len(&sb), stdout);
     fflush(stdout);
+}
+
+void vp_dump_ast(SBuf* sb, vec_t(Decl*) decls)
+{
+    for(uint32_t i = 0; i < vec_len(decls); i++)
+    {
+        dump_decl(sb, decls[i]);
+    }
 }

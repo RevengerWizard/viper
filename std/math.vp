@@ -1,1 +1,21 @@
 pub def pi = 3.14159265358979323846;
+
+def FRAC_BIT : int64 = 52;
+def EXPO_POS : int64 = FRAC_BIT;
+def EXPO_BIT : int64 = 11;
+def EXPO_BIAS : int64 = 1022;
+def SIGN_POS : int64 = FRAC_BIT + EXPO_BIT;
+def FRAC_MASK : int64 = (1 << FRAC_BIT) - 1;
+def EXPO_MASK : int64 = ((1 << EXPO_BIT) - 1 << EXPO_POS);
+def SIGN_MASK : int64 = 1 << SIGN_POS;
+def NAN_MASK : int64 = ((1 << (EXPO_BIT + 1)) - 1) << (EXPO_POS - 1);
+
+union U { d : float64; q : int64; }
+
+pub fn absf64(x : float64) : float64
+{
+    var u : U;
+    u.d = x;
+    u.q &= ~SIGN_MASK;
+    return u.d;
+}
