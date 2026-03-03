@@ -30,7 +30,10 @@
 
 - [X] `switch` statement
 
-- [ ] only allow `bool` type evaluated expressions in conditions, i.e. `if x != nil` instead of `if x`
+- [X] only allow `bool` type evaluated expressions in conditions, i.e. `if x != nil` instead of `if x`
+
+- [ ] explicit uninitialized variables with ` = undefined`
+    - [ ] zero initialization by default
 
 - [ ] intrinsics
 
@@ -86,9 +89,6 @@
 - [ ] `enum E : uint8` must create separate type, not `alias`
 
 - [ ] `sizeof(T)` vs `sizeof(expr)` ?
-
-- [ ] explicit uninitialized variables with ` = undefined`
-    - [ ] zero initialization by default
     
 ---
 
@@ -517,6 +517,7 @@ import windows as win
 - macro declarations cannot shadow other declaration kinds
 - macro name cannot shadow other already declared identifiers
 - macro expressions
+- macro blocks/statements
 
 ```
 struct VecHeader
@@ -530,6 +531,10 @@ macro len(v) = hdr(v).len;
 macro size(v) = hdr(v).size;
 macro end(v) = v + len(v);
 macro hdr(v) = cast(VecHeader*, cast(uint8*, v - offset(VecHeader, data)));
+```
+
+```
+macro assert(cond, msg) = cond ? void(0) : assertx(msg);
 ```
 
 ```
@@ -813,36 +818,7 @@ struct S
 
 ---
 
-# win32 API
-
-```c
-var h : HANDLE = GetStdHandle(STD_OUTPUT_HANDLE);
-var written : DWORD;
-WriteConsoleA(h, "Hello\n", 6, &written, nil);
-```
-
-```c
-MessageBoxA(
-    nil,
-    "Here is a nice message box",
-    "Win32 Example",
-    MB_OKCANCEL | MB_ICONWARNING
-);
-```
-
----
-
 ### linker
-
-`ld out.obj -o out.exe -L. -lkernel32 -ltea00 --subsystem=console -e main`
-
-`ld out.obj -o out.exe --subsystem=console -e main`
-
-`objdump -s -j .data out.obj`
-
----
-
-`dot -Tpng out.dot -o out.png`
 
 ---
 
@@ -914,7 +890,7 @@ struct Data
 }
 ```
 
-```
+```vp
 type X = struct;
 
 type U = union;
@@ -946,4 +922,24 @@ union StatusReg
         factory_test : bit1;
     }
 }
+```
+
+- struct inheritance?
+
+```vp
+struct Pet
+{
+    name : const uint8*;
+    weight : float32;
+}
+
+struct Cat
+{
+    a : int32;
+    b : float32;
+    use pet : Pet;
+}
+
+let cat : Cat;
+cat.name = "Mittens";
 ```

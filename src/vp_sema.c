@@ -1154,42 +1154,54 @@ static Operand sema_ref(Expr* e, Type* ret)
     return opr_rval(vp_type_ptr(opr.ty));
 }
 
-/* Resolve unary expression */
-static Operand sema_unary(Expr* e, Type* ret)
+/* Resolve dereference */
+static Operand sema_unary_deref(Expr* e, Type* ret)
 {
     Operand opr = sema_expr_rval(e->unary, ret);
     Type* ty = opr.ty;
-    switch(e->kind)
+    if(!ty_isptr(ty))
     {
-        case EX_DEREF:
-            if(!ty_isptr(ty))
-            {
-                vp_err_error(e->loc, "cannot deref non-pointer type");
-            }
-            return opr_lval(ty->p);
-        case EX_NOT:
-            if(!ty_isscalar(ty))
-            {
-                vp_err_error(e->loc, "can only use 'not' with scalar types");
-            }
-            return opr_unary(e, opr);
-        case EX_NEG:
-            if(!ty_isnum(ty))
-            {
-                vp_err_error(e->loc, "can only use unary '-' with arithmetic types");
-            }
-            return opr_unary(e, opr);
-        case EX_BNOT:
-            if(!ty_isint(ty))
-            {
-                vp_err_error(e->loc, "can only use '~' with integer types");
-            }
-            return opr_unary(e, opr);
-        default:
-            vp_assertX(0, "not a unary expression");
-            break;
+        vp_err_error(e->loc, "cannot deref non-pointer type");
     }
-    return opr_nil;
+    return opr_lval(ty->p);
+}
+
+/* Resolve unary not ! */
+static Operand sema_unary_not(Expr* e, Type* ret)
+{
+    Operand opr = sema_expr_rval(e->unary, ret);
+    Type* ty = opr.ty;
+    if(!ty_isbool(ty))
+    {
+        vp_err_error(e->loc, "can only use 'not' with type 'bool', found '%s'", type_str(ty));
+    }
+    Operand res = opr_unary(e, opr);
+    res.ty = tybool;
+    return res;
+}
+
+/* Resolve unary negation - */
+static Operand sema_unary_neg(Expr* e, Type* ret)
+{
+    Operand opr = sema_expr_rval(e->unary, ret);
+    Type* ty = opr.ty;
+    if(!ty_isnum(ty))
+    {
+        vp_err_error(e->loc, "can only use unary '-' with arithmetic types");
+    }
+    return opr_unary(e, opr);
+}
+
+/* Resolve unary bitwise not ~ */
+static Operand sema_unary_bnot(Expr* e, Type* ret)
+{
+    Operand opr = sema_expr_rval(e->unary, ret);
+    Type* ty = opr.ty;
+    if(!ty_isint(ty))
+    {
+        vp_err_error(e->loc, "can only use '~' with integer types");
+    }
+    return opr_unary(e, opr);
 }
 
 /* Prologue for binary operators */
@@ -1338,7 +1350,7 @@ static Operand sema_binary_eqcmp(Expr* e, Type* ret)
     if(ty_isnum(lop.ty) && ty_isnum(rop.ty))
     {
         Operand res = opr_binop(e->loc, e->kind, lop, rop, NULL);
-        opr_cast(&res, tybool);
+        res.ty = tybool;
         return res;
     }
     else if(ty_isptrlike(lop.ty) && ty_isptrlike(rop.ty))
@@ -1839,10 +1851,10 @@ static const SemaExprFn semaexprtab[] = {
     [EX_PREDEC] = sema_incdec,
     [EX_POSTINC] = sema_incdec,
     [EX_POSTDEC] = sema_incdec,
-    [EX_NEG] = sema_unary,
-    [EX_NOT] = sema_unary,
-    [EX_BNOT] = sema_unary,
-    [EX_DEREF] = sema_unary,
+    [EX_NEG] = sema_unary_neg,
+    [EX_NOT] = sema_unary_not,
+    [EX_BNOT] = sema_unary_bnot,
+    [EX_DEREF] = sema_unary_deref,
     /* Binary operators */
     [EX_ADD] = sema_binary_add,
     [EX_SUB] = sema_binary_sub,
@@ -1937,9 +1949,9 @@ static Type* sema_var(Sym* sym, Decl* d);
 static void sema_cond(Expr* e)
 {
     Operand cond = sema_expr(e, NULL);
-    if(!ty_isscalar(cond.ty))
+    if(!ty_isbool(cond.ty))
     {
-        vp_err_error(e->loc, "condition expression must have scalar type");
+        vp_err_error(e->loc, "condition expression must have type 'bool', found '%s'", type_str(cond.ty));
     }
 }
 

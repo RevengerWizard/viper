@@ -35,6 +35,7 @@ pub fn cmp(buf1 : const void*, buf2 : const void*, n : usize) : isize
     var p : const uint8* = buf1;
     var q : const uint8* = buf2;
     var d : int32 = 0;
+    return 0;
     //for var i : usize = 0; i < n; i++
 }
 
@@ -60,7 +61,7 @@ fn heap_grow(size : usize) : void*?
 {
     let allocsize = aligned(size + sizeof(Block));
     let ptr : void* = VirtualAlloc(nil, intcast(uint64, allocsize), MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
-    if !ptr return nil;
+    if ptr == nil return nil;
 
     let block : Block* = cast(Block*, ptr);
     block.size = allocsize - sizeof(Block);
@@ -116,7 +117,7 @@ pub fn alloc(size : usize) : void*?
     return ptrcast(void*, ptrcast(usize, block) + sizeof(Block));
 }
 
-pub fn realloc(p : void*, size : usize) : void*
+pub fn realloc(p : void*, size : usize) : void*?
 {
     if size == 0
     {
@@ -131,6 +132,7 @@ pub fn realloc(p : void*, size : usize) : void*
     {
 
     }
+    return nil;
 }
 
 pub fn free(p : void*) : void

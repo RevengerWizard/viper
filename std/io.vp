@@ -68,36 +68,36 @@ fn map_ioerror(err : DWORD) : IOError
 
 fn set_err(res : IOError*?, err : IOError) : void
 {
-    if res { *res = err; }
+    if res != nil { *res = err; }
 }
 
 pub fn open(path : const uint8*, mode : OpenMode, res : IOError*?) : FILE*?
 {
     var access : DWORD = 0;
-    if mode & OpenMode::READ
+    if mode & OpenMode::READ != 0
     {
         access |= GENERIC_READ_FLAG;
     }
 
-    if mode & OpenMode::APPEND
+    if mode & OpenMode::APPEND != 0
     {
         access |= GENERIC_APPEND_FLAG;
     }
-    else if mode & OpenMode::WRITE
+    else if mode & OpenMode::WRITE != 0
     {
         access |= GENERIC_WRITE_FLAG;
     }
 
     var disp : DWORD = OPEN_EXISTING;
-    if mode & OpenMode::CREATE and mode & OpenMode::TRUNC
+    if mode & OpenMode::CREATE != 0 and mode & OpenMode::TRUNC != 0
     {
         disp = CREATE_ALWAYS_D;
     }
-    else if mode & OpenMode::CREATE
+    else if mode & OpenMode::CREATE != 0
     {
         disp = OPEN_ALWAYS;
     }
-    else if mode & OpenMode::TRUNC and mode & OpenMode::WRITE
+    else if mode & OpenMode::TRUNC != 0 and mode & OpenMode::WRITE != 0
     {
         disp = TRUNCATE_EXISTING;
     }
@@ -128,7 +128,7 @@ pub fn open(path : const uint8*, mode : OpenMode, res : IOError*?) : FILE*?
 
     f.h     = h;
     f.flags = 0;
-    if mode & OpenMode::APPEND
+    if mode & OpenMode::APPEND != 0
     {
         f.flags = FF_APPEND;
     }
@@ -139,7 +139,7 @@ pub fn open(path : const uint8*, mode : OpenMode, res : IOError*?) : FILE*?
 
 pub fn close(f : FILE*, res : IOError*?) : void
 {
-    if f.flags & FF_STD
+    if f.flags & FF_STD != 0
     {
         set_err(res, IOError::INVALID);
         return;
@@ -160,7 +160,7 @@ pub fn close(f : FILE*, res : IOError*?) : void
 
 pub fn write(f : FILE*, buf : const uint8*, n : usize, res : IOError*?) : usize
 {
-    if f.flags & FF_APPEND
+    if f.flags & FF_APPEND != 0
     {
         SetFilePointer(f.h, 0, nil, FILE_END_D);
     }
@@ -170,7 +170,7 @@ pub fn write(f : FILE*, buf : const uint8*, n : usize, res : IOError*?) : usize
     // Use WriteConsoleA only when the handle is a real console
     // WriteConsoleA fails on redirected handles (pipe/file), so fall through
     // to WriteFile for those, which works for both files and redirected stds
-    if f.flags & FF_CONSOLE
+    if f.flags & FF_CONSOLE != 0
     {
         var ok : bool = WriteConsoleA(f.h, buf, intcast(DWORD, n), &written, nil);
         if !ok
@@ -197,7 +197,7 @@ pub fn read(f : FILE*, buf : uint8*, n : usize, res : IOError*?) : usize
 {
     // Use ReadConsoleA only when the handle is a real console,
     // for proper line-editing and echo. Fall through to ReadFile otherwise
-    if f.flags & FF_CONSOLE
+    if f.flags & FF_CONSOLE != 0
     {
         var chars_read : DWORD = 0;
         var ok : BOOL = ReadConsoleA(f.h, ptrcast(LPVOID, buf), intcast(DWORD, n), &chars_read, nil);
@@ -246,7 +246,7 @@ pub fn read(f : FILE*, buf : uint8*, n : usize, res : IOError*?) : usize
 
 pub fn seek(f : FILE*, ofs : isize, pos : SeekPos, res : IOError*?) : usize
 {
-    if f.flags & FF_STD
+    if f.flags & FF_STD != 0
     {
         set_err(res, IOError::INVALID);
         return 0;
@@ -280,7 +280,7 @@ pub fn seek(f : FILE*, ofs : isize, pos : SeekPos, res : IOError*?) : usize
 
 pub fn tell(f : FILE*, res : IOError*?) : usize
 {
-    if f.flags & FF_STD
+    if f.flags & FF_STD != 0
     {
         set_err(res, IOError::INVALID);
         return 0;
@@ -303,7 +303,7 @@ pub fn tell(f : FILE*, res : IOError*?) : usize
 
 pub fn flush(f : FILE*, res : IOError*?) : void
 {
-    if f.flags & FF_STD
+    if f.flags & FF_STD != 0
     {
         set_err(res, IOError::OK);
         return;
@@ -322,6 +322,5 @@ pub fn flush(f : FILE*, res : IOError*?) : void
 
 pub fn eof(f : FILE*) : bool
 {
-    return false;
-    //return (f.flags & FF_EOF) != 0;
+    return cast(uint32, f.flags & FF_EOF) != 0;
 }
