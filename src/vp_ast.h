@@ -89,6 +89,7 @@ typedef enum ExprKind
     EX_GE,
     EX_AND,
     EX_OR,
+    EX_TERNARY,
     /* Unary operators */
     EX_UNARY,
     EX_NEG = EX_UNARY,
@@ -165,6 +166,12 @@ typedef struct Expr
             struct Expr* lhs;
             struct Expr* rhs;
         } binop;
+        struct
+        {
+            struct Expr* cond;
+            struct Expr* then;
+            struct Expr* els;
+        } ternary;
         struct
         {
             TypeSpec* spec;
@@ -479,6 +486,7 @@ Expr* vp_expr_cast(SrcLoc loc, ExprKind kind, TypeSpec* spec, Expr* e);
 Expr* vp_expr_sizeof(SrcLoc loc, TypeSpec* spec);
 Expr* vp_expr_alignof(SrcLoc loc, TypeSpec* spec);
 Expr* vp_expr_offsetof(SrcLoc loc, TypeSpec* spec, Str* name);
+Expr* vp_expr_ternary(SrcLoc loc, Expr* cond, Expr* then, Expr* els);
 
 /* Statements */
 Stmt* vp_stmt_assign(SrcLoc loc, StmtKind kind, Expr* lhs, Expr* rhs);

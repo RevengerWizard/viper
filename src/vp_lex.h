@@ -18,6 +18,7 @@
     _(extern) _(export) \
     _(import) _(from) _(as) \
     _(asm) \
+    _(undefined) \
     _(var) _(let) _(const) \
     _(def) \
     _(not) _(and) _(or) \

@@ -216,6 +216,15 @@ Expr* vp_expr_offsetof(SrcLoc loc, TypeSpec* spec, Str* name)
     return expr;
 }
 
+Expr* vp_expr_ternary(SrcLoc loc, Expr* cond, Expr* then, Expr* els)
+{
+    Expr* expr = expr_new(EX_TERNARY, loc);
+    expr->ternary.cond = cond;
+    expr->ternary.then = then;
+    expr->ternary.els  = els;
+    return expr;
+}
+
 /* -- AST statements ------------------------------------------------ */
 
 static Stmt* stmt_new(StmtKind kind, SrcLoc loc)

@@ -1131,6 +1131,13 @@ static void dump_ast_expr(SBuf* sb, Expr* e)
             dump_ast_expr(sb, e->binop.rhs);
             vp_buf_putb(sb, ')');
             break;
+        case EX_TERNARY:
+            dump_ast_expr(sb, e->ternary.cond);
+            vp_buf_putlit(sb, " ? ");
+            dump_ast_expr(sb, e->ternary.then);
+            vp_buf_putlit(sb, " : ");
+            dump_ast_expr(sb, e->ternary.els);
+            break;
         case EX_CAST:
         case EX_INTCAST:
         case EX_FLOATCAST:

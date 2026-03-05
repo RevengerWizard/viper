@@ -47,6 +47,7 @@ typedef struct Code
     uint32_t stacksize; /* Stack size used */
     BB* retbb;  /* Final return basic block */
     VReg* retvr;    /* Return vreg */
+    VReg* inretvr;    /* Inline return vreg */
     Stmt* body;
     const ABIInfo* abi;
 } Code;

@@ -22,6 +22,7 @@ typedef enum
 {
     PREC_NONE,
     PREC_ASSIGN,     /*  =  */
+    PREC_TERNARY,    /*  ?:  */
     PREC_OR,         /*  or  */
     PREC_AND,        /*  and  */
     PREC_EQUALITY,   /*  == !=  */
@@ -255,6 +256,15 @@ static Expr* expr_binary(LexState* ls, Expr* lhs, SrcLoc loc)
     return vp_expr_binop(loc, kind, lhs, rhs);
 }
 
+/* Parse ternary expression cond ? then : els */
+static Expr* expr_ternary(LexState* ls, Expr* cond, SrcLoc loc)
+{
+    Expr* then = expr_prec(ls, PREC_TERNARY);
+    vp_lex_consume(ls, ':');
+    Expr* els = expr_prec(ls, PREC_TERNARY);
+    return vp_expr_ternary(loc, cond, then, els);
+}
+
 /* Parse post increment/decrement */
 static Expr* expr_post(LexState* ls, Expr* lhs, SrcLoc loc)
 {
@@ -402,6 +412,8 @@ static ParseRule expr_rule(LexToken t)
             return OPERATOR(expr_binary, PREC_AND);
         case TK_or:
             return OPERATOR(expr_binary, PREC_OR);
+        case '?':
+            return OPERATOR(expr_ternary, PREC_TERNARY);
         case TK_inc:
         case TK_dec:
             return RULE(expr_unary, expr_post, PREC_CALL);

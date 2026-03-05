@@ -1380,6 +1380,46 @@ static Operand sema_binary_logical(Expr* e, Type* ret)
     return res;
 }
 
+/* Resolve ternary expression cond ? then : els */
+static Operand sema_ternary(Expr* e, Type* ret)
+{
+    Operand cond = sema_expr_rval(e->ternary.cond, NULL);
+    if(!ty_isbool(cond.ty))
+    {
+        vp_err_error(e->ternary.cond->loc,
+            "ternary condition must have type 'bool', found '%s'", type_str(cond.ty));
+    }
+
+    /* Both branches are evaluated; propagate the hint type */
+    Operand top = sema_expr_rval(e->ternary.then, ret);
+    Operand fop = sema_expr_rval(e->ternary.els, ret);
+    opr_fold(e->ternary.then->loc, &e->ternary.then, top);
+    opr_fold(e->ternary.els->loc,  &e->ternary.els, fop);
+
+    /* Resolve the common type of the two branches */
+    Type* ty = ret ? ret : vp_type_common(top.ty, fop.ty);
+    if(!ty)
+    {
+        vp_err_error(e->loc,
+            "ternary branches have incompatible types '%s' and '%s'",
+            type_str(top.ty), type_str(fop.ty));
+    }
+    opr_conv(e->ternary.then->loc, &top, ty);
+    opr_conv(e->ternary.els->loc, &fop, ty);
+
+    /* Constant fold: if the condition is a compile-time constant, collapse */
+    if(opr_isconst(cond))
+    {
+        Operand chosen = cond.val.b ? top : fop;
+        if(opr_isconst(chosen))
+        {
+            return opr_const(ty, chosen.val);
+        }
+    }
+
+    return opr_rval(ty);
+}
+
 /* Resolve variable or compound initializer */
 static Operand sema_init(Type* ty, Expr* e)
 {
@@ -1874,6 +1914,7 @@ static const SemaExprFn semaexprtab[] = {
     [EX_GE] = sema_binary_relcmp,
     [EX_AND] = sema_binary_logical,
     [EX_OR] = sema_binary_logical,
+    [EX_TERNARY] = sema_ternary,
     [EX_COMPLIT] = sema_complit,
     [EX_FIELD] = sema_field,
     [EX_ACCESS] = sema_access,

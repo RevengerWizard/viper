@@ -25,6 +25,13 @@
 #include "vp_var.h"
 #include "vp_vec.h"
 
+/* Push stack slot into current function */
+static VP_AINLINE void slot_add(Type* ty, FrameInfo* fi)
+{
+    Slot sl = {.type = ty, .fi = fi};
+    vec_push(V->fncode->slots, sl);
+}
+
 /* Generate storage location for variable */
 static VReg* gen_varinfo(VarInfo* vi)
 {
@@ -246,8 +253,7 @@ static VReg* gen_str(Expr* e)
         FrameInfo* fi = vp_frameinfo_new();
         VReg* base = vp_ir_bofs(fi)->dst;
 
-        Slot sl = {.type = e->ty, .fi = fi};
-        vec_push(V->fncode->slots, sl);
+        slot_add(e->ty, fi);
 
         gen_memzero(e->ty, base);
 
@@ -518,11 +524,11 @@ static VReg* gen_call(Expr* e)
     vp_assertX(e->kind == EX_CALL, "not a call expression");
     vp_assertX(e->ty, "call type");
 
+    Type* ret = e->ty;
     VReg* freg = NULL;
     Str* label = NULL;
     Code* fn = NULL;
     VarInfo* vi = NULL;
-    bool isglob = false;
 
     /* Determine if this is a direct or indirect call */
     if(e->call.expr->kind == EX_NAME)
@@ -540,32 +546,33 @@ static VReg* gen_call(Expr* e)
         vp_assertX(vi, "'%s' not found", str_data(label));
         vp_assertX(ty_isfn(vi->type), "'%s' not a function", str_data(vi->name));
         fn = vp_tab_get(&V->funcs, label);
-        isglob = vs_isglob(vi) && !vs_isfn(vi);
+        if(vs_isglob(vi) && !vs_isfn(vi))   /* Global variable used as caller */
+        {
+            IR* ir = vp_ir_iofs(label, false, false, true);
+            ir->iofs.got = true;
+            freg = ir->dst;
+            label = NULL;
+        }
     }
-
-    if(!label)
+    else
     {
         freg = gen_expr(e->call.expr);
     }
-    else if(isglob)
+
+    if(fn && !(fn->flags & FN_SYSCALL) && (fn->flags & FN_INLINE))
     {
-        IR* ir = vp_ir_iofs(label, false, false, true);
-        ir->iofs.got = true;
-        freg = ir->dst;
-        label = NULL;
+        return gen_inline(e, ret, fn->body, fn);
     }
 
     /* Determine ABI to use */
     const ABIInfo* abi = fn ? fn->abi : V->T->abi;
     uint32_t shadow = (abi->flags & ABI_SHADOW) ? 32 : 0;
 
-    Type* ret = e->ty;
     FrameInfo* fi = NULL;
     if(abi_isstack(ret))
     {
         fi = vp_frameinfo_new();
-        Slot sl = {.type = ret, .fi = fi};
-        vec_push(V->fncode->slots, sl);
+        slot_add(ret, fi);
     }
 
     typedef struct
@@ -837,8 +844,7 @@ static VReg* gen_complit(Expr* e)
     FrameInfo* fi = vp_frameinfo_new();
     VReg* base = vp_ir_bofs(fi)->dst;
 
-    Slot sl = {.type = e->ty, .fi = fi};
-    vec_push(V->fncode->slots, sl);
+    slot_add(e->ty, fi);
 
     gen_memzero(e->ty, base);
 
@@ -986,6 +992,49 @@ static VReg* gen_logical(Expr* e)
     return dst;
 }
 
+/* Generate ternary expression */
+static VReg* gen_ternary(Expr* e)
+{
+    vp_assertX(e->kind == EX_TERNARY, "not ternary");
+    vp_assertX(e->ty, "no expression type");
+    vp_assertX(e->ternary.cond, "no expression type for condition");
+    vp_assertX(e->ternary.then, "no expression type for then");
+    vp_assertX(e->ternary.els, "no expression type for else");
+    BB* tbb = vp_bb_new();
+    BB* fbb = vp_bb_new();
+    BB* nbb = vp_bb_new();
+    VReg* vr = NULL;
+    if(e->ty->kind != TY_void)
+    {
+        Type* ty = e->ty;
+        if(!ty_isscalar(ty))
+        {
+            ty = vp_type_ptr(ty);
+        }
+        vr = vp_vreg_new(ty);
+    }
+
+    gen_cond_jmp(e->ternary.cond, tbb, fbb);
+
+    vp_bb_setcurr(tbb);
+    VReg* tval = gen_expr(e->ternary.then);
+    if(vr != NULL)
+    {
+        vp_ir_mov(vr, tval, ir_flag(e->ternary.then->ty));
+    }
+    vp_ir_jmp(nbb);
+
+    vp_bb_setcurr(fbb);
+    VReg* fval = gen_expr(e->ternary.els);
+    if(vr != NULL)
+    {
+        vp_ir_mov(vr, fval, ir_flag(e->ternary.els->ty));
+    }
+
+    vp_bb_setcurr(nbb);
+    return vr;
+}
+
 typedef VReg* (*GenExprFn)(Expr*);
 static const GenExprFn genexprtab[] = {
     [EX_NIL] = gen_nil,
@@ -1001,6 +1050,7 @@ static const GenExprFn genexprtab[] = {
     [EX_LSHIFT] = gen_binop, [EX_RSHIFT] = gen_binop,
     [EX_PREINC] = gen_incdec, [EX_POSTINC] = gen_incdec,
     [EX_PREDEC] = gen_incdec, [EX_POSTDEC] = gen_incdec,
+    [EX_TERNARY] = gen_ternary,
     [EX_NEG] = gen_unary, [EX_BNOT] = gen_unary, [EX_NOT] = gen_not,
     [EX_EQ] = gen_cond, [EX_NOTEQ] = gen_cond,
     [EX_LE] = gen_cond, [EX_LT] = gen_cond,
@@ -1030,7 +1080,7 @@ static VReg* gen_expr(Expr* e)
 /* Inline body of a function */
 static VReg* gen_inline(Expr* e, Type* ret, Stmt* body, Code* code)
 {
-    UNUSED(ret);
+    vp_assertX(body, "no body");
     vp_assertX(body->kind == ST_BLOCK, "not a block");
 
     if(e)
@@ -1049,15 +1099,26 @@ static VReg* gen_inline(Expr* e, Type* ret, Stmt* body, Code* code)
     /* Handle restore of any `return` for inlined functions */
     BB* inlbb = vp_bb_new();
     BB* saveretbb = V->fncode->retbb;
-    VReg* saveretvr = V->fncode->retvr;
+    VReg* saveretvr = V->fncode->inretvr;
     V->fncode->retbb = inlbb;
 
     VReg* dst = NULL;
+    if(ret != tyvoid)
+    {
+        if(!ty_isscalar(ret))
+        {
+            /* Receive as pointer */
+            ret = vp_type_ptr(ret);
+        }
+        dst = vp_vreg_new(ret);
+        V->fncode->inretvr = dst;
+    }
+
     /* Inline the body */
     gen_block(body);
 
+    V->fncode->inretvr = saveretvr;
     V->fncode->retbb = saveretbb;
-    V->fncode->retvr = saveretvr;
 
     vp_bb_setcurr(inlbb);
 
@@ -1128,12 +1189,11 @@ static void gen_var_assign(VarInfo* vi, Expr* e)
     vp_assertX(vi, "empty variable info");
     if(!gen_varinfo(vi))
     {
-        Slot sl = {.type = vi->type, .fi = vi->fi};
-        vec_push(V->fncode->slots, sl);
+        slot_add(vi->type, vi->fi);
         V->ra->flag |= RAF_STACK_FRAME;
     }
 
-    /* Generate initialization if provided */
+    /* Generate initialization, if provided */
     if(e)
     {
         if(ty_isscalar(vi->type))
@@ -1150,11 +1210,19 @@ static void gen_var_assign(VarInfo* vi, Expr* e)
             gen_memcpy(vi->type, dst, src);
         }
     }
-    else if(!ty_isscalar(vi->type))
+    else
     {
-        vp_assertX(vi->fi, "missing frame info");
-        VReg* dst = vp_ir_bofs(vi->fi)->dst;
-        gen_memzero(vi->type, dst);
+        /* Zero initialize otherwise */
+        if(ty_isscalar(vi->type))
+        {
+            vp_ir_mov(vi->vreg, vp_vreg_ki(0, vp_vsize(vi->type)), ir_flag(vi->type));
+        }
+        else
+        {
+            vp_assertX(vi->fi, "missing frame info");
+            VReg* dst = vp_ir_bofs(vi->fi)->dst;
+            gen_memzero(vi->type, dst);
+        }
     }
 }
 
@@ -1178,23 +1246,26 @@ static void gen_ret(Stmt* st)
         vp_assertX(st->expr->ty, "missing return type");
         Type* ty = st->expr->ty;
         VReg* vreg = gen_expr(st->expr);
-
-        if(ty_isscalar(ty))
+        VReg* inretvr = V->fncode->inretvr;
+        if(inretvr == NULL)
         {
-            vp_ir_ret(vreg, ir_flag(ty));
-        }
-        else if(ty != tyvoid)
-        {
-            VReg* retvr = V->fncode->retvr;
-            if(retvr)
+            /* No inlining */
+            if(ty_isscalar(ty))
             {
+                vp_ir_ret(vreg, ir_flag(ty));
+            }
+            else if(ty != tyvoid)
+            {
+                VReg* retvr = V->fncode->retvr;
+                vp_assertX(retvr, "?");
                 gen_memcpy(ty, retvr, vreg);
                 vp_ir_ret(vreg, IRF_UNSIGNED);  /* Pointer is unsigned */
             }
-            else
-            {
-                vp_assertX(0, "?");
-            }
+        }
+        else
+        {
+            /* Inlining */
+            vp_ir_mov(inretvr, vreg, ty_isscalar(ty) ? ir_flag(ty) : IRF_UNSIGNED);
         }
     }
     vp_ir_jmp(V->fncode->retbb);
