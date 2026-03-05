@@ -33,7 +33,9 @@
 - [X] only allow `bool` type evaluated expressions in conditions, i.e. `if x != nil` instead of `if x`
 
 - [ ] explicit uninitialized variables with ` = undefined`
-    - [ ] zero initialization by default
+    - [X] zero initialization by default
+
+---
 
 - [ ] intrinsics
 
@@ -89,7 +91,7 @@
 - [ ] `enum E : uint8` must create separate type, not `alias`
 
 - [ ] `sizeof(T)` vs `sizeof(expr)` ?
-    
+
 ---
 
 ### integer literals
@@ -116,6 +118,8 @@
 
 `nil`
 
+---
+
 `float16` `float80` ?
 
 `ptrdiff` `intptr` `uintptr` ?
@@ -124,7 +128,7 @@
 
 ---
 
-custom-width integer types
+custom-width integer types ?
 
 `bit{n}` -> `bit7`, `bit24`, `bit16`
 
@@ -542,6 +546,14 @@ macro min(a, b) = b < a ? b : a;
 macro max(a, b) = b > a ? b : a;
 macro clamp(x, a, b) = max(a, min(x, b));
 macro lerp(bits, a, b, p) = a + ((b - a) * p) >> bits;
+```
+
+```
+macro swap(ref a, ref b) = {
+    let tmp = a;
+    a = b;
+    b = tmp;
+};
 ```
 
 ---
