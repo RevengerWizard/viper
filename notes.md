@@ -35,6 +35,8 @@
 - [ ] explicit uninitialized variables with ` = undefined`
     - [X] zero initialization by default
 
+- [X] memory allocator; converted dlmalloc
+
 ---
 
 - [ ] intrinsics
@@ -82,8 +84,6 @@
     - [ ] `std::mem`
     - [ ] `std::math`
 
-- [ ] memory allocator!
-
 - [ ] `switch type(x)`
 
 - [ ] untyped `def` declarations should expand into context type, not default `int32`
@@ -91,6 +91,10 @@
 - [ ] `enum E : uint8` must create separate type, not `alias`
 
 - [ ] `sizeof(T)` vs `sizeof(expr)` ?
+
+- [ ] ranges ?
+
+- [ ] `case` ranges ?
 
 ---
 
@@ -547,6 +551,8 @@ macro max(a, b) = b > a ? b : a;
 macro clamp(x, a, b) = max(a, min(x, b));
 macro lerp(bits, a, b, p) = a + ((b - a) * p) >> bits;
 ```
+
+- `ref` macro param modifies the given name
 
 ```
 macro swap(ref a, ref b) = {

@@ -931,14 +931,14 @@ static Type* sema_typespec(TypeSpec* spec)
             }
             switch(sym->kind)
             {
-                case SYM_ENUM:
-                case SYM_ALIAS:
-                case SYM_TYPE:
-                    ty = sym->type;
-                    break;
-                default:
-                    vp_err_error(spec->loc, "'%s' must denote a type", str_data(spec->name));
-                    break;
+            case SYM_ENUM:
+            case SYM_ALIAS:
+            case SYM_TYPE:
+                ty = sym->type;
+                break;
+            default:
+                vp_err_error(spec->loc, "'%s' must denote a type", str_data(spec->name));
+                break;
             }
             break;
         }
@@ -1987,13 +1987,14 @@ static bool sema_stmt(Stmt* st, Type* ret);
 static Type* sema_var(Sym* sym, Decl* d);
 
 /* Resolve a condition expression */
-static void sema_cond(Expr* e)
+static Operand sema_cond(Expr* e)
 {
     Operand cond = sema_expr(e, NULL);
     if(!ty_isbool(cond.ty))
     {
         vp_err_error(e->loc, "condition expression must have type 'bool', found '%s'", type_str(cond.ty));
     }
+    return cond;
 }
 
 /* Resolve block of statements */
@@ -2005,7 +2006,6 @@ static bool sema_block(Stmt* st, Type* ret)
     vec_push(S.currfn->fn.scopes, scope);
     uint32_t len = sym_enter();
     bool rets = false;
-
     for(uint32_t i = 0; i < vec_len(stmts); i++)
     {
         Stmt* st = stmts[i];
@@ -2086,7 +2086,8 @@ static bool sema_return(Stmt* st, Type* ret)
 static bool sema_if(Stmt* st, Type* ret)
 {
     vp_assertX(st->kind == ST_IF, "not an if");
-    sema_cond(st->ifst.cond);
+    Operand cond = sema_cond(st->ifst.cond);
+    opr_fold(st->loc, &st->ifst.cond, cond);
     bool rets = sema_stmt(st->ifst.tblock, ret);
     if(st->ifst.fblock)
     {

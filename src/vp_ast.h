@@ -93,8 +93,8 @@ typedef enum ExprKind
     /* Unary operators */
     EX_UNARY,
     EX_NEG = EX_UNARY,
-    EX_NOT,
     EX_BNOT,
+    EX_NOT,
     EX_REF,     /* &x */
     EX_DEREF,   /* *x */
     EX_PREINC,  /* ++x */

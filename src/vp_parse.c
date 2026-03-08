@@ -638,6 +638,10 @@ static TypeSpec* parse_type(LexState* ls)
         {
             vp_lex_consume(ls, '*');
             spec = vp_typespec_ptr(loc, spec);
+            if(lex_match(ls, '?'))
+            {
+                spec->qual |= SPEC_NILABLE;
+            }
         }
     }
     uint8_t qual = 0;
@@ -649,7 +653,7 @@ static TypeSpec* parse_type(LexState* ls)
     {
         qual |= SPEC_CONST;
     }
-    spec->qual = qual;
+    spec->qual |= qual;
     return spec;
 }
 

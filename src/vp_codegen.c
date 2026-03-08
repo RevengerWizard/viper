@@ -911,6 +911,9 @@ static void gen_cond_jmp(Expr* e, BB* tbb, BB* fbb)
     ExprKind ck = e->kind;
     switch(ck)
     {
+        case EX_TRUE: case EX_FALSE:
+            vp_ir_jmp(e->b ? tbb : fbb);
+            break;
         case EX_EQ: case EX_NOTEQ:
         case EX_LT: case EX_LE:
         case EX_GT: case EX_GE:

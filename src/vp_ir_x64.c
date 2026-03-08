@@ -455,7 +455,7 @@ static void cmp_vregs(VReg* src1, VReg* src2, CondKind cond)
         VRSize p = src1->vsize;
         vp_assertVSize(p, VRSize1, VRSize8);
         X64Reg s1 = irx64R[p][src1->phys];
-        X64Reg s2 = irx64R[p][src2->phys];
+        X64Reg s2;
         if(vrf_const(src2) && src2->i64 == 0)
         {
             EMITX64(testRR)(s1, s1);
@@ -468,6 +468,7 @@ static void cmp_vregs(VReg* src1, VReg* src2, CondKind cond)
             }
             else
             {
+                s2 = irx64R[p][src2->phys];
                 EMITX64(cmpRR)(s1, s2);
             }
         }
@@ -1008,7 +1009,7 @@ static const IRX64Fn irx64tab[] = {
 
 void vp_irX64(IR* ir)
 {
-    vp_assertX(ir->kind < (int)ARRSIZE(irx64tab), "out of bounds ir kind");
+    vp_assertX(ir->kind < (int)ARRSIZE(irx64tab), "out of bounds ir kind %d", ir->kind);
     vp_assertX(irx64tab[ir->kind], "empty entry %d", ir->kind);
     return (*irx64tab[ir->kind])(ir);
 }
