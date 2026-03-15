@@ -1,0 +1,4 @@
+from glfw3 import GLFWwindow
+from windows import HWND
+
+pub extern fn glfwGetWin32Window(window : GLFWwindow*) : HWND;
