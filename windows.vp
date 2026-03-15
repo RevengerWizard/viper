@@ -1,46 +1,292 @@
-pub alias HANDLE = void*;
+// Win32 API bindings
+
+/* -- winnt.h ------------------------------------------------------- */
+
+pub alias VOID = void;
+pub alias PVOID = void*;
+pub alias LPVOID = void*;
+pub alias LPCVOID = const void*;
+
 pub alias BYTE = uint8;
 pub alias WORD = uint16;
 pub alias DWORD = uint32;
+pub alias LONG = int32;
+pub alias UINT = uint32;
+
+pub alias INT_PTR = int64;
+pub alias LONG_PTR = int64;
+pub alias UINT_PTR = uint64;
+pub alias ULONG_PTR = uint64;
+pub alias SIZE_T = ULONG_PTR;
+
+pub alias HANDLE = void*;
+pub alias BOOL = int32;
+pub alias WINBOOL = int32;
+
 pub alias LPDWORD = DWORD*;
+pub alias DWORD_PTR = DWORD*;
+
+/* -- windef.h ------------------------------------------------------ */
+
 pub alias HWND = HANDLE;
 pub alias HMENU = HANDLE;
 pub alias HINSTANCE = HANDLE;
+pub alias HMODULE = HANDLE;
 pub alias HICON = HANDLE;
 pub alias HCURSOR = HANDLE;
 pub alias HBRUSH = HANDLE;
-pub alias HMODULE = HANDLE;
-pub alias LPCSTR = const uint8*;
-pub alias UINT = uint32;
-pub alias INT_PTR = int64;
-pub alias UINT_PTR = uint64;
-pub alias WPARAM = UINT_PTR;
-pub alias LONG = int32;
-pub alias LONG_PTR = int64;
-pub alias LPARAM = LONG_PTR;
-pub alias LRESULT = LONG_PTR;
-pub alias LPVOID = void*;
-pub alias WNDPROC = fn(HWND, UINT, WPARAM, LPARAM) : LRESULT;
-pub alias ATOM = uint16;
-pub alias WINBOOL = int32;
-pub alias POINT = int32;
-pub alias BOOL = int32;
-pub alias ULONG_PTR = uint64;
-pub alias SIZE_T = ULONG_PTR;
-pub alias FARPROC = fn() : INT_PTR;
-pub alias VOID = void;
-pub alias PVOID = void*;
-pub alias DWORD_PTR = DWORD*;
-
 pub alias HDC = HANDLE;
 pub alias HGLRC = HANDLE;
 
-pub def PFD_DRAW_TO_WINDOW : DWORD = 0x00000004;
-pub def PFD_SUPPORT_OPENGL : DWORD = 0x00000020;
-pub def PFD_DOUBLEBUFFER : DWORD = 0x00000001;
+pub alias ATOM = uint16;
+pub alias WPARAM = UINT_PTR;
+pub alias LPARAM = LONG_PTR;
+pub alias LRESULT = LONG_PTR;
 
-pub def PFD_TYPE_RGBA : BYTE = 0;
-pub def PFD_MAIN_PLANE : BYTE = 0;
+pub alias LPCSTR = const uint8*;
+pub alias FARPROC = fn() : INT_PTR;
+pub alias WNDPROC = fn(HWND, UINT, WPARAM, LPARAM) : LRESULT;
+
+pub struct POINT
+{
+    x, y : LONG;
+}
+
+/* -- winbase.h ----------------------------------------------------- */
+
+pub alias LPSECURITY_ATTRIBUTES = void*;
+pub alias LPOVERLAPPED = void*;
+
+pub struct FILETIME
+{
+    dwLowDateTime : DWORD;
+    dwHighDateTime : DWORD;
+}
+pub alias PFILETIME = FILETIME*;
+pub alias LPFILETIME = FILETIME*;
+
+// Standard handles
+pub def STD_INPUT_HANDLE : DWORD = bitcast(DWORD, -10);
+pub def STD_OUTPUT_HANDLE : DWORD = bitcast(DWORD, -11);
+pub def STD_ERROR_HANDLE : DWORD = bitcast(DWORD, -12);
+
+/* -- sysinfoapi.h -------------------------------------------------- */
+
+struct SYSTEMTIME
+{
+    wYear : WORD;
+    wMonth : WORD;
+    wDayOfWeek : WORD;
+    wDay : WORD;
+    wHour : WORD;
+    wMinute : WORD;
+    wSecond : WORD;
+    wMilliseconds : WORD;
+}
+pub alias PSYSTEMTIME = SYSTEMTIME*;
+pub alias LPSYSTEMTIME = SYSTEMTIME*;
+
+pub struct SYSTEM_INFO
+{
+    union
+    {
+        dwOemId : DWORD;
+        struct
+        {
+            wProcessorArchitecture : WORD;
+            wReserved : WORD;
+        }
+    }
+    dwPageSize : DWORD;
+    lpMinimumApplicationAddress : LPVOID;
+    lpMaximumApplicationAddress : LPVOID;
+    dwActiveProcessorMask : DWORD_PTR;
+    dwNumberOfProcessors : DWORD;
+    dwProcessorType : DWORD;
+    dwAllocationGranularity : DWORD;
+    wProcessorLevel : WORD;
+    wProcessorRevision : WORD;
+}
+pub alias LPSYSTEM_INFO = SYSTEM_INFO*;
+
+pub extern fn GetSystemInfo(lpSystemInfo : LPSYSTEM_INFO) : VOID;
+pub extern fn GetTickCount() : DWORD;
+pub extern fn GetSystemTime(lpSystemTime : LPSYSTEMTIME) : void;
+pub extern fn GetSystemTimeAsFileTime(lpSystemTimeAsFileTime : LPFILETIME) : void;
+
+/* -- memoryapi.h --------------------------------------------------- */
+
+pub struct MEMORY_BASIC_INFORMATION
+{
+    BaseAddress : PVOID;
+    AllocationBase : PVOID;
+    AllocationProtect : DWORD;
+    PartitionId : WORD;
+    RegionSize : SIZE_T;
+    State : DWORD;
+    Protect : DWORD;
+    Type : DWORD;
+}
+pub alias PMEMORY_BASIC_INFORMATION = MEMORY_BASIC_INFORMATION*;
+
+// Memory allocation types
+pub def MEM_COMMIT : DWORD = 0x1000;
+pub def MEM_RESERVE : DWORD = 0x2000;
+pub def MEM_RELEASE : DWORD = 0x8000;
+pub def MEM_TOP_DOWN : DWORD = 0x100000;
+pub def MEM_IMAGE : DWORD = 0x1000000;
+pub def MEM_MAPPED : DWORD = 0x40000;
+pub def MEM_PRIVATE : DWORD = 0x20000;
+
+// Page protection
+pub def PAGE_READWRITE : DWORD = 0x04;
+
+// Memory management
+pub extern fn VirtualAlloc(lpAddress : LPVOID?, dwSize : SIZE_T, flAllocationType : DWORD, flProtect : DWORD) : LPVOID;
+pub extern fn VirtualQuery(lpAddress : LPCVOID?, lpBuffer : PMEMORY_BASIC_INFORMATION, dwLength : SIZE_T) : SIZE_T;
+pub extern fn VirtualFree(lpAddress : LPVOID, dwSize : SIZE_T, dwFreeType : DWORD) : WINBOOL;
+
+/* -- winuser.h ----------------------------------------------------- */
+
+pub struct WNDCLASSA
+{
+    style : UINT;
+    lpfnWndProc : WNDPROC;
+    cbClsExtra : int32;
+    cbWndExtra : int32;
+    hInstance : HINSTANCE;
+    hIcon : HICON;
+    hCursor : HCURSOR;
+    hbrBackground : HBRUSH;
+    lpszMenuName : LPCSTR;
+    lpszClassName : LPCSTR;
+}
+
+// Window styles
+pub def WS_OVERLAPPED : UINT = 0x00000000;
+pub def WS_POPUP : UINT = 0x80000000;
+pub def WS_CHILD : UINT = 0x40000000;
+pub def WS_MINIMIZE : UINT = 0x20000000;
+pub def WS_VISIBLE : UINT = 0x10000000;
+pub def WS_DISABLED : UINT = 0x08000000;
+pub def WS_CLIPSIBLINGS : UINT = 0x04000000;
+pub def WS_CLIPCHILDREN : UINT = 0x02000000;
+pub def WS_MAXIMIZE : UINT = 0x01000000;
+pub def WS_CAPTION : UINT = 0x00C00000;
+pub def WS_BORDER : UINT = 0x00800000;
+pub def WS_DLGFRAME : UINT = 0x00400000;
+pub def WS_VSCROLL : UINT = 0x00200000;
+pub def WS_HSCROLL : UINT = 0x00100000;
+pub def WS_SYSMENU : UINT = 0x00080000;
+pub def WS_THICKFRAME : UINT = 0x00040000;
+pub def WS_GROUP : UINT = 0x00020000;
+pub def WS_TABSTOP : UINT = 0x00010000;
+pub def WS_MINIMIZEBOX : UINT = 0x00020000;
+pub def WS_MAXIMIZEBOX : UINT = 0x00010000;
+pub def WS_TILED : UINT = WS_OVERLAPPED;
+pub def WS_ICONIC : UINT = WS_MINIMIZE;
+pub def WS_SIZEBOX : UINT = WS_THICKFRAME;
+pub def WS_OVERLAPPEDWINDOW : UINT = (WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX);
+pub def WS_TILEDWINDOW : UINT = WS_OVERLAPPEDWINDOW;
+
+// Window class style
+pub def CS_VREDRAW : UINT = 0x0001;
+pub def CS_HREDRAW : UINT = 0x0002;
+pub def CS_DBLCLKS : UINT = 0x0008;
+pub def CS_OWNDC : UINT = 0x0020;
+
+// Window messages
+pub def WM_CREATE : UINT = 0x0001;
+pub def WM_DESTROY : UINT = 0x0002;
+pub def WM_CLOSE : UINT = 0x0010;
+
+pub def CW_USEDEFAULT : int32 = -2147483647 - 1;
+pub def SW_SHOW : int32 = 5;
+
+// Message box
+pub def MB_OK : UINT = 0x00000000;
+pub def MB_OKCANCEL : UINT = 0x00000001;
+pub def MB_ABORTRETRYIGNORE : UINT = 0x00000002;
+pub def MB_YESNOCANCEL : UINT = 0x00000003;
+pub def MB_YESNO : UINT = 0x00000004;
+pub def MB_RETRYCANCEL : UINT = 0x00000005;
+pub def MB_CANCELTRYCONTINUE : UINT = 0x00000006;
+pub def MB_HELP : UINT = 0x00004000;
+
+pub def MB_ICONSTOP : UINT = 0x00000010;
+pub def MB_ICONHAND : UINT = MB_ICONSTOP;
+pub def MB_ICONERROR : UINT = MB_ICONSTOP;
+pub def MB_ICONEXCLAMATION : UINT = 0x00000030;
+pub def MB_ICONWARNING : UINT = MB_ICONEXCLAMATION;
+pub def MB_ICONQUESTION : UINT = 0x00000020;
+pub def MB_ICONINFORMATION : UINT = 0x00000040;
+pub def MB_ICONASTERISK : UINT = MB_ICONINFORMATION;
+
+pub def PM_REMOVE : UINT = 0x0001;
+
+// Window long indices
+pub def GWLP_WNDPROC : int32 = -4;
+pub def GWLP_HINSTANCE : int32 = -6;
+pub def GWLP_HWNDPARENT : int32 = -8;
+pub def GWLP_ID : int32 = -12;
+pub def GWLP_USERDATA : int32 = -21;
+
+// Colors
+pub def COLOR_BACKGROUND : int32 = 1;
+pub def COLOR_WINDOW : int32 = 5;
+
+pub struct MSG
+{
+    hwnd : HWND;
+    message : UINT;
+    wParam : WPARAM;
+    lParam : LPARAM;
+    time : DWORD;
+    pt : POINT;
+}
+pub alias LPMSG = MSG*;
+
+pub struct CREATESTRUCT
+{
+    lpCreateParams : LPVOID;
+    hInstance : HINSTANCE;
+    hMenu : HMENU;
+    hwndParent : HWND;
+    cy : int32;
+    cx : int32;
+    y : int32;
+    x : int32;
+    style : LONG;
+    lpszName : LPCSTR;
+    lpszClass : LPCSTR;
+    dwExStyle : DWORD;
+}
+
+// Window management
+pub extern fn CreateWindowExA(dwExStyle : DWORD, lpClassName : LPCSTR?, lpWindowName : LPCSTR?, dwStyle : DWORD, X : int32, Y : int32, nWidth : int32, nHeight : int32, hWndParent : HWND?, hMenu : HMENU?, hInstance : HINSTANCE?, lpParam : LPVOID?) : HWND;
+pub extern fn RegisterClassA(lpWndClass : WNDCLASSA*) : ATOM;
+pub extern fn DefWindowProcA(hWnd : HWND, Msg : UINT, wParam : WPARAM, lParam : LPARAM) : LRESULT;
+pub extern fn ShowWindow(hWnd : HWND, nCmdShow : int32) : WINBOOL;
+pub extern fn UpdateWindow(hWnd : HWND) : WINBOOL;
+pub extern fn GetDC(hWnd : HWND) : HDC;
+pub extern fn ReleaseDC(hWnd : HWND, hDC : HDC) : int32;
+pub extern fn DestroyWindow(hWnd : HWND) : BOOL;
+
+// Message handling
+pub extern fn GetMessageA(lpMsg : MSG*, hWnd : HWND?, wMsgFilterMin : UINT, wMsgFilterMax : UINT) : WINBOOL;
+pub extern fn PeekMessageA(lpMsg : LPMSG, hWnd : HWND, wMsgFilterMin : UINT, wMsgFilterMax : UINT, wRemoveMsg : UINT) : BOOL;
+pub extern fn DispatchMessageA(lpMsg : MSG*) : LRESULT;
+pub extern fn TranslateMessage(lpMsg : MSG*) : WINBOOL;
+pub extern fn PostQuitMessage(nExitCode : int32) : void;
+
+// Window userdata
+pub extern fn SetWindowLongPtrA(hWnd : HWND, nIndex : int32, dwNewLong : LONG_PTR) : LONG_PTR;
+pub extern fn GetWindowLongPtrA(hWnd : HWND, nIndex : int32) : LONG_PTR;
+
+// Message box
+pub extern fn MessageBoxA(hWnd : HWND?, lpText : LPCSTR, lpCaption : LPCSTR, uType : UINT) : int32;
+
+/* -- wingdi.h ------------------------------------------------------ */
 
 pub struct PIXELFORMATDESCRIPTOR
 {
@@ -72,253 +318,149 @@ pub struct PIXELFORMATDESCRIPTOR
     dwDamageMask : DWORD;
 }
 
-pub struct CREATESTRUCT
-{
-    lpCreateParams : LPVOID;
-    hInstance : HINSTANCE;
-    hMenu : HMENU;
-    hwndParent : HWND;
-    cy : int32;
-    cx : int32;
-    y : int32;
-    x : int32;
-    style : LONG;
-    lpszName : LPCSTR;
-    lpszClass : LPCSTR;
-    dwExStyle : DWORD;
-}
+// Pixel format
+pub def PFD_DRAW_TO_WINDOW : DWORD = 0x00000004;
+pub def PFD_DOUBLEBUFFER : DWORD = 0x00000001;
+pub def PFD_SUPPORT_OPENGL : DWORD = 0x00000020;
+pub def PFD_TYPE_RGBA : BYTE = 0;
+pub def PFD_MAIN_PLANE : BYTE = 0;
 
-pub alias LPCVOID = const void*;
+// WGL
+pub def WGL_DRAW_TO_WINDOW_ARB : int32 = 0x2001;
+pub def WGL_DRAW_TO_BITMAP_ARB : int32 = 0x2002;
+pub def WGL_ACCELERATION_ARB : int32 = 0x2003;
+pub def WGL_SWAP_METHOD_ARB : int32 = 0x2007;
+pub def WGL_SUPPORT_OPENGL_ARB : int32 = 0x2010;
+pub def WGL_SUPPORT_GDI_ARB : int32 = 0x200F;
+pub def WGL_DOUBLE_BUFFER_ARB : int32 = 0x2011;
+pub def WGL_STEREO_ARB : int32 = 0x2012;
+pub def WGL_PIXEL_TYPE_ARB : int32 = 0x2013;
+pub def WGL_COLOR_BITS_ARB : int32 = 0x2014;
+pub def WGL_RED_BITS_ARB : int32 = 0x2015;
+pub def WGL_RED_SHIFT_ARB : int32 = 0x2016;
+pub def WGL_GREEN_BITS_ARB : int32 = 0x2017;
+pub def WGL_GREEN_SHIFT_ARB : int32 = 0x2018;
+pub def WGL_BLUE_BITS_ARB : int32 = 0x2019;
+pub def WGL_BLUE_SHIFT_ARB : int32 = 0x201A;
+pub def WGL_ALPHA_BITS_ARB : int32 = 0x201B;
+pub def WGL_ALPHA_SHIFT_ARB : int32 = 0x201C;
+pub def WGL_ACCUM_BITS_ARB : int32 = 0x201D;
+pub def WGL_ACCUM_RED_BITS_ARB : int32 = 0x201E;
+pub def WGL_ACCUM_GREEN_BITS_ARB : int32 = 0x201F;
+pub def WGL_ACCUM_BLUE_BITS_ARB : int32 = 0x2020;
+pub def WGL_ACCUM_ALPHA_BITS_ARB : int32 = 0x2021;
+pub def WGL_DEPTH_BITS_ARB : int32 = 0x2022;
+pub def WGL_STENCIL_BITS_ARB : int32 = 0x2023;
+pub def WGL_AUX_BUFFERS_ARB : int32 = 0x2024;
+pub def WGL_NO_ACCELERATION_ARB : int32 = 0x2025;
+pub def WGL_GENERIC_ACCELERATION_ARB : int32 = 0x2026;
+pub def WGL_FULL_ACCELERATION_ARB : int32 = 0x2027;
+pub def WGL_SAMPLE_BUFFERS_ARB : int32 = 0x2041;
+pub def WGL_SAMPLES_ARB : int32 = 0x2042;
+pub def WGL_TYPE_RGBA_ARB : int32 = 0x202B;
+pub def WGL_TYPE_COLORINDEX_ARB : int32 = 0x202C;
 
-pub alias LPSECURITY_ATTRIBUTES = void*;
-pub alias LPOVERLAPPED = void*;
+pub def WGL_CONTEXT_MAJOR_VERSION_ARB : int32 = 0x2091;
+pub def WGL_CONTEXT_MINOR_VERSION_ARB : int32 = 0x2092;
+pub def WGL_CONTEXT_LAYER_PLANE_ARB : int32 = 0x2093;
+pub def WGL_CONTEXT_FLAGS_ARB : int32 = 0x2094;
+pub def WGL_CONTEXT_PROFILE_MASK_ARB : int32 = 0x9126;
+pub def WGL_CONTEXT_DEBUG_BIT_ARB : int32 = 0x00000001;
+pub def WGL_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB : int32 = 0x00000002;
+pub def WGL_CONTEXT_CORE_PROFILE_BIT_ARB : int32 = 0x00000001;
+pub def WGL_CONTEXT_COMPATIBILITY_PROFILE_BIT_ARB : int32 = 0x00000002;
 
+// WGL extensions
+pub alias PFNWGLCHOOSEPIXELFORMATARB = fn(HDC, const int32*, const float32*, uint32, int32*, uint32*) : BOOL;
+pub alias PFNWGLCREATECONTEXTATTRIBSARB = fn(HDC, HGLRC, const int32*) : HGLRC;
+
+pub extern fn ChoosePixelFormat(hdc : HDC, ppfd : const PIXELFORMATDESCRIPTOR*) : int32;
+pub extern fn SetPixelFormat(hdc : HDC, format : int32, ppfd : const PIXELFORMATDESCRIPTOR*) : BOOL;
+pub extern fn SwapBuffers(unnamedParam1 : HDC) : BOOL;
+pub extern fn wglCreateContext(hdc : HDC) : HGLRC;
+pub extern fn wglDeleteContext(hglrc : HGLRC) : BOOL;
+pub extern fn wglMakeCurrent(hdc : HDC?, hglrc : HGLRC?) : BOOL;
+pub extern fn wglGetCurrentContext() : HGLRC;
+pub extern fn wglGetCurrentDC() : HDC;
+pub extern fn wglGetProcAddress(lpszProc : LPCSTR) : FARPROC;
+
+/* -- fileapi.h ----------------------------------------------------- */
+
+// File access modes
+pub def GENERIC_READ_FLAG : DWORD = 0x80000000;
 pub def GENERIC_WRITE : DWORD = 0x40000000;
+pub def GENERIC_WRITE_FLAG : DWORD = 0x40000000;
+pub def GENERIC_APPEND_FLAG : DWORD = 0x00000004;
 
+// File sharing
+pub def FILE_SHARE_READ_FLAG : DWORD = 0x00000001;
+
+// Creation disposition
+pub def CREATE_NEW_D : DWORD = 1;
 pub def CREATE_ALWAYS : DWORD = 2;
+pub def CREATE_ALWAYS_D : DWORD = 2;
+pub def OPEN_EXISTING : DWORD = 3;
+pub def OPEN_ALWAYS : DWORD = 4;
+pub def TRUNCATE_EXISTING : DWORD = 5;
 
+// File attributes
 pub def FILE_ATTRIBUTE_NORMAL : DWORD = 128;
+pub def FILE_FLAG_APPEND : DWORD = 0x00000004;
 
-pub struct MSG
-{
-    hwnd : HWND;
-    message : UINT;
-    wParam : WPARAM;
-    lParam : LPARAM;
-    time : DWORD;
-    pt : POINT;
-}
-
-pub alias LPMSG = MSG*;
-
-pub def PM_REMOVE : UINT = 0x0001;
-
-pub struct WNDCLASSA
-{
-    style : UINT;
-    lpfnWndProc : WNDPROC;
-    cbClsExtra : int32;
-    cbWndExtra : int32;
-    hInstance : HINSTANCE;
-    hIcon : HICON;
-    hCursor : HCURSOR;
-    hbrBackground : HBRUSH;
-    lpszMenuName : LPCSTR;
-    lpszClassName : LPCSTR;
-}
-
-pub def CS_OWNDC : UINT = 0x0020;
-
-pub def GWLP_WNDPROC : int32 = -4;
-pub def GWLP_HINSTANCE : int32 = -6;
-pub def GWLP_HWNDPARENT : int32 = -8;
-pub def GWLP_USERDATA : int32 = -21;
-pub def GWLP_ID : int32 = -12;
-
-pub def MB_ABORTRETRYIGNORE : UINT = 0x00000002;
-pub def MB_CANCELTRYCONTINUE : UINT = 0x00000006;
-pub def MB_HELP : UINT = 0x00004000;
-pub def MB_OK : UINT = 0x00000000;
-pub def MB_OKCANCEL : UINT = 0x00000001;
-pub def MB_RETRYCANCEL : UINT = 0x00000005;
-pub def MB_YESNO : UINT = 0x00000004;
-pub def MB_YESNOCANCEL : UINT = 0x00000003;
-
-pub def MB_ICONEXCLAMATION : UINT = 0x00000030;
-pub def MB_ICONWARNING : UINT = MB_ICONEXCLAMATION;
-pub def MB_ICONINFORMATION : UINT = 0x00000040;
-pub def MB_ICONASTERISK : UINT = MB_ICONINFORMATION;
-pub def MB_ICONQUESTION : UINT = MB_ICONINFORMATION;
-pub def MB_ICONSTOP : UINT = 0x00000010;
-pub def MB_ICONERROR : UINT = MB_ICONSTOP;
-pub def MB_ICONHAND : UINT = MB_ICONSTOP;
-
-pub def WS_OVERLAPPED : UINT = 0x00000000;
-pub def WS_POPUP : UINT = 0x80000000;
-pub def WS_CHILD : UINT = 0x40000000;
-pub def WS_MINIMIZE : UINT = 0x20000000;
-pub def WS_VISIBLE : UINT = 0x10000000;
-pub def WS_DISABLED : UINT = 0x08000000;
-pub def WS_CLIPSIBLINGS : UINT = 0x04000000;
-pub def WS_CLIPCHILDREN : UINT = 0x02000000;
-pub def WS_MAXIMIZE : UINT = 0x01000000;
-pub def WS_CAPTION : UINT = 0x00C00000;
-pub def WS_BORDER : UINT = 0x00800000;
-pub def WS_DLGFRAME : UINT = 0x00400000;
-pub def WS_VSCROLL : UINT = 0x00200000;
-pub def WS_HSCROLL : UINT = 0x00100000;
-pub def WS_SYSMENU : UINT = 0x00080000;
-pub def WS_THICKFRAME : UINT = 0x00040000;
-pub def WS_GROUP : UINT = 0x00020000;
-pub def WS_TABSTOP : UINT = 0x00010000;
-pub def WS_MINIMIZEBOX : UINT = 0x00020000;
-pub def WS_MAXIMIZEBOX : UINT = 0x00010000;
-pub def WS_TILED : UINT = WS_OVERLAPPED;
-pub def WS_ICONIC : UINT = WS_MINIMIZE;
-pub def WS_SIZEBOX : UINT = WS_THICKFRAME;
-pub def WS_TILEDWINDOW : UINT = WS_OVERLAPPEDWINDOW;
-
-pub def WS_OVERLAPPEDWINDOW : UINT = (WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX);
-
-pub def WM_DESTROY : UINT = 0x0002;
-pub def WM_CREATE : UINT = 0x0001;
-pub def WM_CLOSE : UINT = 0x0010;
-
-pub def CW_USEDEFAULT : int32 = -2147483647 - 1;
-
-pub def SW_SHOW = 5;
-
-pub def COLOR_BACKGROUND = 1;
-pub def COLOR_WINDOW = 5;
-
-pub def STD_INPUT_HANDLE  : DWORD = bitcast(DWORD, -10);
-pub def STD_OUTPUT_HANDLE : DWORD = bitcast(DWORD, -11);
-pub def STD_ERROR_HANDLE  : DWORD = bitcast(DWORD, -12);
-
-pub extern fn PostQuitMessage(nExitCode : int32) : void;
-pub extern fn DefWindowProcA(hWnd : HWND, Msg : UINT, wParam : WPARAM, lParam : LPARAM) : LRESULT;
-pub extern fn DispatchMessageA(lpMsg : MSG*) : LRESULT;
-pub extern fn TranslateMessage(lpMsg : MSG*) : WINBOOL;
-pub extern fn GetMessageA(lpMsg : MSG*, hWnd : HWND?, wMsgFilterMin : UINT, wMsgFilterMax : UINT) : WINBOOL;
-pub extern fn PeekMessageA(lpMsg : LPMSG, hWnd : HWND, wMsgFilterMin : UINT, wMsgFilterMax : UINT, wRemoveMsg : UINT) : BOOL;
-pub extern fn UpdateWindow(hWnd : HWND) : WINBOOL;
-pub extern fn ShowWindow(hWnd : HWND, nCmdShow : int32) : WINBOOL;
-pub extern fn RegisterClassA(lpWndClass : WNDCLASSA*) : ATOM;
-pub extern fn CreateWindowExA(dwExStyle : DWORD, lpClassName : LPCSTR?, lpWindowName : LPCSTR?, dwStyle : DWORD, X : int32, Y : int32, nWidth : int32, nHeight : int32, hWndParent : HWND?, hMenu : HMENU?, hInstance : HINSTANCE?, lpParam : LPVOID?) : HWND;
-pub extern fn MessageBoxA(hWnd : HWND?, lpText : LPCSTR, lpCaption : LPCSTR, uType : UINT) : int32;
-pub extern fn GetDC(hWnd : HWND) : HDC;
-pub extern fn SetWindowLongPtrA(hWnd : HWND, nIndex : int32, dwNewLong : LONG_PTR) : LONG_PTR;
-pub extern fn GetWindowLongPtrA(hWnd : HWND, nIndex : int32) : LONG_PTR;
-pub extern fn GetModuleHandleA(lpModuleName : LPCSTR?) : HMODULE;
-pub extern fn GetStdHandle(std : DWORD) : HANDLE;
-pub extern fn WriteConsoleA(h : HANDLE, buf : const uint8*, n : DWORD, nw : LPDWORD?, _ : void*?) : bool;
-pub extern fn ReadConsoleA(h : HANDLE, buf : LPVOID, n : DWORD, nr : LPDWORD, _ : void*?) : BOOL;
-
-pub def PAGE_READWRITE : DWORD = 0x04;
-
-pub def MEM_COMMIT : DWORD = 0x1000;
-pub def MEM_RESERVE : DWORD = 0x2000;
-pub def MEM_RELEASE : DWORD = 0x8000;
-pub def MEM_TOP_DOWN : DWORD = 0x100000;
-
-pub def MEM_IMAGE : DWORD = 0x1000000;
-pub def MEM_MAPPED : DWORD = 0x40000;
-pub def MEM_PRIVATE : DWORD = 0x20000;
-
-pub struct MEMORY_BASIC_INFORMATION
-{
-    BaseAddress : PVOID;
-    AllocationBase : PVOID;
-    AllocationProtect : DWORD;
-    PartitionId : WORD;
-    RegionSize : SIZE_T;
-    State : DWORD;
-    Protect : DWORD;
-    Type : DWORD;
-}
-
-pub alias PMEMORY_BASIC_INFORMATION = MEMORY_BASIC_INFORMATION*;
-
-pub extern fn VirtualAlloc(lpAddress : LPVOID?, dwSize : SIZE_T, flAllocationType : DWORD, flProtect : DWORD) : LPVOID;
-pub extern fn VirtualQuery(lpAddress : LPCVOID?, lpBuffer : PMEMORY_BASIC_INFORMATION, dwLength : SIZE_T) : SIZE_T;
-pub extern fn VirtualFree(lpAddress : LPVOID, dwSize : SIZE_T, dwFreeType : DWORD) : WINBOOL;
-
-pub extern fn CloseHandle(hObject : HANDLE) : BOOL;
-
-pub def FILE_FLAG_APPEND     : DWORD = 0x00000004;
-pub def GENERIC_READ_FLAG    : DWORD = 0x80000000;
-pub def GENERIC_WRITE_FLAG   : DWORD = 0x40000000;
-pub def GENERIC_APPEND_FLAG  : DWORD = 0x00000004;
-
-// Added: required by io.vp
-pub def FILE_SHARE_READ_FLAG         : DWORD = 0x00000001;
-pub def INVALID_SET_FILE_POINTER     : DWORD = 0xFFFFFFFF;
-
-pub def ERROR_FILE_NOT_FOUND : DWORD = 2;
-pub def ERROR_PATH_NOT_FOUND : DWORD = 3;
-pub def ERROR_ACCESS_DENIED  : DWORD = 5;
-pub def ERROR_HANDLE_EOF     : DWORD = 38;
-pub def ERROR_BROKEN_PIPE    : DWORD = 109;
-pub def ERROR_NO_DATA        : DWORD = 232;
-
-pub def OPEN_EXISTING      : DWORD = 3;
-pub def OPEN_ALWAYS        : DWORD = 4;
-pub def CREATE_ALWAYS_D    : DWORD = 2;
-pub def CREATE_NEW_D       : DWORD = 1;
-pub def TRUNCATE_EXISTING  : DWORD = 5;
-
+// File pointer movement
+pub def FILE_BEGIN : DWORD = 0;
 pub def FILE_CURRENT : DWORD = 1;
-pub def FILE_END_D   : DWORD = 2;
-pub def FILE_BEGIN   : DWORD = 0;
+pub def FILE_END_D : DWORD = 2;
 
+// File type
 pub def FILE_TYPE_CHAR : DWORD = 0x0002;
 
+pub def INVALID_SET_FILE_POINTER : DWORD = 0xFFFFFFFF;
+
+// File I/O
 pub extern fn CreateFileA(lpFileName : LPCSTR, dwDesiredAccess : DWORD, dwShareMode : DWORD, lpSecurityAttributes : LPSECURITY_ATTRIBUTES?, dwCreationDisposition : DWORD, dwFlagsAndAttributes : DWORD, hTemplateFile : HANDLE?) : HANDLE;
-pub extern fn ReadFile(hFIle : HANDLE, lpBuffer : LPVOID, nNumberOfBytesToRead : DWORD, lpNumberOfBytesRead : LPDWORD, lpOverlapped : LPOVERLAPPED?) : BOOL;
+pub extern fn ReadFile(hFile : HANDLE, lpBuffer : LPVOID, nNumberOfBytesToRead : DWORD, lpNumberOfBytesRead : LPDWORD, lpOverlapped : LPOVERLAPPED?) : BOOL;
 pub extern fn WriteFile(hFile : HANDLE, lpBuffer : LPCVOID, nNumberOfBytesToWrite : DWORD, lpNumberOfBytesWritten : LPDWORD, lpOverlapped : LPOVERLAPPED?) : BOOL;
 pub extern fn SetFilePointer(hFile : HANDLE, lDistanceToMove : LONG, lpDistanceToMoveHigh : LONG*?, dwMoveMethod : DWORD) : DWORD;
 pub extern fn FlushFileBuffers(hFile : HANDLE) : BOOL;
 pub extern fn GetFileType(hFile : HANDLE) : DWORD;
 
-pub extern fn GetProcAddress(hModule : HMODULE, lpProcName : LPCSTR) : FARPROC;
+/* -- errhandlingapi.h ---------------------------------------------- */
 
-pub extern fn wglCreateContext(handleToDeviceContext : HDC) : HGLRC;
-pub extern fn wglMakeCurrent(unnamedParam1 : HDC, unnamedParam2 : HGLRC) : BOOL;
-
-pub extern fn ChoosePixelFormat(hdc : HDC, ppfd : const PIXELFORMATDESCRIPTOR*) : int32;
-pub extern fn SetPixelFormat(hdc : HDC, format : int32, ppfd : const PIXELFORMATDESCRIPTOR*) : BOOL;
-
-pub extern fn SwapBuffers(unnamedParam1 : HDC) : BOOL;
+// Error codes
+pub def ERROR_FILE_NOT_FOUND : DWORD = 2;
+pub def ERROR_PATH_NOT_FOUND : DWORD = 3;
+pub def ERROR_ACCESS_DENIED : DWORD = 5;
+pub def ERROR_HANDLE_EOF : DWORD = 38;
+pub def ERROR_BROKEN_PIPE : DWORD = 109;
+pub def ERROR_NO_DATA : DWORD = 232;
 
 pub extern fn GetLastError() : DWORD;
 
+/* -- handleapi.h --------------------------------------------------- */
+
+pub extern fn CloseHandle(hObject : HANDLE) : BOOL;
+
+/* -- synchapi.h ---------------------------------------------------- */
+
+pub extern fn Sleep(dwMilliseconds : DWORD) : VOID;
+
+/* -- processthreadsapi.h ------------------------------------------- */
+
 pub noreturn extern fn ExitProcess(uExitCode : UINT) : VOID;
 
-// sysinfoapi.h
+/* -- libloaderapi.h ------------------------------------------------ */
 
-pub struct SYSTEM_INFO
-{
-    union
-    {
-        dwOemId : DWORD;
-        struct
-        {
-            wProcessorArchitecture : WORD;
-            wReserved : WORD;
-        }
-    }
-    dwPageSize : DWORD;
-    lpMinimumApplicationAddress : LPVOID;
-    lpMaximumApplicationAddress : LPVOID;
-    dwActiveProcessorMask : DWORD_PTR;
-    dwNumberOfProcessors : DWORD;
-    dwProcessorType : DWORD;
-    dwAllocationGranularity : DWORD;
-    wProcessorLevel : WORD;
-    wProcessorRevision : WORD;
-}
+pub extern fn LoadLibraryA(lpLibFileName : LPCSTR) : HMODULE;
+pub extern fn FreeLibrary(hLibModule : HMODULE) : BOOL;
+pub extern fn GetModuleHandleA(lpModuleName : LPCSTR?) : HMODULE;
+pub extern fn GetProcAddress(hModule : HMODULE, lpProcName : LPCSTR) : FARPROC;
 
-pub alias LPSYSTEM_INFO = SYSTEM_INFO*;
+/* -- consoleapi.h -------------------------------------------------- */
 
-pub extern fn GetSystemInfo(lpSystemInfo : LPSYSTEM_INFO) : VOID;
-pub extern fn GetTickCount() : DWORD;
+pub extern fn WriteConsoleA(h : HANDLE, buf : const uint8*, n : DWORD, nw : LPDWORD?, _ : void*?) : bool;
+pub extern fn ReadConsoleA(h : HANDLE, buf : LPVOID, n : DWORD, nr : LPDWORD, _ : void*?) : BOOL;
+
+/* -- processenv.h -------------------------------------------------- */
+
+pub extern fn GetStdHandle(std : DWORD) : HANDLE;
