@@ -1,0 +1,359 @@
+// Teascript C API
+
+pub alias tea_Number = float64;
+
+pub alias tea_Integer = int32;
+
+// Interpreter status
+pub def TEA_OK = 0;
+pub def TEA_ERROR_SYNTAX = 1;
+pub def TEA_ERROR_RUNTIME = 2;
+pub def TEA_ERROR_MEMORY = 3;
+pub def TEA_ERROR_FILE = 4;
+pub def TEA_ERROR_ERROR = 5;
+
+pub struct tea_State;
+
+pub type tea_CFunction = fn(T : tea_State*) : void;
+
+pub type tea_Finalizer = fn(p : void*) : void;
+
+pub type tea_Reader = fn(T : tea_State*, ud : void*, sz : usize*) : const uint8*;
+
+pub type tea_Writer = fn(T : tea_State*, ud : void*, p : const void*, sz : usize) : int32;
+
+pub type tea_Alloc = fn(ud : void*, ptr : void*, osize : usize, nsize : usize) : void*;
+
+pub struct tea_Reg
+{
+    name : const uint8*;
+    f : tea_CFunction;
+    nargs : int32;
+    nopts : int32;
+}
+
+pub struct tea_Methods
+{
+    name : const uint8*;
+    tt : const uint8*;
+    f : tea_CFunction;
+    nargs : int32;
+    nopts : int32;
+}
+
+// Basic type masks
+pub def TEA_MASK_NONE = 1 << TEA_TYPE_NONE;
+pub def TEA_MASK_NIL = 1 << TEA_TYPE_NIL;
+pub def TEA_MASK_BOOL = 1 << TEA_TYPE_BOOL;
+pub def TEA_MASK_NUMBER = 1 << TEA_TYPE_NUMBER;
+pub def TEA_MASK_POINTER = 1 << TEA_TYPE_POINTER;
+pub def TEA_MASK_STRING = 1 << TEA_TYPE_STRING;
+pub def TEA_MASK_RANGE = 1 << TEA_TYPE_RANGE;
+pub def TEA_MASK_FUNCTION = 1 << TEA_TYPE_FUNCTION;
+pub def TEA_MASK_MODULE = 1 << TEA_TYPE_MODULE;
+pub def TEA_MASK_CLASS = 1 << TEA_TYPE_CLASS;
+pub def TEA_MASK_INSTANCE = 1 << TEA_TYPE_INSTANCE;
+pub def TEA_MASK_LIST = 1 << TEA_TYPE_LIST;
+pub def TEA_MASK_MAP = 1 << TEA_TYPE_MAP;
+pub def TEA_MASK_USERDATA = 1 << TEA_TYPE_USERDATA;
+
+// Option for variadic functions
+pub def TEA_VARG = -255;
+
+// Basic types
+pub def TEA_TYPE_NONE = 0;
+pub def TEA_TYPE_NIL = 1;
+pub def TEA_TYPE_BOOL = 2;
+pub def TEA_TYPE_NUMBER = 3;
+pub def TEA_TYPE_POINTER = 4;
+pub def TEA_TYPE_STRING = 5;
+pub def TEA_TYPE_RANGE = 6;
+pub def TEA_TYPE_FUNCTION = 7;
+pub def TEA_TYPE_MODULE = 8;
+pub def TEA_TYPE_CLASS = 9;
+pub def TEA_TYPE_INSTANCE = 10;
+pub def TEA_TYPE_LIST = 11;
+pub def TEA_TYPE_MAP = 12;
+pub def TEA_TYPE_USERDATA = 13;
+
+// Pseudo-indices
+pub def TEA_REGISTRY_INDEX = -10000;
+pub def TEA_UPVALUES_INDEX = -11000;
+
+pub inline fn tea_upvalue_index(i : int32) : int32
+{
+    return TEA_UPVALUES_INDEX - i;
+}
+
+// State manipulation
+pub extern fn tea_new_state(allocf : tea_Alloc?, ud : void*?) : tea_State*;
+pub extern fn tea_close(T : tea_State*) : void;
+pub extern fn tea_set_argv(T : tea_State*, argc : int32, argv : uint8**?, argf : int32) : void;
+pub extern fn tea_get_argv(T : tea_State*, argv : uint8***, argf : int32*) : int32;
+pub extern fn tea_atpanic(T : tea_State*, panicf : tea_CFunction) : tea_CFunction;
+pub extern fn tea_get_allocf(T : tea_State*, ud : void**?) : tea_Alloc;
+pub extern fn tea_set_allocf(T : tea_State*, f : tea_Alloc?, ud : void*?) : void;
+
+// Stack manipulation
+pub extern fn tea_absindex(T : tea_State*, idx : int32) : int32;
+pub extern fn tea_pop(T : tea_State*, n : int32) : void;
+pub extern fn tea_get_top(T : tea_State*) : int32;
+pub extern fn tea_set_top(T : tea_State*, idx : int32) : void;
+pub extern fn tea_push_value(T : tea_State*, idx : int32) : void;
+pub extern fn tea_remove(T : tea_State*, idx : int32) : void;
+pub extern fn tea_insert(T : tea_State*, idx : int32) : void;
+pub extern fn tea_replace(T : tea_State*, idx : int32) : void;
+pub extern fn tea_copy(T : tea_State*, from_idx : int32, to_idx : int32) : void;
+pub extern fn tea_swap(T : tea_State*, idx1 : int32, idx2 : int32) : void;
+pub extern fn tea_test_stack(T : tea_State*, size : int32) : bool;
+pub extern fn tea_check_stack(T : tea_State*, size : int32, msg : const uint8*) : void;
+
+// Get functions (stack -> C)
+pub extern fn tea_typeof(T : tea_State*, idx : int32) : const uint8*;
+pub extern fn tea_get_mask(T : tea_State*, idx : int32) : int32;
+pub extern fn tea_get_type(T : tea_State*, idx : int32) : int32;
+pub extern fn tea_get_bool(T : tea_State*, idx : int32) : bool;
+pub extern fn tea_get_number(T : tea_State*, idx : int32) : tea_Number;
+pub extern fn tea_get_integer(T : tea_State*, idx : int32) : tea_Integer;
+pub extern fn tea_get_pointer(T : tea_State*, idx : int32) : const void*;
+pub extern fn tea_get_range(T : tea_State*, idx : int32, start : tea_Number*, end : tea_Number*, step : tea_Number*) : void;
+pub extern fn tea_get_lstring(T : tea_State*, idx : int32, len : usize*) : const uint8*;
+pub extern fn tea_get_string(T : tea_State*, idx : int32) : const uint8*;
+pub extern fn tea_get_userdata(T : tea_State*, idx : int32) : void*;
+pub extern fn tea_get_udvalue(T : tea_State*, ud : int32, n : int32) : bool;
+pub extern fn tea_set_udvalue(T : tea_State*, ud : int32, n : int32) : void;
+
+// Value testing
+pub extern fn tea_is_object(T : tea_State*, idx : int32) : bool;
+pub extern fn tea_is_cfunction(T : tea_State*, idx : int32) : bool;
+pub extern fn tea_equal(T : tea_State*, idx1 : int32, idx2 : int32) : bool;
+pub extern fn tea_rawequal(T : tea_State*, idx1 : int32, idx2 : int32) : bool;
+
+// Value conversion (stack -> C)
+pub extern fn tea_to_bool(T : tea_State*, idx : int32) : bool;
+pub extern fn tea_to_numberx(T : tea_State*, idx : int32, is_num : bool*) : tea_Number;
+pub extern fn tea_to_number(T : tea_State*, idx : int32) : tea_Number;
+pub extern fn tea_to_integerx(T : tea_State*, idx : int32, is_num : bool*) : tea_Integer;
+pub extern fn tea_to_integer(T : tea_State*, idx : int32) : tea_Integer;
+pub extern fn tea_to_pointer(T : tea_State*, idx : int32) : const void*;
+pub extern fn tea_to_lstring(T : tea_State*, idx : int32, len : usize*) : const uint8*;
+pub extern fn tea_to_string(T : tea_State*, idx : int32) : const uint8*;
+pub extern fn tea_to_userdata(T : tea_State*, idx : int32) : void*;
+pub extern fn tea_to_cfunction(T : tea_State*, idx : int32) : tea_CFunction;
+
+// Push functions (C -> stack)
+pub extern fn tea_push_nil(T : tea_State*) : void;
+pub extern fn tea_push_true(T : tea_State*) : void;
+pub extern fn tea_push_false(T : tea_State*) : void;
+pub extern fn tea_push_bool(T : tea_State*, b : bool) : void;
+pub extern fn tea_push_number(T : tea_State*, n : tea_Number) : void;
+pub extern fn tea_push_integer(T : tea_State*, n : tea_Integer) : void;
+pub extern fn tea_push_pointer(T : tea_State*, p : void*) : void;
+pub extern fn tea_push_lstring(T : tea_State*, s : const uint8*, len : usize) : const uint8*;
+pub extern fn tea_push_string(T : tea_State*, s : const uint8*) : const uint8*;
+pub extern fn tea_push_range(T : tea_State*, start : tea_Number, end : tea_Number, step : tea_Number) : void;
+pub extern fn tea_push_cclosure(T : tea_State*, f : tea_CFunction, nupvalues : int32, nargs : int32, nopts : int32) : void;
+pub extern fn tea_push_cfunction(T : tea_State*, f : tea_CFunction, nargs : int32, nopts : int32) : void;
+
+// Object creation
+pub extern fn tea_new_list(T : tea_State*, n : usize) : void;
+pub extern fn tea_new_map(T : tea_State*) : void;
+pub extern fn tea_new_class(T : tea_State*, name : const uint8*) : void;
+pub extern fn tea_new_module(T : tea_State*, name : const uint8*) : void;
+pub extern fn tea_new_submodule(T : tea_State*, name : const uint8*) : void;
+pub extern fn tea_create_class(T : tea_State*, name : const uint8*, klass : const tea_Methods*) : void;
+pub extern fn tea_create_module(T : tea_State*, name : const uint8*, module : const tea_Reg*) : void;
+pub extern fn tea_create_submodule(T : tea_State*, name : const uint8*, module : const tea_Reg*) : void;
+pub extern fn tea_new_userdatav(T : tea_State*, size : usize, nuvs : int32) : void*;
+pub extern fn tea_new_udatav(T : tea_State*, size : usize, nuvs : int32, name : const uint8*) : void*;
+pub extern fn tea_new_userdata(T : tea_State*, size : usize) : void*;
+pub extern fn tea_new_udata(T : tea_State*, size : usize, name : const uint8*) : void*;
+
+// Object manipulation
+pub extern fn tea_len(T : tea_State*, idx : int32) : int32;
+pub extern fn tea_next(T : tea_State*, obj : int32) : int32;
+
+// List operations
+pub extern fn tea_add_item(T : tea_State*, list : int32) : void;
+pub extern fn tea_get_item(T : tea_State*, list : int32, idx : int32) : bool;
+pub extern fn tea_set_item(T : tea_State*, list : int32, idx : int32) : bool;
+pub extern fn tea_delete_item(T : tea_State*, list : int32, idx : int32) : bool;
+pub extern fn tea_insert_item(T : tea_State*, list : int32, idx : int32) : bool;
+
+// Map operations
+pub extern fn tea_get_fieldi(T : tea_State*, obj : int32, i : tea_Integer) : bool;
+pub extern fn tea_set_fieldi(T : tea_State*, obj : int32, i : tea_Integer) : void;
+pub extern fn tea_get_field(T : tea_State*, obj : int32) : bool;
+pub extern fn tea_set_field(T : tea_State*, obj : int32) : void;
+pub extern fn tea_delete_field(T : tea_State*, obj : int32) : bool;
+pub extern fn tea_get_key(T : tea_State*, obj : int32, key : const uint8*) : bool;
+pub extern fn tea_set_key(T : tea_State*, obj : int32, key : const uint8*) : void;
+pub extern fn tea_delete_key(T : tea_State*, obj : int32, key : const uint8*) : bool;
+
+// Attribute access
+pub extern fn tea_has_attr(T : tea_State*, obj : int32, key : const uint8*) : bool;
+pub extern fn tea_get_attr(T : tea_State*, obj : int32, key : const uint8*) : void;
+pub extern fn tea_set_attr(T : tea_State*, obj : int32, key : const uint8*) : void;
+pub extern fn tea_delete_attr(T : tea_State*, obj : int32, key : const uint8*) : void;
+pub extern fn tea_get_index(T : tea_State*, obj : int32) : void;
+pub extern fn tea_set_index(T : tea_State*, obj : int32) : void;
+
+// Variable access
+pub extern fn tea_get_global(T : tea_State*, name : const uint8*) : bool;
+pub extern fn tea_set_global(T : tea_State*, name : const uint8*) : void;
+pub extern fn tea_get_var(T : tea_State*, name : const uint8*, varr : const uint8*) : bool;
+pub extern fn tea_set_var(T : tea_State*, name : const uint8*, varr : const uint8*) : void;
+
+// Function and method registration
+pub extern fn tea_set_funcs(T : tea_State*, reg : const tea_Reg*, nup : int32) : void;
+pub extern fn tea_set_methods(T : tea_State*, reg : const tea_Methods*, nup : int32) : void;
+
+// Type checking
+pub extern fn tea_check_type(T : tea_State*, idx : int32, tt : int32) : void;
+pub extern fn tea_check_any(T : tea_State*, idx : int32) : void;
+pub extern fn tea_check_bool(T : tea_State*, idx : int32) : bool;
+pub extern fn tea_check_number(T : tea_State*, idx : int32) : tea_Number;
+pub extern fn tea_check_integer(T : tea_State*, idx : int32) : tea_Integer;
+pub extern fn tea_check_pointer(T : tea_State*, idx : int32) : const void*;
+pub extern fn tea_check_range(T : tea_State*, idx : int32, start : tea_Number*, end : tea_Number*, step : tea_Number*) : void;
+pub extern fn tea_check_lstring(T : tea_State*, idx : int32, len : usize*) : const uint8*;
+pub extern fn tea_check_string(T : tea_State*, idx : int32) : const uint8*;
+pub extern fn tea_check_cfunction(T : tea_State*, idx : int32) : tea_CFunction;
+pub extern fn tea_check_userdata(T : tea_State*, idx : int32) : void*;
+pub extern fn tea_test_udata(T : tea_State*, idx : int32, name : const uint8*) : void*;
+pub extern fn tea_check_udata(T : tea_State*, idx : int32, name : const uint8*) : void*;
+pub extern fn tea_check_option(T : tea_State*, idx : int32, deff : const uint8*?, options : const uint8**?) : int32;
+
+// Optional arguments
+pub extern fn tea_opt_nil(T : tea_State*, idx : int32) : void;
+pub extern fn tea_opt_bool(T : tea_State*, idx : int32, deff : bool) : bool;
+pub extern fn tea_opt_number(T : tea_State*, idx : int32, deff : tea_Number) : tea_Number;
+pub extern fn tea_opt_integer(T : tea_State*, idx : int32, deff : tea_Integer) : tea_Integer;
+pub extern fn tea_opt_pointer(T : tea_State*, idx : int32, deff : void*) : const void*;
+pub extern fn tea_opt_lstring(T : tea_State*, idx : int32, deff : const uint8*, len : usize*) : const uint8*;
+pub extern fn tea_opt_string(T : tea_State*, idx : int32, deff : const uint8*) : const uint8*;
+pub extern fn tea_opt_userdata(T : tea_State*, idx : int32, deff : void*) : void*;
+pub extern fn tea_opt_cfunction(T : tea_State*, idx : int32, deff : tea_CFunction) : tea_CFunction;
+
+// Garbage collection function
+pub extern fn tea_gc(T : tea_State*) : int32;
+
+// Memory management
+pub extern fn tea_alloc(T : tea_State*, size : usize) : void*;
+pub extern fn tea_realloc(T : tea_State*, p : void*, size : usize) : void*;
+pub extern fn tea_free(T : tea_State*, p : void*) : void;
+pub extern fn tea_set_finalizer(T : tea_State*, f : tea_Finalizer) : void;
+
+// Code loading and execution (load and run Teascript code)
+pub extern fn tea_call(T : tea_State*, n : int32) : void;
+pub extern fn tea_pcall(T : tea_State*, n : int32) : int32;
+pub extern fn tea_pccall(T : tea_State*, func : tea_CFunction, ud : void*) : int32;
+pub extern fn tea_loadx(T : tea_State*, reader : tea_Reader, data : void*, name : const uint8*, mode : const uint8*) : int32;
+pub extern fn tea_load(T : tea_State*, reader : tea_Reader, data : void*, name : const uint8*) : int32;
+pub extern fn tea_dump(T : tea_State*, writer : tea_Writer, data : void*) : int32;
+pub extern fn tea_load_filex(T : tea_State*, filename : const uint8*, name : const uint8*?, mode : const uint8*) : int32;
+pub extern fn tea_load_file(T : tea_State*, filename : const uint8*, name : const uint8*?) : int32;
+pub extern fn tea_load_bufferx(T : tea_State*, buffer : const uint8*, size : usize, name : const uint8*, mode : const uint8*) : int32;
+pub extern fn tea_load_buffer(T : tea_State*, buffer : const uint8*, size : usize, name : const uint8*) : int32;
+pub extern fn tea_eval(T : tea_State*, s : const uint8*) : int32;
+pub extern fn tea_import(T : tea_State*, name : const uint8*) : void;
+
+// Error handling
+pub extern fn tea_throw(T : tea_State*) : void;
+pub extern fn tea_error(T : tea_State*, fmt : const uint8*/*, ...*/) : int32;
+pub extern fn tea_arglimit_error(T : tea_State*, narg : int32, msg : const uint8*) : int32;
+pub extern fn tea_arg_error(T : tea_State*, narg : int32, msg : const uint8*) : int32;
+pub extern fn tea_type_error(T : tea_State*, narg : int32, xname : const uint8*) : int32;
+
+// String operations
+pub extern fn tea_concat(T : tea_State*, n : int32) : void;
+
+pub inline fn tea_open() : tea_State*
+{
+    return tea_new_state(nil, nil);
+}
+
+pub inline fn tea_do_file(T : tea_State*, f : const uint8*) : int32
+{
+    return tea_load_file(T, f, nil) or tea_pcall(T, 0);
+}
+
+pub inline fn tea_is_mask(T : tea_State*, n : int32, m : int32) : bool
+{
+    return (tea_get_mask(T, n) & m) != 0;
+}
+
+pub inline fn tea_is_nonenil(T : tea_State*, n : int32) : bool
+{
+    return tea_get_type(T, n) <= TEA_TYPE_NIL;
+}
+
+pub inline fn tea_is_none(T : tea_State*, n : int32) : bool
+{
+    return tea_get_type(T, n) == TEA_TYPE_NONE;
+}
+
+pub inline fn tea_is_nil(T : tea_State*, n : int32) : bool
+{
+    return tea_get_type(T, n) == TEA_TYPE_NIL;
+}
+
+pub inline fn tea_is_bool(T : tea_State*, n : int32) : bool
+{
+    return tea_get_type(T, n) == TEA_TYPE_BOOL;
+}
+
+pub inline fn tea_is_number(T : tea_State*, n : int32) : bool
+{
+    return tea_get_type(T, n) == TEA_TYPE_NUMBER;
+}
+
+pub inline fn tea_is_pointer(T : tea_State*, n : int32) : bool
+{
+    return tea_get_type(T, n) == TEA_TYPE_POINTER;
+}
+
+pub inline fn tea_is_range(T : tea_State*, n : int32) : bool
+{
+    return tea_get_type(T, n) == TEA_TYPE_RANGE;
+}
+
+pub inline fn tea_is_string(T : tea_State*, n : int32) : bool
+{
+    return tea_get_type(T, n) == TEA_TYPE_STRING;
+}
+
+pub inline fn tea_is_list(T : tea_State*, n : int32) : bool
+{
+    return tea_get_type(T, n) == TEA_TYPE_LIST;
+}
+
+pub inline fn tea_is_map(T : tea_State*, n : int32) : bool
+{
+    return tea_get_type(T, n) == TEA_TYPE_MAP;
+}
+
+pub inline fn tea_is_function(T : tea_State*, n : int32) : bool
+{
+    return tea_get_type(T, n) == TEA_TYPE_FUNCTION;
+}
+
+pub inline fn tea_is_module(T : tea_State*, n : int32) : bool
+{
+    return tea_get_type(T, n) == TEA_TYPE_MODULE;
+}
+
+pub inline fn tea_is_class(T : tea_State*, n : int32) : bool
+{
+    return tea_get_type(T, n) == TEA_TYPE_CLASS;
+}
+
+pub inline fn tea_is_instance(T : tea_State*, n : int32) : bool
+{
+    return tea_get_type(T, n) == TEA_TYPE_INSTANCE;
+}
+
+pub inline fn tea_is_userdata(T : tea_State*, n : int32) : bool
+{
+    return tea_get_type(T, n) == TEA_TYPE_USERDATA;
+}

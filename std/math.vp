@@ -1,21 +1,231 @@
-pub def pi = 3.14159265358979323846;
+//pub def pi = 3.14159265358979323846;
 
-def FRAC_BIT : int64 = 52;
-def EXPO_POS : int64 = FRAC_BIT;
-def EXPO_BIT : int64 = 11;
-def EXPO_BIAS : int64 = 1022;
-def SIGN_POS : int64 = FRAC_BIT + EXPO_BIT;
-def FRAC_MASK : int64 = (1 << FRAC_BIT) - 1;
-def EXPO_MASK : int64 = ((1 << EXPO_BIT) - 1 << EXPO_POS);
-def SIGN_MASK : int64 = 1 << SIGN_POS;
-def NAN_MASK : int64 = ((1 << (EXPO_BIT + 1)) - 1) << (EXPO_POS - 1);
+// float64 IEEE 754 layout
+def F64_FRAC_BIT : int64 = 52;
+def F64_EXPO_BIT : int64 = 11;
+def F64_EXPO_POS : int64 = F64_FRAC_BIT;
+def F64_SIGN_POS : int64 = F64_FRAC_BIT + F64_EXPO_BIT;
+def F64_EXPO_BIAS : int64 = 1022;
+def F64_FRAC_MASK : int64 = (1 << F64_FRAC_BIT) - 1;
+def F64_EXPO_MASK : int64 = ((1 << F64_EXPO_BIT) - 1) << F64_EXPO_POS;
+def F64_SIGN_MASK : int64 = 1 << F64_SIGN_POS;
+def F64_NAN_MASK : int64 = ((1 << (F64_EXPO_BIT + 1)) - 1) << (F64_EXPO_POS - 1);
 
-union U { d : float64; q : int64; }
+// float64 IEEE 754 layout
+def F32_FRAC_BIT : int32 = 23;
+def F32_EXPO_BIT : int32 = 8;
+def F32_EXPO_POS : int32 = F32_FRAC_BIT;
+def F32_EXPO_BIAS : int32 = 127;
+def F32_FRAC_MASK : int32 = (1 << F32_FRAC_BIT) - 1;
+def F32_SIGN_MASK : int32 = 1 << 31;
+
+union UF64 { d : float64; q : int64; }
+union UF32 { f : float32; i : int32; }
 
 pub fn absf64(x : float64) : float64
 {
-    var u : U;
+    var u : UF64;
     u.d = x;
-    u.q &= ~SIGN_MASK;
+    u.q &= ~F64_SIGN_MASK;
     return u.d;
+}
+
+pub fn absf32(x : float32) : float32
+{
+    var u : UF32;
+    u.f = x;
+    u.i &= ~F32_SIGN_MASK;
+    return u.f;
+}
+
+pub fn absi32(x : int32) : int32
+{
+    return x >= 0 ? x : -x;
+}
+
+pub fn absi64(x : int64) : int64
+{
+    return x >= 0 ? x : -x;
+}
+
+pub fn floorf64(x : float64) : float64
+{
+    var u : UF64;
+    u.d = x;
+    var e : int64 = ((u.q >> F64_EXPO_POS) & 0x7FF) - 1023;
+
+    // |x| >= 2^52: already integral, inf, or nan
+    if e >= F64_FRAC_BIT return x;
+
+    // |x| < 1
+    if e < 0
+    {
+        if u.q < 0
+            return -1.0;
+        return 0.0;
+    }
+
+    var mask : int64 = F64_FRAC_MASK >> e;
+    if (u.q & mask) == 0
+    {
+        return x;
+    }
+    u.q &= ~mask;
+    if u.q < 0
+    {
+        u.d -= float64(1.0);
+    }
+    return u.d;
+}
+
+pub fn floorf32(x : float32) : float32
+{
+    var u : UF32;
+    u.f = x;
+    var e : int32 = ((u.i >> F32_EXPO_POS) & 0xFF) - F32_EXPO_BIAS;
+
+    // |x| >= 2^23: already integral, inf, or nan
+    if e >= F32_FRAC_BIT return x;
+
+    // |x| < 1
+    if e < 0
+    {
+        if u.i < 0
+            return -1.0;
+        return 0.0;
+    }
+
+    var mask : int32 = F32_FRAC_MASK >> e;
+    if (u.i & mask) == 0
+    {
+        return x;
+    }
+    u.i &= ~mask;
+    if u.i < 0
+    {
+        u.f -= 1.0;
+    }
+    return u.f;
+}
+
+//
+// Strategy: Cephes-style range reduction + minimax polynomial.
+//
+// 1. j = round(x · 2/π)  →  reduces x to r ∈ [-π/4, π/4]
+// 2. quadrant = j & 3     →  selects sin_kernel or cos_kernel (± sign)
+//
+// Polynomial coefficients are degree-9/8 minimax on [-π/4, π/4],
+// evaluated in Horner form for minimal FMA-friendly op count.
+
+def F32_TWO_OVER_PI : float32 = 0.6366197723675814;
+def F32_PI_OVER_2 : float32 = 1.5707963267948966;
+
+// sin kernel: p(z) ≈ sin(z) on [-π/4, π/4]
+def SIN_C1 : float32 = -1.6666667163e-1;
+def SIN_C2 : float32 =  8.3333337680e-3;
+def SIN_C3 : float32 = -1.9841270114e-4;
+def SIN_C4 : float32 =  2.7557314297e-6;
+def SIN_C5 : float32 = -2.5050759690e-8;
+
+// cos kernel: p(z) ≈ cos(z) on [-π/4, π/4]
+def COS_C1 : float32 = -5.0000000000e-1;
+def COS_C2 : float32 =  4.1666667908e-2;
+def COS_C3 : float32 = -1.3888889225e-3;
+def COS_C4 : float32 =  2.4801587642e-5;
+def COS_C5 : float32 = -2.7557314297e-7;
+
+inline fn sin_kernel_f32(z : float32) : float32
+{
+    var z2 : float32 = z * z;
+    return z * (1.0 + z2 * (SIN_C1 + z2 * (SIN_C2 + z2 * (SIN_C3 + z2 * (SIN_C4 + z2 * SIN_C5)))));
+}
+
+inline fn cos_kernel_f32(z : float32) : float32
+{
+    var z2 : float32 = z * z;
+    return 1.0 + z2 * (COS_C1 + z2 * (COS_C2 + z2 * (COS_C3 + z2 * (COS_C4 + z2 * COS_C5))));
+}
+
+pub fn sinf32(x : float32) : float32
+{
+    var j : int32 = floatcast(int32, x * F32_TWO_OVER_PI + (x >= 0.0 ? 0.5 : -0.5));
+    var r : float32 = x - floatcast(float32, j) * F32_PI_OVER_2;
+    var q : int32 = j & 3;
+
+    if q == 0 return sin_kernel_f32(r);
+    if q == 1 return cos_kernel_f32(r);
+    if q == 2 return -sin_kernel_f32(r);
+    return -cos_kernel_f32(r);
+}
+
+pub fn cosf32(x : float32) : float32
+{
+    var j : int32 = floatcast(int32, x * F32_TWO_OVER_PI + (x >= 0.0 ? 0.5 : -0.5));
+    var r : float32 = x - floatcast(float32, j) * F32_PI_OVER_2;
+    var q : int32 = j & 3;
+
+    if q == 0 return cos_kernel_f32(r);
+    if q == 1 return -sin_kernel_f32(r);
+    if q == 2 return -cos_kernel_f32(r);
+    return sin_kernel_f32(r);
+}
+
+pub fn modf32(x : float32, y : float32) : float32
+{
+    var u : UF32;
+    u.f = x;
+    var ex : int32 = ((u.i >> F32_EXPO_POS) & 0xFF) - F32_EXPO_BIAS;
+    var u2 : UF32;
+    u2.f = y;
+    var ey : int32 = ((u2.i >> F32_EXPO_POS) & 0xFF) - F32_EXPO_BIAS;
+
+    // |x| < |y|: remainder is x
+    if ex < ey return x;
+
+    // Truncate x/y toward zero and subtract
+    var n : float32 = x / y;
+    var q : float32 = n >= 0.0 ? floorf32(n) : -floorf32(-n);
+    return x - q * y;
+}
+
+pub fn modf64(x : float64, y : float64) : float64
+{
+    var u : UF64;
+    u.d = x;
+    var ex : int64 = ((u.q >> F64_EXPO_POS) & 0x7FF) - 1023;
+    var u2 : UF64;
+    u2.d = y;
+    var ey : int64 = ((u2.q >> F64_EXPO_POS) & 0x7FF) - 1023;
+
+    // |x| < |y|: remainder is x
+    if ex < ey return x;
+
+    // Truncate x/y toward zero and subtract
+    var n : float64 = x / y;
+    var q : float64 = n >= float64(0.0) ? floorf64(n) : -floorf64(-n);
+    return x - q * y;
+}
+
+// tan kernel: p(z) ≈ tan(z) on [-π/4, π/4]
+def TAN_C1 : float32 =  3.3333334327e-1;
+def TAN_C2 : float32 =  1.3333334029e-1;
+def TAN_C3 : float32 =  5.3968254477e-2;
+def TAN_C4 : float32 =  2.1869488060e-2;
+def TAN_C5 : float32 =  8.8632395491e-3;
+def TAN_C6 : float32 =  3.5921201088e-3;
+
+inline fn tan_kernel_f32(z : float32) : float32
+{
+    var z2 : float32 = z * z;
+    return z * (1.0 + z2 * (TAN_C1 + z2 * (TAN_C2 + z2 * (TAN_C3 + z2 * (TAN_C4 + z2 * (TAN_C5 + z2 * TAN_C6))))));
+}
+
+pub fn tanf32(x : float32) : float32
+{
+    var j : int32 = floatcast(int32, x * F32_TWO_OVER_PI + (x >= 0.0 ? 0.5 : -0.5));
+    var r : float32 = x - floatcast(float32, j) * F32_PI_OVER_2;
+    var q : int32 = j & 1;
+
+    if q == 0 return  tan_kernel_f32(r);
+    return -1.0 / tan_kernel_f32(r);
 }

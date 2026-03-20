@@ -1,0 +1,372 @@
+from gl import *
+from windows import *
+import std::io as io
+import std::str as str
+
+var glClearColor : GLCLEARCOLOR = nil;
+var glClear : GLCLEAR = nil;
+var glViewport : GLVIEWPORT = nil;
+var glGenVertexArrays : GLGENVERTEXARRAYS = nil;
+var glBindVertexArray : GLBINDVERTEXARRAY = nil;
+var glGenBuffers : GLGENBUFFERS = nil;
+var glBindBuffer : GLBINDBUFFER = nil;
+var glBufferData : GLBUFFERDATA = nil;
+var glVertexAttribPointer : GLVERTEXATTRIBPOINTER = nil;
+var glEnableVertexAttribArray : GLENABLEVERTEXATTRIBARRAY = nil;
+var glCreateShader : GLCREATESHADER = nil;
+var glShaderSource : GLSHADERSOURCE = nil;
+var glCompileShader : GLCOMPILESHADER = nil;
+var glGetShaderiv : GLGETSHADERIV = nil;
+var glGetShaderInfoLog : GLGETSHADERINFOLOG = nil;
+var glCreateProgram : GLCREATEPROGRAM = nil;
+var glAttachShader : GLATTACHSHADER = nil;
+var glLinkProgram : GLLINKPROGRAM = nil;
+var glGetProgramiv : GLGETPROGRAMIV = nil;
+var glGetProgramInfoLog : GLGETPROGRAMINFOLOG = nil;
+var glUseProgram : GLUSEPROGRAM = nil;
+var glDrawArrays : GLDRAWARRAYS = nil;
+var glDeleteShader : GLDELETESHADER = nil;
+var glDeleteProgram : GLDELETEPROGRAM = nil;
+var glGetAttribLocation : GLGETATTRIBLOCATION = nil;
+var glPolygonMode : GLPOLYGONMODE = nil;
+var glDeleteBuffers : GLGENBUFFERS = nil;
+var glDeleteVertexArrays : GLGENVERTEXARRAYS = nil;
+
+fn print(s : const uint8*) : void
+{
+    io::write(io::stdout, s, str::len(s), nil);
+}
+
+fn glload() : bool
+{
+    let wglGetProcAddress : WGLGETPROCADDRESS = ptrcast(WGLGETPROCADDRESS, GetProcAddress(GetModuleHandleA("opengl32"), "wglGetProcAddress"));
+    if wglGetProcAddress == nil return false;
+    glClearColor = wglGetProcAddress("glClearColor"); if glClearColor == nil return false;
+    glClear = wglGetProcAddress("glClear"); if glClear == nil return false;
+    glViewport = wglGetProcAddress("glViewport"); if glViewport == nil return false;
+    glGenVertexArrays = wglGetProcAddress("glGenVertexArrays"); if glGenVertexArrays == nil return false;
+    glBindVertexArray = wglGetProcAddress("glBindVertexArray"); if glBindVertexArray == nil return false;
+    glGenBuffers = wglGetProcAddress("glGenBuffers"); if glGenBuffers == nil return false;
+    glBindBuffer = wglGetProcAddress("glBindBuffer"); if glBindBuffer == nil return false;
+    glBufferData = wglGetProcAddress("glBufferData"); if glBufferData == nil return false;
+    glVertexAttribPointer = wglGetProcAddress("glVertexAttribPointer"); if glVertexAttribPointer == nil return false;
+    glEnableVertexAttribArray = wglGetProcAddress("glEnableVertexAttribArray"); if glEnableVertexAttribArray == nil return false;
+    glCreateShader = wglGetProcAddress("glCreateShader"); if glCreateShader == nil return false;
+    glShaderSource = wglGetProcAddress("glShaderSource"); if glShaderSource == nil return false;
+    glCompileShader = wglGetProcAddress("glCompileShader"); if glCompileShader == nil return false;
+    glGetShaderiv = wglGetProcAddress("glGetShaderiv"); if glGetShaderiv == nil return false;
+    glGetShaderInfoLog = wglGetProcAddress("glGetShaderInfoLog"); if glGetShaderInfoLog == nil return false;
+    glCreateProgram = wglGetProcAddress("glCreateProgram"); if glCreateProgram == nil return false;
+    glAttachShader = wglGetProcAddress("glAttachShader"); if glAttachShader == nil return false;
+    glLinkProgram = wglGetProcAddress("glLinkProgram"); if glLinkProgram == nil return false;
+    glGetProgramiv = wglGetProcAddress("glGetProgramiv"); if glGetProgramiv == nil return false;
+    glGetProgramInfoLog = wglGetProcAddress("glGetProgramInfoLog"); if glGetProgramInfoLog == nil return false;
+    glUseProgram = wglGetProcAddress("glUseProgram"); if glUseProgram == nil return false;
+    glDrawArrays = wglGetProcAddress("glDrawArrays"); if glDrawArrays == nil return false;
+    glDeleteShader = wglGetProcAddress("glDeleteShader"); if glDeleteShader == nil return false;
+    glDeleteProgram = wglGetProcAddress("glDeleteProgram"); if glDeleteProgram == nil return false;
+    glGetAttribLocation = wglGetProcAddress("glGetAttribLocation"); if glGetAttribLocation == nil return false;
+    glPolygonMode = wglGetProcAddress("glPolygonMode"); if glPolygonMode == nil return false;
+    glDeleteBuffers = wglGetProcAddress("glDeleteBuffers"); if glDeleteBuffers == nil return false;
+    glDeleteVertexArrays = wglGetProcAddress("glDeleteVertexArrays"); if glDeleteVertexArrays == nil return false;
+    return true;
+}
+
+var close_window : bool = false;
+
+fn WindowProc(hwnd : HWND, uMsg : UINT, wParam : WPARAM, lParam : LPARAM) : LRESULT
+{
+    if uMsg == WM_CLOSE or uMsg == WM_DESTROY
+    {
+        close_window = true;
+        PostQuitMessage(0);
+        return 0;
+    }
+
+    return DefWindowProcA(hwnd, uMsg, wParam, lParam);
+}
+
+let vertex_shader_src : const uint8* =
+    "#version 330 core\n"
+    "layout (location = 0) in vec3 aPos;\n"
+    "layout (location = 1) in vec3 aColor;\n"
+    "out vec3 vertexColor;\n"
+    "void main() {\n"
+    "   gl_Position = vec4(aPos.x, aPos.y, aPos.z, 1.0);\n"
+    "   vertexColor = aColor;"
+    "\n}\0";
+
+let fragment_shader_src : const uint8* =
+    "#version 330 core\n"
+    "in vec3 vertexColor;\n"
+    "out vec4 FragColor;\n"
+    "void main() {\n"
+    "    FragColor = vec4(vertexColor, 1.0f);\n"
+    "}\0";
+
+fn print_shader_error(shader : GLuint) : void
+{
+    var errorLog : uint8[512];
+    glGetShaderInfoLog(shader, 512, nil, errorLog);
+    print("Shader compilation error: ");
+    io::write(io::stdout, errorLog, 512, nil);
+    print("\n");
+}
+
+fn print_program_error(program : GLuint) : void
+{
+    var errorLog : uint8[512];
+    glGetProgramInfoLog(program, 512, nil, errorLog);
+    print("Program linking error: ");
+    io::write(io::stdout, errorLog, 512, nil);
+    print("\n");
+}
+
+fn create_shader(shader_type : GLenum, src : const uint8*) : GLuint
+{
+    var shader : GLuint = glCreateShader(shader_type);
+    glShaderSource(shader, 1, &src, nil);
+    glCompileShader(shader);
+
+    var success : GLint;
+    glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
+    if success != 1
+    {
+        print_shader_error(shader);
+        return 0;
+    }
+    return shader;
+}
+
+fn create_program(vertsrc : const uint8*, fragsrc : const uint8*) : GLuint
+{
+    var vert : GLuint = create_shader(GL_VERTEX_SHADER, vertsrc);
+    var frag : GLuint = create_shader(GL_FRAGMENT_SHADER, fragsrc);
+    if vert == 0 or frag == 0
+        return 0;
+
+    var prog : GLuint = glCreateProgram();
+    glAttachShader(prog, vert);
+    glAttachShader(prog, frag);
+    glLinkProgram(prog);
+
+    var success : GLint;
+    glGetProgramiv(prog, GL_LINK_STATUS, &success);
+    if success != 1
+    {
+        print_program_error(prog);
+        return 0;
+    }
+
+    glDeleteShader(vert);
+    glDeleteShader(frag);
+
+    return prog;
+}
+
+def WIDTH = 800;
+def HEIGHT = 600;
+
+var hwnd : HWND? = nil;
+var hdc : HDC? = nil;
+var hglrc : HGLRC? = nil;
+
+fn create_window() : int32
+{
+    var wc : WNDCLASSA = {};
+    wc.lpfnWndProc = WindowProc;
+    wc.lpszClassName = "OpenGLWindow";
+    wc.style = CS_OWNDC;
+
+    RegisterClassA(&wc);
+
+    hwnd = CreateWindowExA(
+        0,
+        "OpenGLWindow",
+        "OpenGL 3.3 Core Triangle",
+        WS_OVERLAPPEDWINDOW,
+        CW_USEDEFAULT, CW_USEDEFAULT,
+        WIDTH, HEIGHT,
+        nil, nil,
+        GetModuleHandleA(nil),
+        nil
+    );
+    if hwnd == nil
+        return 100;
+
+    hdc = GetDC(hwnd);
+    if hdc == nil
+        return 2;
+
+    let pfd : PIXELFORMATDESCRIPTOR = {
+        nSize = sizeof(PIXELFORMATDESCRIPTOR),
+        nVersion = 1,
+        dwFlags = PFD_DRAW_TO_WINDOW | PFD_SUPPORT_OPENGL | PFD_DOUBLEBUFFER,
+        iPixelType = PFD_TYPE_RGBA,
+        cColorBits = 32,
+        cDepthBits = 24,
+        iLayerType = PFD_MAIN_PLANE
+    };
+    var pixelFormat : int32 = ChoosePixelFormat(hdc, &pfd);
+    if pixelFormat == 0 or SetPixelFormat(hdc, pixelFormat, &pfd) == 0
+        return 3;
+
+    hglrc = wglCreateContext(hdc);
+    if hglrc == nil
+        return 4;
+
+    if wglMakeCurrent(hdc, hglrc) == 0
+        return 5;
+
+    ShowWindow(hwnd, SW_SHOW);
+    UpdateWindow(hwnd);
+
+    return 0;
+}
+
+/* Cleanup OpenGL resources */
+fn cleanup_opengl(vao : GLuint, vbo : GLuint, shader_program : GLuint) : void
+{
+    print("Cleaning up OpenGL resources...\n");
+
+    /* Delete shader program */
+    if shader_program != 0
+    {
+        glUseProgram(0);
+        glDeleteProgram(shader_program);
+    }
+
+    /* Delete vertex and buffer objects */
+    if vao != 0
+    {
+        glBindVertexArray(0);
+        glDeleteVertexArrays(1, &vao);
+    }
+
+    if vbo != 0
+    {
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
+        glDeleteBuffers(1, &vbo);
+    }
+
+    print("OpenGL cleanup complete\n");
+}
+
+/* Cleanup window and OpenGL context */
+fn cleanup_window() : void
+{
+    print("Cleaning up window and OpenGL context...\n");
+
+    /* Unbind and delete OpenGL context */
+    if hglrc != nil
+    {
+        wglMakeCurrent(nil, nil);
+        wglDeleteContext(hglrc);
+        hglrc = nil;
+        print("OpenGL context deleted\n");
+    }
+
+    /* Release device context */
+    if hdc != nil and hwnd != nil
+    {
+        ReleaseDC(hwnd, hdc);
+        hdc = nil;
+        print("Device context released\n");
+    }
+
+    /* Destroy window */
+    if hwnd != nil
+    {
+        DestroyWindow(hwnd);
+        hwnd = nil;
+        print("Window destroyed\n");
+    }
+
+    print("Window cleanup complete\n");
+}
+
+pub fn main() : int32
+{
+    io::init();
+    var res = create_window();
+    if res != 0
+        return res;
+
+    if not glload()
+    {
+        print("gl_load failed\n");
+        cleanup_window();
+        return 190;
+    }
+
+    glViewport(0, 0, intcast(int32, WIDTH), intcast(int32, HEIGHT));
+    glClearColor(0.2, 0.2, 0.2, 1.0);
+
+    /* Create and link shader program */
+    var shader_program : GLuint = create_program(vertex_shader_src, fragment_shader_src);
+    if shader_program == 0
+    {
+        print("Failed to create shader program\n");
+        cleanup_window();
+        return 12;
+    }
+
+    glUseProgram(shader_program);
+
+    /* Triangle vertex data with colors */
+    var vertices : float32[] = {
+        -0.5, -0.5, 0.0,   /* bottom left position */
+         1.0,  0.0, 0.0,   /* red */
+         0.5, -0.5, 0.0,   /* bottom right position */
+         0.0,  1.0, 0.0,   /* green */
+         0.0,  0.5, 0.0,   /* top position */
+         0.0,  0.0, 1.0    /* blue */
+    };
+
+    /* Create Vertex Array Object and Vertex Buffer Object */
+    var VAO : GLuint;
+    var VBO : GLuint;
+    glGenVertexArrays(1, &VAO);
+    glGenBuffers(1, &VBO);
+    glBindVertexArray(VAO);
+
+    glBindBuffer(GL_ARRAY_BUFFER, VBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(typeof(vertices)), vertices, GL_STATIC_DRAW);
+
+    /* Set up vertex attribute pointers */
+    /* Position attribute */
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float32), ptrcast(const void*, 0));
+    glEnableVertexAttribArray(0);
+
+    /* Color attribute */
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float32), ptrcast(const void*, 3 * sizeof(float32)));
+    glEnableVertexAttribArray(1);
+
+    //glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+
+    /* Main loop */
+    while !close_window
+    {
+        let msg : MSG;
+        while PeekMessageA(&msg, hwnd, 0, 0, PM_REMOVE) != 0
+        {
+            TranslateMessage(&msg);
+            DispatchMessageA(&msg);
+        }
+
+        glClear(GL_COLOR_BUFFER_BIT);
+        glDrawArrays(GL_TRIANGLES, 0, 3);
+        if hdc != nil
+        {
+            SwapBuffers(hdc);
+        }
+    }
+
+    /* Cleanup all resources */
+    cleanup_opengl(VAO, VBO, shader_program);
+    cleanup_window();
+
+    print("Application exiting cleanly\n");
+    ExitProcess(0);
+    return 0;
+}

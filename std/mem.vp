@@ -4,7 +4,7 @@
 pub fn set(buf : void*, val : uint8, size : usize) : void*
 {
     var p : uint8* = buf;
-    for var i : usize = 0; i < size; i++ { *p++ = val; }
+    for var i : usize = 0; i < size; i++ { p[i] = val; }
     return buf;
 }
 
@@ -39,7 +39,7 @@ pub fn cmp(buf1 : const void*, buf2 : const void*, n : usize) : isize
     var q : const uint8* = buf2;
     for var i : usize = 0; i < n; i++
     {
-        let d = intcast(isize, *p++) - intcast(isize, *q++);
+        let d : isize = intcast(isize, *p++) - intcast(isize, *q++);
         if d != 0 return d;
     }
     return 0;
@@ -69,9 +69,14 @@ def RELEASE_CHECK_RATE : usize = 4095;
 def N_SMALL_BINS : usize = 32;
 def SMALL_BIN_SHIFT : usize = 3;
 
+def CHUNK_ALIGN_MASK : usize = MALLOC_ALIGNMENT - 1;
+
 // Large-bin (trie) parameters
 def N_TREE_BINS : usize = 32;
 def TREE_BIN_SHIFT : usize = 8;
+def MIN_LARGE_SIZE : usize = 1 << TREE_BIN_SHIFT;
+def MAX_SMALL_SIZE : usize = MIN_LARGE_SIZE - 1;
+def MAX_SMALL_REQUEST : usize = MAX_SMALL_SIZE - CHUNK_ALIGN_MASK - CHUNK_OVERHEAD;
 
 // Status bits in head
 def PINUSE_BIT : usize = 1;
@@ -159,37 +164,37 @@ inline fn align_up(n : usize, a : usize) : usize
     return (n + a - 1) & ~(a - 1);
 }
 
-inline fn chunk_to_mem(p : Chunk*) : void*
+inline fn chunk2mem(p : Chunk*) : void*
 {
     return ptrcast(void*, ptrcast(usize, p) + TWO_WORD_SIZE);
 }
 
-inline fn mem_to_chunk(m : void*) : Chunk*
+inline fn mem2chunk(m : void*) : Chunk*
 {
     return ptrcast(Chunk*, ptrcast(usize, m) - TWO_WORD_SIZE);
 }
 
 inline fn align_offset(base : uint8*) : usize
 {
-    let addr = ptrcast(usize, base) + TWO_WORD_SIZE;
-    let rem = addr & (MALLOC_ALIGNMENT - 1);
+    let addr : usize = ptrcast(usize, base) + TWO_WORD_SIZE;
+    let rem : usize = addr & (MALLOC_ALIGNMENT - 1);
     if rem == 0 return 0;
     return MALLOC_ALIGNMENT - rem;
 }
 
 inline fn align_as_chunk(base : uint8*) : Chunk*
 {
-    let off = align_offset(base);
+    let off : usize = align_offset(base);
     return ptrcast(Chunk*, ptrcast(usize, base) + off);
 }
 
-inline fn chunk_at(p : Chunk*, offset : usize) : Chunk*
+inline fn chunk_plus_offset(p : Chunk*, offset : usize) : Chunk*
 {
     return ptrcast(Chunk*, ptrcast(usize, p) + offset);
 }
 
 inline fn chunk_size(p : Chunk*) : usize { return p.head & ~FLAG_BITS; }
-inline fn next_chunk(p : Chunk*) : Chunk* { return chunk_at(p, chunk_size(p)); }
+inline fn next_chunk(p : Chunk*) : Chunk* { return chunk_plus_offset(p, chunk_size(p)); }
 inline fn prev_chunk(p : Chunk*) : Chunk* { return ptrcast(Chunk*, ptrcast(usize, p) - p.prev_foot); }
 
 inline fn pinuse(p : Chunk*) : bool { return usize(p.head & PINUSE_BIT) != 0; }
@@ -200,7 +205,7 @@ inline fn is_mmapped(p : Chunk*) : bool { return usize(p.head & INUSE_BITS) == 0
 
 inline fn set_foot(p : Chunk*, s : usize) : void
 {
-    chunk_at(p, s).prev_foot = s;
+    chunk_plus_offset(p, s).prev_foot = s;
 }
 
 inline fn set_size_and_pinuse_of_free_chunk(p : Chunk*, s : usize) : void
@@ -219,13 +224,13 @@ inline fn set_free_with_pinuse(p : Chunk*, s : usize, next : Chunk*) : void
 inline fn set_inuse(p : Chunk*, s : usize) : void
 {
     p.head = (p.head & PINUSE_BIT) | s | CINUSE_BIT;
-    chunk_at(p, s).head |= PINUSE_BIT;
+    chunk_plus_offset(p, s).head |= PINUSE_BIT;
 }
 
 inline fn set_inuse_and_pinuse(p : Chunk*, s : usize) : void
 {
     p.head = s | PINUSE_BIT | CINUSE_BIT;
-    chunk_at(p, s).head |= PINUSE_BIT;
+    chunk_plus_offset(p, s).head |= PINUSE_BIT;
 }
 
 inline fn set_size_and_pinuse_of_inuse_chunk(p : Chunk*, s : usize) : void
@@ -233,23 +238,25 @@ inline fn set_size_and_pinuse_of_inuse_chunk(p : Chunk*, s : usize) : void
     p.head = s | PINUSE_BIT | CINUSE_BIT;
 }
 
-inline fn min_chunk_size() : usize
+def MIN_CHUNK_SIZE : usize = (sizeof(Chunk) + CHUNK_ALIGN_MASK) & ~CHUNK_ALIGN_MASK;
+
+def MIN_REQUEST : usize = MIN_CHUNK_SIZE - CHUNK_OVERHEAD - 1;
+
+inline fn pad_request(req : usize) : usize
 {
-    return align_up(sizeof(Chunk), MALLOC_ALIGNMENT);
+    return (req + CHUNK_OVERHEAD + CHUNK_ALIGN_MASK) & ~CHUNK_ALIGN_MASK;
 }
 
-inline fn request_to_size(req : usize) : usize
+inline fn request2size(req : usize) : usize
 {
-    let min_req = min_chunk_size() - sizeof(usize) - 1;
-    if req < min_req return min_chunk_size();
-    return align_up(req + sizeof(usize), MALLOC_ALIGNMENT);
+    return req < MIN_REQUEST ? MIN_CHUNK_SIZE : pad_request(req);
 }
 
 inline fn top_foot_size() : usize
 {
     return align_offset(ptrcast(uint8*, 0)) +
            align_up(sizeof(Segment), MALLOC_ALIGNMENT) +
-           min_chunk_size();
+           MIN_CHUNK_SIZE;
 }
 
 inline fn is_small_size(s : usize) : bool
@@ -262,7 +269,7 @@ inline fn small_index(s : usize) : uint32
     return intcast(uint32, s >> SMALL_BIN_SHIFT);
 }
 
-inline fn small_index_to_size(i : uint32) : usize
+inline fn small_index2size(i : uint32) : usize
 {
     return intcast(usize, i) << SMALL_BIN_SHIFT;
 }
@@ -272,7 +279,7 @@ inline fn smallbin_at(i : uint32) : Chunk*
     return ptrcast(Chunk*, &gm.smallbins[i * 2]);
 }
 
-inline fn treebin_root_ptr(i : uint32) : Chunk*?*
+inline fn treebin_at(i : uint32) : Chunk*?*
 {
     return &gm.treebins[i];
 }
@@ -305,13 +312,13 @@ fn leftshift_for_tree_index(i : uint32) : uint32
     return (USIZE_BITS - 1) - ((i >> 1) + intcast(uint32, TREE_BIN_SHIFT - 2));
 }
 
-inline fn idx_to_bit(i : uint32) : uint32 { return 1 << i; }
+inline fn idx2bit(i : uint32) : uint32 { return 1 << i; }
 
 inline fn least_bit(x : uint32) : uint32 { return x & (0 - x); }
 
 inline fn left_bits(x : uint32) : uint32 { return (x << 1) | -(x << 1); }
 
-fn bit_to_index(x : uint32) : uint32
+fn bit2idx(x : uint32) : uint32
 {
     var y : uint32 = x - 1;
     var n : uint32 = y >> (16 - 4) & 16;
@@ -330,9 +337,11 @@ inline fn leftmost_child(t : TreeChunk*) : TreeChunk*?
     return t.child[1];
 }
 
+// Win32 memory backend
+
 fn win32_mmap(size : usize) : uint8*?
 {
-    let p = VirtualAlloc(nil, intcast(SIZE_T, size),
+    let p : void*? = VirtualAlloc(nil, intcast(SIZE_T, size),
                          MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
     if p == nil return nil;
     return ptrcast(uint8*, p);
@@ -340,7 +349,7 @@ fn win32_mmap(size : usize) : uint8*?
 
 fn win32_direct_mmap(size : usize) : uint8*?
 {
-    let p = VirtualAlloc(nil, intcast(SIZE_T, size),
+    let p : void*? = VirtualAlloc(nil, intcast(SIZE_T, size),
                          MEM_COMMIT | MEM_RESERVE | MEM_TOP_DOWN, PAGE_READWRITE);
     if p == nil return nil;
     return ptrcast(uint8*, p);
@@ -353,7 +362,7 @@ fn win32_munmap(ptr : uint8*, size : usize) : bool
     while rem > 0
     {
         var minfo : MEMORY_BASIC_INFORMATION;
-        let queried = VirtualQuery(ptrcast(void*?, cptr), &minfo,
+        let queried : uint64 = VirtualQuery(ptrcast(void*?, cptr), &minfo,
                                    sizeof(MEMORY_BASIC_INFORMATION));
         if queried == 0 return false;
         if minfo.BaseAddress != ptrcast(void*, cptr) return false;
@@ -361,7 +370,7 @@ fn win32_munmap(ptr : uint8*, size : usize) : bool
         if minfo.State != intcast(DWORD, MEM_COMMIT) return false;
         if minfo.RegionSize > intcast(SIZE_T, rem) return false;
         if VirtualFree(ptrcast(void*, cptr), 0, MEM_RELEASE) == 0 return false;
-        let step = intcast(usize, minfo.RegionSize);
+        let step : usize = intcast(usize, minfo.RegionSize);
         cptr = ptrcast(uint8*, ptrcast(usize, cptr) + step);
         rem -= step;
     }
@@ -394,10 +403,14 @@ inline fn segment_holds(sp : Segment*, addr : uint8*) : bool
            ptrcast(usize, addr) < ptrcast(usize, sp.base + sp.size);
 }
 
-// Find and return the Segment that contains addr, or nil
+// Find and return the Segment that contains addr, or nil.
+// Mirrors C's segment_holding which starts traversal from &m->seg (the inline segment).
 fn segment_holding(addr : uint8*) : Segment*?
 {
-    var sp : Segment*? = gm.seg_next;
+    // The inline segment fields (seg_base/seg_size/seg_next/seg_sflags) are laid
+    // out contiguously in MState and are treated as a Segment* here, exactly as
+    // C treats &m->seg as the first node in the chain.
+    var sp : Segment*? = ptrcast(Segment*, &gm.seg_base);
     while sp != nil
     {
         if segment_holds(sp, addr) return sp;
@@ -406,22 +419,14 @@ fn segment_holding(addr : uint8*) : Segment*?
     return nil;
 }
 
-// Returns true if addr is inside the top-level segment
-fn addr_in_top_seg(addr : uint8*) : bool
-{
-    if gm.seg_base == nil return false;
-    return addr >= gm.seg_base and
-           ptrcast(usize, addr) < ptrcast(usize, gm.seg_base + gm.seg_size);
-}
-
-// True if any Segment record's own address falls within ss's range
-// (would mean releasing ss would destroy a live Segment header)
+// Returns true if any Segment record's own address falls within ss's range.
+// Mirrors C's has_segment_link which starts traversal from &m->seg (the inline segment).
 fn has_segment_link(ss : Segment*) : bool
 {
-    var sp : Segment*? = gm.seg_next;
+    var sp : Segment*? = ptrcast(Segment*, &gm.seg_base);
     while sp != nil
     {
-        let spaddr = ptrcast(uint8*, sp);
+        let spaddr : uint8* = ptrcast(uint8*, sp);
         if segment_holds(ss, spaddr) return true;
         sp = sp.next;
     }
@@ -438,19 +443,19 @@ fn init_bins() : void
     }
     for var i : uint32 = 0; i < N_TREE_BINS; i++
     {
-        *treebin_root_ptr(i) = nil;
+        *treebin_at(i) = nil;
     }
 }
 
 fn init_top(p : Chunk*, p_size : usize) : void
 {
-    let off = align_offset(ptrcast(uint8*, p));
-    let adj_p = chunk_at(p, off);
-    let adj_s = p_size - off;
+    let off : usize = align_offset(ptrcast(uint8*, p));
+    let adj_p : Chunk* = chunk_plus_offset(p, off);
+    let adj_s : usize = p_size - off;
     gm.top = adj_p;
     gm.top_size = adj_s;
     adj_p.head = adj_s | PINUSE_BIT;
-    chunk_at(adj_p, adj_s).head = top_foot_size();
+    chunk_plus_offset(adj_p, adj_s).head = top_foot_size();
     gm.trim_check = TRIM_THRESHOLD;
 }
 
@@ -485,28 +490,28 @@ inline fn should_trim(s : usize) : bool { return s > gm.trim_check; }
 
 fn insert_small_chunk(p : Chunk*, s : usize) : void
 {
-    let i = small_index(s);
-    let b = smallbin_at(i);
+    let i : uint32 = small_index(s);
+    let b : Chunk* = smallbin_at(i);
     var f : Chunk* = b;
-    if (gm.smallmap & idx_to_bit(i)) != 0
+    if (gm.smallmap & idx2bit(i)) != 0
     {
         f = b.fd;
     }
     else
     {
-        gm.smallmap |= idx_to_bit(i);
+        gm.smallmap |= idx2bit(i);
     }
     b.fd = p; f.bk = p; p.fd = f; p.bk = b;
 }
 
 fn unlink_small_chunk(p : Chunk*, s : usize) : void
 {
-    let f = p.fd;
-    let b = p.bk;
-    let i = small_index(s);
+    let f : Chunk* = p.fd;
+    let b : Chunk* = p.bk;
+    let i : uint32 = small_index(s);
     if b == f
     {
-        gm.smallmap &= ~idx_to_bit(i);
+        gm.smallmap &= ~idx2bit(i);
     }
     else
     {
@@ -516,10 +521,10 @@ fn unlink_small_chunk(p : Chunk*, s : usize) : void
 
 fn unlink_first_small_chunk(b : Chunk*, p : Chunk*, i : uint32) : void
 {
-    let f = p.fd;
+    let f : Chunk* = p.fd;
     if b == f
     {
-        gm.smallmap &= ~idx_to_bit(i);
+        gm.smallmap &= ~idx2bit(i);
     }
     else
     {
@@ -530,7 +535,7 @@ fn unlink_first_small_chunk(b : Chunk*, p : Chunk*, i : uint32) : void
 // Retire the current dv into a small bin, install p/s as new dv.
 fn replace_dv(p : Chunk*, s : usize) : void
 {
-    let dvs = gm.dv_size;
+    let dvs : usize = gm.dv_size;
     if dvs != 0
     {
         insert_small_chunk(gm.dv, dvs);
@@ -541,15 +546,15 @@ fn replace_dv(p : Chunk*, s : usize) : void
 
 fn insert_large_chunk(x : TreeChunk*, s : usize) : void
 {
-    let i = compute_tree_index(s);
-    let hp = treebin_root_ptr(i);
+    let i : uint32 = compute_tree_index(s);
+    let hp : Chunk*?* = treebin_at(i);
     x.index  = i;
     x.child[0] = nil;
     x.child[1] = nil;
 
-    if (gm.treemap & idx_to_bit(i)) == 0
+    if (gm.treemap & idx2bit(i)) == 0
     {
-        gm.treemap |= idx_to_bit(i);
+        gm.treemap |= idx2bit(i);
         *hp = ptrcast(Chunk*, x);
         x.parent = ptrcast(TreeChunk*, hp);
         x.fd = x;
@@ -564,7 +569,7 @@ fn insert_large_chunk(x : TreeChunk*, s : usize) : void
     {
         if chunk_size(ptrcast(Chunk*, t)) != s
         {
-            let bit = (k >> (8 * sizeof(usize) - 1)) & 1;
+            let bit : usize = (k >> (8 * sizeof(usize) - 1)) & 1;
             var cp : TreeChunk**?;
             if bit == 0 { cp = &t.child[0]; }
             else { cp = &t.child[1]; }
@@ -585,7 +590,7 @@ fn insert_large_chunk(x : TreeChunk*, s : usize) : void
         else
         {
             // Same-size: insert into the circular fd/bk chain at front
-            let f = t.fd;
+            let f : TreeChunk* = t.fd;
             t.fd = x; f.bk = x;
             x.fd = f; x.bk = t;
             x.parent = nil;
@@ -596,13 +601,13 @@ fn insert_large_chunk(x : TreeChunk*, s : usize) : void
 
 fn unlink_large_chunk(x : TreeChunk*) : void
 {
-    let xp = x.parent;
+    let xp : TreeChunk*? = x.parent;
     var r  : TreeChunk*? = nil;
 
     if x.bk != x
     {
         // Not the sole representative, just splice out
-        let f = x.fd;
+        let f : TreeChunk* = x.fd;
         r = x.bk;
         f.bk = r;  r.fd = f;
     }
@@ -618,8 +623,8 @@ fn unlink_large_chunk(x : TreeChunk*) : void
             var searching : bool = true;
             while searching
             {
-                let try1 = &(*rp).child[1];
-                let try0 = &(*rp).child[0];
+                let try1 : TreeChunk*?* = &(*rp).child[1];
+                let try0 : TreeChunk*?* = &(*rp).child[0];
                 if *try1 != nil { rp = try1; }
                 else if *try0 != nil { rp = try0; }
                 else { searching = false; }
@@ -631,11 +636,11 @@ fn unlink_large_chunk(x : TreeChunk*) : void
 
     if xp == nil return;
 
-    let hp = treebin_root_ptr(x.index);
+    let hp : Chunk*?* = treebin_at(x.index);
     if ptrcast(usize, x) == ptrcast(usize, *hp)
     {
         *hp = ptrcast(Chunk*, r);
-        if r == nil { gm.treemap &= ~idx_to_bit(x.index); }
+        if r == nil { gm.treemap &= ~idx2bit(x.index); }
     }
     else
     {
@@ -646,9 +651,9 @@ fn unlink_large_chunk(x : TreeChunk*) : void
     if r != nil
     {
         r.parent = xp;
-        let c0 = x.child[0];
+        let c0 : TreeChunk*? = x.child[0];
         if c0 != nil { r.child[0] = c0; c0.parent = r; }
-        let c1 = x.child[1];
+        let c1 : TreeChunk*? = x.child[1];
         if c1 != nil { r.child[1] = c1; c1.parent = r; }
     }
 }
@@ -679,35 +684,35 @@ fn unlink_chunk(p : Chunk*, s : usize) : void
 
 fn mmap_alloc(nb : usize) : void*?
 {
-    let mm_size = granularity_align(nb + 6 * sizeof(usize) + MALLOC_ALIGNMENT - 1);
+    let mm_size : usize = granularity_align(nb + 6 * sizeof(usize) + MALLOC_ALIGNMENT - 1);
     if mm_size <= nb return nil;   // overflow
 
-    let mm = win32_direct_mmap(mm_size);
+    let mm : uint8*? = win32_direct_mmap(mm_size);
     if mm == nil return nil;
 
-    let off = align_offset(mm);
-    let p = ptrcast(Chunk*, ptrcast(usize, mm) + off);
-    let psize = mm_size - off - MMAP_FOOT_PAD;
+    let off : usize = align_offset(mm);
+    let p : Chunk* = ptrcast(Chunk*, ptrcast(usize, mm) + off);
+    let psize : usize = mm_size - off - MMAP_FOOT_PAD;
 
     p.prev_foot = off;
     p.head = psize;   // no CINUSE/PINUSE bits — marks it as mmapped
-    chunk_at(p, psize).head = FENCEPOST_HEAD;
-    chunk_at(p, psize + sizeof(usize)).head = 0;
+    chunk_plus_offset(p, psize).head = FENCEPOST_HEAD;
+    chunk_plus_offset(p, psize + sizeof(usize)).head = 0;
 
     if gm.least_addr == nil or mm < gm.least_addr { gm.least_addr = mm; }
     gm.footprint += mm_size;
     if gm.footprint > gm.max_footprint { gm.max_footprint = gm.footprint; }
 
-    return chunk_to_mem(p);
+    return chunk2mem(p);
 }
 
 fn prepend_alloc(new_base : uint8*, old_base : uint8*, nb : usize) : void*
 {
-    let p = align_as_chunk(new_base);
-    var old_first = align_as_chunk(old_base);
-    let p_size = ptrcast(usize, old_first) - ptrcast(usize, p);
-    let q = chunk_at(p, nb);
-    var q_size = p_size - nb;
+    let p : Chunk* = align_as_chunk(new_base);
+    var old_first : Chunk* = align_as_chunk(old_base);
+    let p_size : usize = ptrcast(usize, old_first) - ptrcast(usize, p);
+    let q : Chunk* = chunk_plus_offset(p, nb);
+    var q_size : usize = p_size - nb;
     set_size_and_pinuse_of_inuse_chunk(p, nb);
 
     if ptrcast(usize, old_first) == ptrcast(usize, gm.top)
@@ -726,39 +731,38 @@ fn prepend_alloc(new_base : uint8*, old_base : uint8*, nb : usize) : void*
     {
         if !is_inuse(old_first)
         {
-            let n_size = chunk_size(old_first);
+            let n_size : usize = chunk_size(old_first);
             unlink_chunk(old_first, n_size);
-            old_first = chunk_at(old_first, n_size);
+            old_first = chunk_plus_offset(old_first, n_size);
             q_size += n_size;
         }
         set_free_with_pinuse(q, q_size, old_first);
         insert_chunk(q, q_size);
     }
-    return chunk_to_mem(p);
+    return chunk2mem(p);
 }
 
 fn add_segment(t_base : uint8*, t_size : usize, mmapped : uint32) : void
 {
-    let old_top = ptrcast(uint8*, gm.top);
+    let old_top : uint8* = ptrcast(uint8*, gm.top);
 
-    // Find old_end: end of whichever existing segment contains old_top
-    var old_end : uint8* = ptrcast(uint8*, ptrcast(usize, gm.seg_base) + gm.seg_size);
-    var sp : Segment*? = gm.seg_next;
-    while sp != nil
+    var old_end : uint8* = ptrcast(uint8*, 0);  // will be set by segment_holding result
+    var sp_find : Segment*? = ptrcast(Segment*, &gm.seg_base);
+    while sp_find != nil
     {
-        if segment_holds(sp, old_top)
+        if segment_holds(sp_find, old_top)
         {
-            old_end = ptrcast(uint8*, ptrcast(usize, sp.base) + sp.size);
+            old_end = ptrcast(uint8*, ptrcast(usize, sp_find.base) + sp_find.size);
         }
-        sp = sp.next;
+        sp_find = sp_find.next;
     }
 
-    let s_size = align_up(sizeof(Segment), MALLOC_ALIGNMENT);
-    let rawsp = ptrcast(uint8*, ptrcast(usize, old_end) - (s_size + 4 * sizeof(usize) + MALLOC_ALIGNMENT - 1));
-    let off = align_offset(rawsp);
-    let asp = ptrcast(uint8*, ptrcast(usize, rawsp) + off);
+    let s_size : usize = align_up(sizeof(Segment), MALLOC_ALIGNMENT);
+    let rawsp : uint8* = ptrcast(uint8*, ptrcast(usize, old_end) - (s_size + 4 * sizeof(usize) + MALLOC_ALIGNMENT - 1));
+    let off : usize = align_offset(rawsp);
+    let asp : uint8* = ptrcast(uint8*, ptrcast(usize, rawsp) + off);
     var csp : uint8*;
-    if ptrcast(usize, asp) < ptrcast(usize, old_top) + min_chunk_size()
+    if ptrcast(usize, asp) < ptrcast(usize, old_top) + MIN_CHUNK_SIZE
     {
         csp = old_top;
     }
@@ -767,8 +771,8 @@ fn add_segment(t_base : uint8*, t_size : usize, mmapped : uint32) : void
         csp = asp;
     }
 
-    let sp_chunk = ptrcast(Chunk*, csp);
-    let ss = ptrcast(Segment*, chunk_to_mem(sp_chunk));
+    let sp_chunk : Chunk* = ptrcast(Chunk*, csp);
+    let ss : Segment* = ptrcast(Segment*, chunk2mem(sp_chunk));
 
     // Redirect top to the new region
     init_top(ptrcast(Chunk*, t_base), t_size - top_foot_size());
@@ -785,12 +789,12 @@ fn add_segment(t_base : uint8*, t_size : usize, mmapped : uint32) : void
     gm.seg_next = ss;
 
     // Write fenceposts from sp_chunk+s_size up to old_end
-    var fp = chunk_at(sp_chunk, s_size);
+    var fp : Chunk* = chunk_plus_offset(sp_chunk, s_size);
     var fencing : bool = true;
     while fencing
     {
         fp.head = FENCEPOST_HEAD;
-        let next_fp = chunk_at(fp, sizeof(usize));
+        let next_fp : Chunk* = chunk_plus_offset(fp, sizeof(usize));
         if ptrcast(usize, &next_fp.head) >= ptrcast(usize, old_end)
         {
             fencing = false;
@@ -804,9 +808,9 @@ fn add_segment(t_base : uint8*, t_size : usize, mmapped : uint32) : void
     // Release any old-top space not consumed by the segment header
     if ptrcast(usize, csp) != ptrcast(usize, old_top)
     {
-        let q = ptrcast(Chunk*, old_top);
-        let q_size = ptrcast(usize, csp) - ptrcast(usize, old_top);
-        let tn = chunk_at(q, q_size);
+        let q : Chunk* = ptrcast(Chunk*, old_top);
+        let q_size : usize = ptrcast(usize, csp) - ptrcast(usize, old_top);
+        let tn : Chunk* = chunk_plus_offset(q, q_size);
         set_free_with_pinuse(q, q_size, tn);
         insert_chunk(q, q_size);
     }
@@ -819,18 +823,18 @@ fn sys_alloc(nb : usize) : void*?
     // For large requests once the heap is live, try a direct mmap first
     if use_mmap() and nb >= MMAP_THRESHOLD and gm.top_size != 0
     {
-        let mem = mmap_alloc(nb);
+        let mem : void*? = mmap_alloc(nb);
         if mem != nil return mem;
     }
 
-    let a_size = granularity_align(nb + top_foot_size() + MALLOC_ALIGNMENT);
+    let a_size : usize = granularity_align(nb + top_foot_size() + MALLOC_ALIGNMENT);
     if a_size <= nb return nil;   // overflow
 
-    let t_base = win32_mmap(a_size);
+    let t_base : uint8*? = win32_mmap(a_size);
     if t_base == nil return nil;
 
-    let t_size = a_size;
-    let mflag = intcast(uint32, USE_MMAP_BIT);
+    let t_size : usize = a_size;
+    let mflag : uint32 = intcast(uint32, USE_MMAP_BIT);
 
     gm.footprint += t_size;
     if gm.footprint > gm.max_footprint { gm.max_footprint = gm.footprint; }
@@ -848,74 +852,35 @@ fn sys_alloc(nb : usize) : void*?
     }
     else
     {
-        // Attempt to extend an existing contiguous segment
-        var extended : bool = false;
-
-        // Check if t_base abuts the end of the top-level segment
-        if gm.seg_base != nil
-           and ptrcast(usize, gm.seg_base) + gm.seg_size == ptrcast(usize, t_base)
-           and gm.seg_sflags == mflag
-           and addr_in_top_seg(ptrcast(uint8*, gm.top))
+        var sp : Segment*? = ptrcast(Segment*, &gm.seg_base);
+        while sp != nil and ptrcast(usize, sp.base) + sp.size != ptrcast(usize, t_base)
         {
-            gm.seg_size += t_size;
+            sp = sp.next;
+        }
+        if sp != nil and !seg_is_extern(sp)
+           and sp.sflags == mflag
+           and segment_holds(sp, ptrcast(uint8*, gm.top))
+        {
+            sp.size += t_size;
             init_top(gm.top, gm.top_size + t_size);
-            extended = true;
         }
-
-        if !extended
-        {
-            var sp : Segment*? = gm.seg_next;
-            while sp != nil and !extended
-            {
-                if ptrcast(usize, sp.base) + sp.size == ptrcast(usize, t_base)
-                   and !seg_is_extern(sp)
-                   and sp.sflags == mflag
-                   and segment_holds(sp, ptrcast(uint8*, gm.top))
-                {
-                    sp.size += t_size;
-                    init_top(gm.top, gm.top_size + t_size);
-                    extended = true;
-                }
-                sp = sp.next;
-            }
-        }
-
-        if !extended
+        else
         {
             if t_base < gm.least_addr { gm.least_addr = t_base; }
 
-            // Check if the new region immediately precedes an existing segment
-            var prepended : bool = false;
-
-            if gm.seg_base != nil
-               and ptrcast(usize, t_base) + t_size == ptrcast(usize, gm.seg_base)
-               and gm.seg_sflags == mflag
+            var sp2 : Segment*? = ptrcast(Segment*, &gm.seg_base);
+            while sp2 != nil and ptrcast(usize, sp2.base) != ptrcast(usize, t_base) + t_size
             {
-                let old_base = gm.seg_base;
-                gm.seg_base   = t_base;
-                gm.seg_size  += t_size;
+                sp2 = sp2.next;
+            }
+            if sp2 != nil and !seg_is_extern(sp2) and sp2.sflags == mflag
+            {
+                let old_base : uint8* = sp2.base;
+                sp2.base = t_base;
+                sp2.size += t_size;
                 return prepend_alloc(t_base, old_base, nb);
             }
-
-            if !prepended
-            {
-                var sp : Segment*? = gm.seg_next;
-                while sp != nil and !prepended
-                {
-                    if ptrcast(usize, t_base) + t_size == ptrcast(usize, sp.base)
-                       and !seg_is_extern(sp)
-                       and sp.sflags == mflag
-                    {
-                        let old_base = sp.base;
-                        sp.base = t_base;
-                        sp.size += t_size;
-                        return prepend_alloc(t_base, old_base, nb);
-                    }
-                    sp = sp.next;
-                }
-            }
-
-            if !prepended
+            else
             {
                 add_segment(t_base, t_size, mflag);
             }
@@ -924,14 +889,14 @@ fn sys_alloc(nb : usize) : void*?
 
     if nb < gm.top_size
     {
-        let rsize = gm.top_size - nb;
-        let p = gm.top;
-        let r = chunk_at(p, nb);
+        let rsize : usize = gm.top_size - nb;
+        let p : Chunk* = gm.top;
+        let r : Chunk* = chunk_plus_offset(p, nb);
         gm.top = r;
         gm.top_size = rsize;
         r.head = rsize | PINUSE_BIT;
         set_size_and_pinuse_of_inuse_chunk(p, nb);
-        return chunk_to_mem(p);
+        return chunk2mem(p);
     }
 
     return nil;
@@ -941,26 +906,27 @@ fn release_unused_segments() : usize
 {
     var released : usize = 0;
     var n_segs : usize = 0;
-    var pred : Segment*? = nil;      // predecessor in chain (nil = top-level)
+    // pred starts at the inline segment (mirrors C's pred = &m->seg)
+    var pred : Segment*? = ptrcast(Segment*, &gm.seg_base);
     var sp : Segment*? = gm.seg_next;
 
     while sp != nil
     {
-        let base = sp.base;
-        let size = sp.size;
-        let next = sp.next;
+        let base : uint8* = sp.base;
+        let size : usize = sp.size;
+        let next : Segment*? = sp.next;
         n_segs++;
 
         if seg_is_mmapped(sp) and !seg_is_extern(sp)
         {
-            let p = align_as_chunk(base);
-            let psize = chunk_size(p);
-            let p_end = ptrcast(uint8*, ptrcast(usize, p) + psize);
-            let s_end = ptrcast(uint8*, ptrcast(usize, base) + size - top_foot_size());
+            let p : Chunk* = align_as_chunk(base);
+            let psize : usize = chunk_size(p);
+            let p_end : uint8* = ptrcast(uint8*, ptrcast(usize, p) + psize);
+            let s_end : uint8* = ptrcast(uint8*, ptrcast(usize, base) + size - top_foot_size());
 
             if !is_inuse(p) and ptrcast(usize, p_end) >= ptrcast(usize, s_end)
             {
-                let tp = ptrcast(TreeChunk*, p);
+                let tp : TreeChunk* = ptrcast(TreeChunk*, p);
                 if ptrcast(usize, p) == ptrcast(usize, gm.dv)
                 {
                     gm.dv = nil;
@@ -975,9 +941,8 @@ fn release_unused_segments() : usize
                 {
                     released    += size;
                     gm.footprint -= size;
-                    // Unlink sp from the chain
-                    if pred == nil { gm.seg_next = next; }
-                    else { pred.next  = next; }
+                    // Unlink sp from the chain via pred (pred.next = next)
+                    pred.next = next;
                     sp = next;
                     // pred stays the same — it now links directly to next
                 }
@@ -1014,67 +979,28 @@ fn sys_trim(pad : usize) : bool
 
     if is_initialized() and gm.top_size > pad + top_foot_size()
     {
-        let unit = gm.granularity;
-        let extra = ((gm.top_size - pad - top_foot_size() + unit - 1) / unit - 1) * unit;
+        let unit : usize = gm.granularity;
+        let extra : usize = ((gm.top_size - pad - top_foot_size() + unit - 1) / unit - 1) * unit;
 
-        // Try to shrink the segment that currently holds gm.top
-        let top_u8 = ptrcast(uint8*, gm.top);
+        // Find the segment holding gm.top via segment_holding (starts from inline seg,
+        // same as C's segment_holding(m, (char*)m->top)).
+        let top_u8 : uint8* = ptrcast(uint8*, gm.top);
+        let sp : Segment*? = segment_holding(top_u8);
 
-        if addr_in_top_seg(top_u8)
-           and (gm.seg_sflags & intcast(uint32, USE_MMAP_BIT)) != 0
-           and gm.seg_size >= extra
+        if sp != nil and !seg_is_extern(sp)
+           and seg_is_mmapped(sp)
+           and sp.size >= extra
+           and !has_segment_link(sp)
         {
-            // Check no Segment record lives inside this range
-            var link_found : bool = false;
-            var chk : Segment*? = gm.seg_next;
-            while chk != nil
+            let new_size : usize = sp.size - extra;
+            let rel_base : uint8* = ptrcast(uint8*, ptrcast(usize, sp.base) + new_size);
+            if win32_munmap(rel_base, extra)
             {
-                let chkaddr = ptrcast(uint8*, chk);
-                if chkaddr >= gm.seg_base and
-                   ptrcast(usize, chkaddr) < ptrcast(usize, gm.seg_base) + gm.seg_size
-                {
-                    link_found = true;
-                }
-                chk = chk.next;
-            }
-
-            if !link_found
-            {
-                let new_size = gm.seg_size - extra;
-                let rel_base = ptrcast(uint8*, ptrcast(usize, gm.seg_base) + new_size);
-                if win32_munmap(rel_base, extra)
-                {
-                    released     = extra;
-                    gm.seg_size   = new_size;
-                    gm.footprint -= released;
-                    init_top(gm.top, gm.top_size - released);
-                    gm.trim_check = TRIM_THRESHOLD;
-                }
-            }
-        }
-        else
-        {
-            var sp : Segment*? = gm.seg_next;
-            while sp != nil
-            {
-                if segment_holds(sp, top_u8)
-                   and seg_is_mmapped(sp)
-                   and !seg_is_extern(sp)
-                   and sp.size >= extra
-                   and !has_segment_link(sp)
-                {
-                    let new_size = sp.size - extra;
-                    let rel_base = ptrcast(uint8*, ptrcast(usize, sp.base) + new_size);
-                    if win32_munmap(rel_base, extra)
-                    {
-                        released = extra;
-                        sp.size = new_size;
-                        gm.footprint -= released;
-                        init_top(gm.top, gm.top_size - released);
-                        gm.trim_check = TRIM_THRESHOLD;
-                    }
-                }
-                sp = sp.next;
+                released      = extra;
+                sp.size       = new_size;
+                gm.footprint -= released;
+                init_top(gm.top, gm.top_size - released);
+                gm.trim_check = TRIM_THRESHOLD;
             }
         }
     }
@@ -1089,21 +1015,21 @@ fn sys_trim(pad : usize) : bool
 
 fn dispose_chunk(p : Chunk*, p_size : usize) : void
 {
-    var cp = p;
-    var csize = p_size;
-    let next = chunk_at(cp, csize);
+    var cp : Chunk* = p;
+    var csize : usize = p_size;
+    let next : Chunk* = chunk_plus_offset(cp, csize);
 
     if !pinuse(cp)
     {
-        let prev_size = cp.prev_foot;
+        let prev_size : usize = cp.prev_foot;
         if is_mmapped(cp)
         {
             csize += prev_size + MMAP_FOOT_PAD;
-            let raw = ptrcast(uint8*, ptrcast(usize, cp) - prev_size);
+            let raw : uint8* = ptrcast(uint8*, ptrcast(usize, cp) - prev_size);
             if win32_munmap(raw, csize) { gm.footprint -= csize; }
             return;
         }
-        let prev = ptrcast(Chunk*, ptrcast(usize, cp) - prev_size);
+        let prev : Chunk* = ptrcast(Chunk*, ptrcast(usize, cp) - prev_size);
         csize += prev_size;
         cp = prev;
         if ptrcast(usize, cp) != ptrcast(usize, gm.dv)
@@ -1138,7 +1064,7 @@ fn dispose_chunk(p : Chunk*, p_size : usize) : void
             set_size_and_pinuse_of_free_chunk(cp, gm.dv_size);
             return;
         }
-        let n_size = chunk_size(next);
+        let n_size : usize = chunk_size(next);
         csize += n_size;
         unlink_chunk(next, n_size);
         set_size_and_pinuse_of_free_chunk(cp, csize);
@@ -1159,73 +1085,69 @@ fn dispose_chunk(p : Chunk*, p_size : usize) : void
 fn tmalloc_large(nb : usize) : void*?
 {
     var v : TreeChunk*? = nil;
-    var rsize : usize = ~intcast(usize, 0) - nb + 1;   // –nb unsigned
+    var rsize : usize = ~intcast(usize, 0) - nb + 1;   // -nb unsigned
 
-    let idx = compute_tree_index(nb);
-    var t : TreeChunk*? = ptrcast(TreeChunk*, *treebin_root_ptr(idx));
+    let idx : uint32 = compute_tree_index(nb);
+    var t : TreeChunk*? = ptrcast(TreeChunk*, *treebin_at(idx));
 
     if t != nil
     {
         var sizebits : usize = nb << intcast(usize, leftshift_for_tree_index(idx));
         var rst : TreeChunk*? = nil;
-        var scanning : bool = true;
-        while scanning
+        while true
         {
-            let trem = chunk_size(ptrcast(Chunk*, t)) - nb;
+            let trem : usize = chunk_size(ptrcast(Chunk*, t)) - nb;
             if trem < rsize
             {
                 rsize = trem;
                 v = t;
-                if rsize == 0 { scanning = false; }
+                if rsize == 0 break;
             }
-            if scanning
+            let rt : TreeChunk*? = t.child[1];
+            let bit : usize = (sizebits >> (8 * sizeof(usize) - 1)) & 1;
+            var tc : TreeChunk*?;
+            if bit == 0 { tc = t.child[0]; }
+            else { tc = t.child[1]; }
+            if rt != nil and ptrcast(usize, rt) != ptrcast(usize, tc)
             {
-                let rt = t.child[1];
-                let bit = (sizebits >> (8 * sizeof(usize) - 1)) & 1;
-                var tc : TreeChunk*?;
-                if bit == 0 { tc = t.child[0]; }
-                else { tc = t.child[1]; }
-                if rt != nil and ptrcast(usize, rt) != ptrcast(usize, tc)
-                {
-                    rst = rt;
-                }
-                if tc == nil
-                {
-                    t = rst;
-                    scanning = false;
-                }
-                else
-                {
-                    t = tc;
-                    sizebits <<= 1;
-                }
+                rst = rt;
+            }
+            if tc == nil
+            {
+                t = rst;
+                break;
+            }
+            else
+            {
+                t = tc;
+                sizebits <<= 1;
             }
         }
     }
 
     if t == nil and v == nil
     {
-        let left = left_bits(idx_to_bit(idx)) & gm.treemap;
+        let left : uint32 = left_bits(idx2bit(idx)) & gm.treemap;
         if left != 0
         {
-            let i = bit_to_index(least_bit(left));
-            t = ptrcast(TreeChunk*, *treebin_root_ptr(i));
+            let i : uint32 = bit2idx(least_bit(left));
+            t = ptrcast(TreeChunk*, *treebin_at(i));
         }
     }
 
     while t != nil
     {
-        let trem = chunk_size(ptrcast(Chunk*, t)) - nb;
+        let trem : usize = chunk_size(ptrcast(Chunk*, t)) - nb;
         if trem < rsize { rsize = trem;  v = t; }
         t = leftmost_child(t);
     }
 
     if v != nil and rsize < gm.dv_size - nb
     {
-        let vp = ptrcast(Chunk*, v);
-        let r  = chunk_at(vp, nb);
+        let vp : Chunk* = ptrcast(Chunk*, v);
+        let r  : Chunk* = chunk_plus_offset(vp, nb);
         unlink_large_chunk(v);
-        if rsize < min_chunk_size()
+        if rsize < MIN_CHUNK_SIZE
         {
             set_inuse_and_pinuse(vp, rsize + nb);
         }
@@ -1235,23 +1157,23 @@ fn tmalloc_large(nb : usize) : void*?
             set_size_and_pinuse_of_free_chunk(r, rsize);
             insert_chunk(r, rsize);
         }
-        return chunk_to_mem(vp);
+        return chunk2mem(vp);
     }
     return nil;
 }
 
 fn tmalloc_small(nb : usize) : void*?
 {
-    let lbit = least_bit(gm.treemap);
-    let i = bit_to_index(lbit);
-    var v : TreeChunk* = ptrcast(TreeChunk*, *treebin_root_ptr(i));
-    var t = v;
-    var rsize = chunk_size(ptrcast(Chunk*, t)) - nb;
+    let lbit : uint32 = least_bit(gm.treemap);
+    let i : uint32 = bit2idx(lbit);
+    var v : TreeChunk* = ptrcast(TreeChunk*, *treebin_at(i));
+    var t : TreeChunk* = v;
+    var rsize : usize = chunk_size(ptrcast(Chunk*, t)) - nb;
 
     var scanning : bool = true;
     while scanning
     {
-        let child = leftmost_child(t);
+        let child : TreeChunk*? = leftmost_child(t);
         if child == nil
         {
             scanning = false;
@@ -1259,15 +1181,15 @@ fn tmalloc_small(nb : usize) : void*?
         else
         {
             t = child;
-            let trem = chunk_size(ptrcast(Chunk*, t)) - nb;
-            if trem < rsize { rsize = trem;  v = t; }
+            let trem : usize = chunk_size(ptrcast(Chunk*, t)) - nb;
+            if trem < rsize { rsize = trem; v = t; }
         }
     }
 
-    let vp = ptrcast(Chunk*, v);
-    let r = chunk_at(vp, nb);
+    let vp : Chunk* = ptrcast(Chunk*, v);
+    let r : Chunk* = chunk_plus_offset(vp, nb);
     unlink_large_chunk(v);
-    if rsize < min_chunk_size()
+    if rsize < MIN_CHUNK_SIZE
     {
         set_inuse_and_pinuse(vp, rsize + nb);
     }
@@ -1277,13 +1199,13 @@ fn tmalloc_small(nb : usize) : void*?
         set_size_and_pinuse_of_free_chunk(r, rsize);
         replace_dv(r, rsize);
     }
-    return chunk_to_mem(vp);
+    return chunk2mem(vp);
 }
 
 fn try_realloc_chunk(p : Chunk*, nb : usize) : Chunk*?
 {
-    let old_size = chunk_size(p);
-    let next = chunk_at(p, old_size);
+    let old_size : usize = chunk_size(p);
+    let next : Chunk* = chunk_plus_offset(p, old_size);
 
     if is_mmapped(p)
     {
@@ -1293,10 +1215,10 @@ fn try_realloc_chunk(p : Chunk*, nb : usize) : Chunk*?
 
     if old_size >= nb
     {
-        let rsize = old_size - nb;
-        if rsize >= min_chunk_size()
+        let rsize : usize = old_size - nb;
+        if rsize >= MIN_CHUNK_SIZE
         {
-            let r = chunk_at(p, nb);
+            let r : Chunk* = chunk_plus_offset(p, nb);
             set_inuse(p, nb);
             set_inuse(r, rsize);
             dispose_chunk(r, rsize);
@@ -1306,9 +1228,9 @@ fn try_realloc_chunk(p : Chunk*, nb : usize) : Chunk*?
 
     if ptrcast(usize, next) == ptrcast(usize, gm.top) and old_size + gm.top_size > nb
     {
-        let new_size = old_size + gm.top_size;
-        let new_top_size = new_size - nb;
-        let new_top = chunk_at(p, nb);
+        let new_size : usize = old_size + gm.top_size;
+        let new_top_size : usize = new_size - nb;
+        let new_top : Chunk* = chunk_plus_offset(p, nb);
         set_inuse(p, nb);
         new_top.head = new_top_size | PINUSE_BIT;
         gm.top = new_top;
@@ -1318,11 +1240,11 @@ fn try_realloc_chunk(p : Chunk*, nb : usize) : Chunk*?
 
     if ptrcast(usize, next) == ptrcast(usize, gm.dv) and old_size + gm.dv_size >= nb
     {
-        let dsize = old_size + gm.dv_size - nb;
-        if dsize >= min_chunk_size()
+        let dsize : usize = old_size + gm.dv_size - nb;
+        if dsize >= MIN_CHUNK_SIZE
         {
-            let r = chunk_at(p, nb);
-            let n = chunk_at(r, dsize);
+            let r : Chunk* = chunk_plus_offset(p, nb);
+            let n : Chunk* = chunk_plus_offset(r, dsize);
             set_inuse(p, nb);
             set_size_and_pinuse_of_free_chunk(r, dsize);
             n.head &= ~PINUSE_BIT;
@@ -1331,7 +1253,8 @@ fn try_realloc_chunk(p : Chunk*, nb : usize) : Chunk*?
         }
         else
         {
-            set_inuse(p, old_size + gm.dv_size);
+            let newsize : usize = old_size + gm.dv_size;
+            set_inuse(p, newsize);
             gm.dv_size = 0;
             gm.dv = nil;
         }
@@ -1340,18 +1263,18 @@ fn try_realloc_chunk(p : Chunk*, nb : usize) : Chunk*?
 
     if !cinuse(next)
     {
-        let next_size = chunk_size(next);
+        let next_size : usize = chunk_size(next);
         if old_size + next_size >= nb
         {
-            let rsize = old_size + next_size - nb;
+            let rsize : usize = old_size + next_size - nb;
             unlink_chunk(next, next_size);
-            if rsize < min_chunk_size()
+            if rsize < MIN_CHUNK_SIZE
             {
                 set_inuse(p, old_size + next_size);
             }
             else
             {
-                let r = chunk_at(p, nb);
+                let r : Chunk* = chunk_plus_offset(p, nb);
                 set_inuse(p, nb);
                 set_inuse(r, rsize);
                 dispose_chunk(r, rsize);
@@ -1368,68 +1291,66 @@ pub fn alloc(size : usize) : void*?
     ensure_init();
     if size == 0 return nil;
 
-    let nb = request_to_size(size);
+    let nb : usize = request2size(size);
 
     // Small request
-    if size <= (1 << TREE_BIN_SHIFT) - sizeof(usize) - 1
+    if size <= MAX_SMALL_REQUEST
     {
-        let idx = small_index(nb);
-        let smallbits = gm.smallmap >> idx;
+        let idx : uint32 = small_index(nb);
+        let smallbits : uint32 = gm.smallmap >> idx;
 
         // Exact or next-bin remainderless fit (avoids a split entirely)
         if (smallbits & 3) != 0
         {
-            let adj_idx = idx + (~smallbits & 1);
-            let b = smallbin_at(adj_idx);
-            let p = b.fd;
+            let adj_idx : uint32 = idx + (~smallbits & 1);
+            let b : Chunk* = smallbin_at(adj_idx);
+            let p : Chunk* = b.fd;
             unlink_first_small_chunk(b, p, adj_idx);
-            set_inuse_and_pinuse(p, small_index_to_size(adj_idx));
-            return chunk_to_mem(p);
+            set_inuse_and_pinuse(p, small_index2size(adj_idx));
+            return chunk2mem(p);
         }
-
-        if nb > gm.dv_size
+        else if nb > gm.dv_size
         {
             // Use a larger smallbin, save the remainder as new dv
             if smallbits != 0
             {
-                let shifted = (smallbits << idx) & left_bits(idx_to_bit(idx));
-                let i = bit_to_index(least_bit(shifted));
-                let b = smallbin_at(i);
-                let p = b.fd;
+                let shifted : uint32 = (smallbits << idx) & left_bits(idx2bit(idx));
+                let i : uint32 = bit2idx(least_bit(shifted));
+                let b : Chunk* = smallbin_at(i);
+                let p : Chunk* = b.fd;
                 unlink_first_small_chunk(b, p, i);
-                let sz = small_index_to_size(i);
-                let rsize = sz - nb;
-                if sizeof(usize) != 4 and rsize < min_chunk_size()
+                let sz : usize = small_index2size(i);
+                let rsize : usize = sz - nb;
+                if sizeof(usize) != 4 and rsize < MIN_CHUNK_SIZE
                 {
                     set_inuse_and_pinuse(p, sz);
                 }
                 else
                 {
                     set_size_and_pinuse_of_inuse_chunk(p, nb);
-                    let r = chunk_at(p, nb);
+                    let r : Chunk* = chunk_plus_offset(p, nb);
                     set_size_and_pinuse_of_free_chunk(r, rsize);
                     replace_dv(r, rsize);
                 }
-                return chunk_to_mem(p);
+                return chunk2mem(p);
             }
-
-            if gm.treemap != 0
+            else if gm.treemap != 0
             {
-                let mem = tmalloc_small(nb);
+                let mem : void*? = tmalloc_small(nb);
                 if mem != nil return mem;
             }
         }
     }
     else
     {
-        // Large request
-        if size >= usize(~0) - MALLOC_ALIGNMENT
-        {
-            return nil;   // request too large to represent as a chunk size
-        }
+        // Large request: if size is too large to represent as a chunk, fail
+        //if size >= usize(~0) - MALLOC_ALIGNMENT
+        //{
+        //    return nil;
+        //}
         if gm.treemap != 0
         {
-            let mem = tmalloc_large(nb);
+            let mem : void*? = tmalloc_large(nb);
             if mem != nil return mem;
         }
     }
@@ -1437,11 +1358,11 @@ pub fn alloc(size : usize) : void*?
     // Designated victim
     if nb <= gm.dv_size
     {
-        let rsize = gm.dv_size - nb;
-        let p = gm.dv;
-        if rsize >= min_chunk_size()
+        let rsize : usize = gm.dv_size - nb;
+        let p : Chunk* = gm.dv;
+        if rsize >= MIN_CHUNK_SIZE
         {
-            let r = chunk_at(p, nb);
+            let r : Chunk* = chunk_plus_offset(p, nb);
             gm.dv = r;
             gm.dv_size = rsize;
             set_size_and_pinuse_of_free_chunk(r, rsize);
@@ -1449,25 +1370,25 @@ pub fn alloc(size : usize) : void*?
         }
         else
         {
-            let dvs = gm.dv_size;
+            let dvs : usize = gm.dv_size;
             gm.dv_size = 0;
             gm.dv = nil;
             set_inuse_and_pinuse(p, dvs);
         }
-        return chunk_to_mem(p);
+        return chunk2mem(p);
     }
 
     // Top chunk
     if nb < gm.top_size
     {
-        let rsize = gm.top_size - nb;
-        let p = gm.top;
-        let r = chunk_at(p, nb);
+        let rsize : usize = gm.top_size - nb;
+        let p : Chunk* = gm.top;
+        let r : Chunk* = chunk_plus_offset(p, nb);
         gm.top = r;
         gm.top_size = rsize;
         r.head = rsize | PINUSE_BIT;
         set_size_and_pinuse_of_inuse_chunk(p, nb);
-        return chunk_to_mem(p);
+        return chunk2mem(p);
     }
 
     // Grow from OS
@@ -1478,23 +1399,23 @@ pub fn free(p : void*) : void
 {
     if p == nil return;
 
-    var cp = mem_to_chunk(p);
-    var csize = chunk_size(cp);
-    let next = chunk_at(cp, csize);
+    var cp : Chunk* = mem2chunk(p);
+    var csize : usize = chunk_size(cp);
+    let next : Chunk* = chunk_plus_offset(cp, csize);
 
     // backward consolidation
     if !pinuse(cp)
     {
-        let prev_size = cp.prev_foot;
+        let prev_size : usize = cp.prev_foot;
         if is_mmapped(cp)
         {
             // Release the entire OS region obtained for this direct-mmap chunk
             csize += prev_size + MMAP_FOOT_PAD;
-            let raw = ptrcast(uint8*, ptrcast(usize, cp) - prev_size);
+            let raw : uint8* = ptrcast(uint8*, ptrcast(usize, cp) - prev_size);
             if win32_munmap(raw, csize) { gm.footprint -= csize; }
             return;
         }
-        let prev = ptrcast(Chunk*, ptrcast(usize, cp) - prev_size);
+        let prev : Chunk* = ptrcast(Chunk*, ptrcast(usize, cp) - prev_size);
         csize += prev_size;
         cp = prev;
         if ptrcast(usize, cp) != ptrcast(usize, gm.dv)
@@ -1531,7 +1452,7 @@ pub fn free(p : void*) : void
             set_size_and_pinuse_of_free_chunk(cp, gm.dv_size);
             return;
         }
-        let n_size = chunk_size(next);
+        let n_size : usize = chunk_size(next);
         csize += n_size;
         unlink_chunk(next, n_size);
         set_size_and_pinuse_of_free_chunk(cp, csize);
@@ -1567,18 +1488,18 @@ pub fn calloc(n : usize, size : usize) : void*?
         req = n * size;
         // Overflow: if either factor has high bits set and the product does not
         // round-trip through division, the multiplication wrapped
-        if ((n | size) & ~intcast(usize, 0xFFFF)) != 0 and req / n != size
-        {
-            req = ~intcast(usize, 0);   // force alloc failure
-        }
+        //if ((n | size) & /*~intcast(usize, 0xFFFF)*/usize(0xffffffffffff0000)) != 0 and (req / n != size)
+        //{
+        //    req = usize::max;   // force alloc failure
+        //}
     }
 
-    let mem = alloc(req);
+    let mem : void*? = alloc(req);
     if mem == nil return nil;
 
     // VirtualAlloc always zeroes committed pages, so only zero non-mmap chunks
     // (mmap chunks come from VirtualAlloc too, so they are already zeroed)
-    let cp = mem_to_chunk(mem);
+    let cp : Chunk* = mem2chunk(mem);
     if !is_mmapped(cp)
     {
         set(mem, 0, req);
@@ -1591,18 +1512,18 @@ pub fn realloc(p : void*?, size : usize) : void*?
     if p == nil return alloc(size);
     if size == 0 { free(p); return nil; }
 
-    let cp = mem_to_chunk(p);
-    let nb = request_to_size(size);
+    let cp : Chunk* = mem2chunk(p);
+    let nb : usize = request2size(size);
 
     // Try in-place extension first
-    let new_p = try_realloc_chunk(cp, nb);
-    if new_p != nil return chunk_to_mem(new_p);
+    let new_p : Chunk*? = try_realloc_chunk(cp, nb);
+    if new_p != nil return chunk2mem(new_p);
 
     // Fall back: allocate fresh, copy, release old
-    let new_mem = alloc(size);
+    let new_mem : void*? = alloc(size);
     if new_mem == nil return nil;
 
-    let old_usable = chunk_size(cp) - CHUNK_OVERHEAD;
+    let old_usable : usize = chunk_size(cp) - CHUNK_OVERHEAD;
     var copy_size : usize;
     if old_usable < size
     {

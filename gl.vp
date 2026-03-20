@@ -17,6 +17,7 @@ pub alias GLclampf = float32;
 pub alias GLdouble = float64;
 pub alias GLclampd = float64;
 
+pub def GLFW_SAMPLES = 0x0002100D;
 pub def GL_VERTEX_SHADER : GLuint = 0x8B31;
 pub def GL_FRAGMENT_SHADER : GLuint = 0x8B30;
 pub def GL_ARRAY_BUFFER : GLuint = 0x8892;
