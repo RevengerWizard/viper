@@ -427,6 +427,7 @@ typedef struct Decl
             Param* params;
             Stmt* body;
             vec_t(Scope)* scopes;
+            VarInfo* vi;
         } fn;
         struct
         {

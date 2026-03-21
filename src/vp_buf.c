@@ -46,6 +46,15 @@ SBuf* vp_buf_putmem(SBuf* sb, const void* q, size_t len)
     return sb;
 }
 
+SBuf* vp_buf_putstr(SBuf* sb, Str* s)
+{
+    size_t len = s->len;
+    char* w = vp_buf_more(sb, len);
+    w = vp_buf_wmem(w, str_data(s), len);
+    sb->w = w;
+    return sb;
+}
+
 static char* buf_tmp(uint32_t size)
 {
     SBuf* sb = &V->tmpbuf;

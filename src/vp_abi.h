@@ -9,6 +9,7 @@
 #include "vp_def.h"
 #include "vp_type.h"
 #include "vp_target.h"
+#include "vp_var.h"
 
 /* ABI parameter classification */
 typedef enum
@@ -24,6 +25,7 @@ typedef struct ParamLoc
 {
     ParamClass cls;    /* Classifier */
     uint32_t idx;   /* Register index or stack offset */
+    VarInfo* vi;
 } ParamLoc;
 
 /* Determine if type parameter needs to be allocated on the stack */

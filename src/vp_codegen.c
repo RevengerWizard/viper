@@ -310,7 +310,7 @@ static VReg* gen_name(Expr* e)
             return vi->vreg;
         }
         VReg* src = gen_lval(e);
-        if(ty_isfn(ty))
+        if(ty_isfn(ty) || ty_isarr(vi->type))
         {
             return src;
         }
@@ -400,7 +400,7 @@ static VReg* gen_incdec(Expr* e)
     }
     else
     {
-        addend = vp_vreg_ki(ty_isptrlike(e->ty) ? vp_type_sizeof(e->ty) : 1, vs);
+        addend = vp_vreg_ki(ty_isptrlike(e->ty) ? vp_type_sizeof(e->ty->p) : 1, vs);
     }
     VReg* after = vp_ir_binop(ISDEC(e) ? IR_SUB : IR_ADD, val, addend, vs, irflag);
     if(vi)
@@ -480,7 +480,7 @@ static VReg* gen_ref(Expr* e)
             return gen_complit(e);
         }
         default:
-            vp_assertX(0, "?");
+            vp_assertX(0, "%d ?", e->kind);
             return NULL;
     }
 }
@@ -551,7 +551,10 @@ static VReg* gen_call(Expr* e)
             IR* ir = vp_ir_iofs(label, false, false, true);
             ir->iofs.got = true;
             freg = ir->dst;
-            label = NULL;
+            if(!(vi->storage & VS_MOD))
+            {
+                label = NULL;
+            }
         }
     }
     else
@@ -669,12 +672,17 @@ static VReg* gen_call(Expr* e)
     VReg* dst = NULL;
     if(fi != NULL)
     {
+        ret = vp_type_ptr(ret);
         VReg* dst = vp_ir_bofs(fi)->dst;
         vp_ir_pusharg(dst, abi->imap[0]);
         args[0] = dst;
         regargs++;
     }
-    if(ret->kind != TY_void)
+    if(!abi_isstack(ret))
+    {
+        dst = vp_ra_spawn(vp_msb(vp_type_sizeof(ret)), 0);
+    }
+    else if(ret->kind != TY_void)
     {
         dst = vp_vreg_new(ret);
     }
@@ -808,9 +816,19 @@ static void flatten_complit(Expr* e, uint32_t baseofs, vec_t(FlatField)* flat)
             }
             case FIELD_DEFAULT:
             {
-                Type* elemty = compty->p;
-                uint32_t elemsize = vp_type_sizeof(elemty);
-                field_offset = baseofs + (i * elemsize);
+                if(ty_isarr(compty))
+                {
+                    Type* elemty = compty->p;
+                    uint32_t elemsize = vp_type_sizeof(elemty);
+                    field_offset = baseofs + (i * elemsize);
+                }
+                else
+                {
+                    /* Struct/union: use positional field offset */
+                    vp_assertX(ty_isaggr(compty), "FIELD_DEFAULT requires array, struct, or union type");
+                    vp_assertX(i < vec_len(compty->st.fields), "field index out of bounds");
+                    field_offset = baseofs + compty->st.fields[i].offset;
+                }
                 break;
             }
             default:
@@ -835,48 +853,47 @@ static void flatten_complit(Expr* e, uint32_t baseofs, vec_t(FlatField)* flat)
     }
 }
 
+/* Compound literal initialization */
+static VReg* gen_complit_init(VReg* base, Expr* e)
+{
+    gen_memzero(e->ty, base);
+
+    vec_t(FlatField) flat_fields = vec_init(FlatField);
+    flatten_complit(e, 0, &flat_fields);
+    for(uint32_t i = 0; i < vec_len(flat_fields); i++)
+    {
+        FlatField* ff = &flat_fields[i];
+
+        /* Calculate field address from original base with absolute offset */
+        VReg* field_addr = NULL;
+        if(ff->offset == 0)
+        {
+            /* No offset needed, use base directly */
+            field_addr = base;
+        }
+        else
+        {
+            /* Compute base + absolute_offset */
+            VReg* offset_reg = vp_vreg_ki(ff->offset, VRSize8);
+            field_addr = vp_ir_binop(IR_ADD, base, offset_reg, VRSize8, IRF_UNSIGNED);
+        }
+
+        VReg* vr = gen_expr(ff->init);
+        gen_store(field_addr, vr, ff->type);
+    }
+    vec_free(flat_fields);
+    return base;
+}
+
 /* Generate compound literal */
 static VReg* gen_complit(Expr* e)
 {
     vp_assertX(e->kind == EX_COMPLIT, "compound literal");
     vp_assertX(e->ty, "missing compound type");
-
     FrameInfo* fi = vp_frameinfo_new();
     VReg* base = vp_ir_bofs(fi)->dst;
-
     slot_add(e->ty, fi);
-
-    gen_memzero(e->ty, base);
-
-    vec_t(FlatField) flat_fields = vec_init(FlatField);
-    flatten_complit(e, 0, &flat_fields);
-
-    /* Generate stores for all flattened fields */
-    for(uint32_t i = 0; i < vec_len(flat_fields); i++)
-    {
-        FlatField* ff = &flat_fields[i];
-
-        /* Calculate field address */
-        VReg* field_addr;
-        if(ff->offset == 0)
-        {
-            field_addr = base;
-        }
-        else
-        {
-            VReg* offset_reg = vp_vreg_ki(ff->offset, VRSize8);
-            field_addr = vp_ir_binop(IR_ADD, base, offset_reg, VRSize8, IRF_UNSIGNED);
-        }
-
-        VReg* value = gen_expr(ff->init);
-        gen_store(field_addr, value, ff->type);
-    }
-
-    if(flat_fields)
-    {
-        vec_free(flat_fields);
-    }
-
+    gen_complit_init(base, e);
     return base;
 }
 
@@ -1168,8 +1185,13 @@ static void gen_comp_assign(Stmt* st)
 /* Generate assignment */
 static void gen_assign(Stmt* st)
 {
+    vp_assertX(st->kind == ST_ASSIGN, "not assignment");
     Expr* lhs = st->lhs;
     Expr* rhs = st->rhs;
+    vp_assertX(lhs, "no lhs");
+    vp_assertX(rhs, "no rhs");
+    vp_assertX(lhs->ty, "no lhs type");
+    vp_assertX(rhs->ty, "no rhs type");
     VReg* src = gen_expr(rhs);
     if(lhs->kind == EX_NAME && ty_isscalar(lhs->ty))
     {
@@ -1182,49 +1204,57 @@ static void gen_assign(Stmt* st)
         }
     }
 
+    vp_assertX(lhs->ty == rhs->ty, "lhs type != rhs type");
     VReg* dst = gen_lval(lhs);
-    gen_store(dst, src, lhs->ty);
+    gen_store(dst, src, rhs->ty);
 }
 
 /* Generate varinfo and assignment */
 static void gen_var_assign(VarInfo* vi, Expr* e)
 {
     vp_assertX(vi, "empty variable info");
+    Type* ty = vi->type;
     if(!gen_varinfo(vi))
     {
-        slot_add(vi->type, vi->fi);
+        slot_add(ty, vi->fi);
         V->ra->flag |= RAF_STACK_FRAME;
     }
 
     /* Generate initialization, if provided */
     if(e)
     {
-        if(ty_isscalar(vi->type))
+        if(e->kind == EX_COMPLIT)
+        {
+            VReg* base = vp_ir_bofs(vi->fi)->dst;
+            gen_complit_init(base, e);
+        }
+        else if(ty_isscalar(ty))
         {
             vp_assertX(vi->vreg, "empty vreg");
             VReg* src = gen_expr(e);
-            vp_ir_mov(vi->vreg, src, ir_flag(vi->type));
+            vp_ir_mov(vi->vreg, src, ir_flag(ty));
         }
         else
         {
-            vp_assertX(vi->fi, "missing frame info");
+            vp_assertX(vi->fi, "missing frame info for var '%s' (%s)", str_data(vi->name), type_str(ty));
             VReg* dst = vp_ir_bofs(vi->fi)->dst;
             VReg* src = gen_expr(e);
-            gen_memcpy(vi->type, dst, src);
+            gen_memcpy(ty, dst, src);
         }
     }
     else
     {
         /* Zero initialize otherwise */
-        if(ty_isscalar(vi->type))
+        if(ty_isscalar(ty))
         {
-            vp_ir_mov(vi->vreg, vp_vreg_ki(0, vp_vsize(vi->type)), ir_flag(vi->type));
+            VReg* src = ty_isflo(ty) ? vp_vreg_kf(0, vp_vsize(ty)) : vp_vreg_ki(0, vp_vsize(ty));
+            vp_ir_mov(vi->vreg, src, ir_flag(ty));
         }
         else
         {
             vp_assertX(vi->fi, "missing frame info");
             VReg* dst = vp_ir_bofs(vi->fi)->dst;
-            gen_memzero(vi->type, dst);
+            gen_memzero(ty, dst);
         }
     }
 }
@@ -1235,7 +1265,6 @@ static void gen_var(Stmt* st)
     Decl* d = st->decl;
     if(d->kind == DECL_NOTE) return;
     vp_assertX(d->kind == DECL_VAR || d->kind == DECL_LET, "var/let");
-
     gen_var_assign(d->var.vi, d->var.expr);
 }
 
@@ -1253,7 +1282,7 @@ static void gen_ret(Stmt* st)
         if(inretvr == NULL)
         {
             /* No inlining */
-            if(ty_isscalar(ty))
+            if(!abi_isstack(ty))
             {
                 vp_ir_ret(vreg, ir_flag(ty));
             }
@@ -1656,6 +1685,36 @@ static void gen_stack(Code* code)
         vr->fi.ofs = -(int32_t)framesize;
     }
 
+    /* Allocate stack params */
+    uint32_t paramofs = code->paramofs;
+    paramofs += vp_lowX64_stack_params(code);
+    for(uint32_t i = 0; i < vec_len(code->plocs); i++)
+    {
+        ParamLoc* pl = &code->plocs[i];
+        VarInfo* vi = pl->vi;
+        switch(pl->cls)
+        {
+            case PC_STACK:
+                /* Stack parameter offset */
+                vi->vreg->fi.ofs = paramofs = ALIGN_UP(paramofs, TARGET_PTR_SIZE);
+                paramofs += TARGET_PTR_SIZE;
+                break;
+            case PC_MEM:
+            {
+                Type* ty = vi->type;
+                uint32_t size = vp_type_sizeof(ty);
+                uint32_t align = vp_type_alignof(ty);
+                V->ra->flag = RAF_STACK_FRAME;
+                /* Stack parameter offset */
+                vi->fi->ofs = paramofs = ALIGN_UP(paramofs, align);
+                paramofs += ALIGN_UP(size, TARGET_PTR_SIZE);
+                break;
+            }
+            default: break;
+        }
+    }
+
+    code->paramofs = paramofs;
     code->framesize = framesize;
 }
 
@@ -1664,7 +1723,7 @@ static void gen_params(Decl* d, Code* code)
 {
     Type* ret = d->fn.rett;
     const ABIInfo* abi = code->abi;
-    uint32_t paramofs = TARGET_PTR_SIZE * 2;
+    uint32_t paramofs = 0;
     uint32_t iidx = 0, fidx = 0;
 
     /* Classify return value */
@@ -1684,6 +1743,8 @@ static void gen_params(Decl* d, Code* code)
         paramofs += TARGET_PTR_SIZE;
     }
 
+    code->paramofs = paramofs;
+
     /* Classify each parameter */
     for(uint32_t i = 0; i < vec_len(d->fn.params); i++)
     {
@@ -1696,7 +1757,7 @@ static void gen_params(Decl* d, Code* code)
         switch(cls)
         {
             case PC_IREG:
-                vp_assertX(vr, "not scalar param");
+                vp_assertX(vr, "'%s' (%s) param is not scalar", str_data(vi->name), type_str(ty));
                 vr->flag |= VRF_PARAM;
                 vr->param = pl.idx = abi->imap[previidx];
                 break;
@@ -1710,19 +1771,13 @@ static void gen_params(Decl* d, Code* code)
                 vr->flag |= VRF_STACK_PARAM;
                 vreg_spill(vr);
                 V->ra->flag = RAF_STACK_FRAME;
-                /* Stack parameter offset */
-                pl.idx = vr->fi.ofs = paramofs = ALIGN_UP(paramofs, TARGET_PTR_SIZE);
-                paramofs += TARGET_PTR_SIZE;
+                pl.vi = vi;
                 break;
             case PC_MEM:
             {
                 vp_assertX(vi->fi, "aggregate param needs frame info");
-                uint32_t size = vp_type_sizeof(ty);
-                uint32_t align = vp_type_alignof(ty);
                 V->ra->flag = RAF_STACK_FRAME;
-                /* Stack parameter offset */
-                pl.idx = vi->fi->ofs = paramofs = ALIGN_UP(paramofs, align);
-                paramofs += ALIGN_UP(size, TARGET_PTR_SIZE);
+                pl.vi = vi;
                 break;
             }
         }
@@ -1742,6 +1797,7 @@ static const ABIInfo syscall_abi = {
 static Code* gen_fn(Decl* d)
 {
     vp_assertX(d->kind == DECL_FN, "not function declaration");
+    vp_assertX(d->fn.vi, "no varinfo");
 
     Code* code = vp_mem_calloc(1, sizeof(*code));
     code->name = d->name;
@@ -1764,16 +1820,16 @@ static Code* gen_fn(Decl* d)
     }
     vp_tab_set(&V->funcs, code->name, code);
 
-    if(!d->fn.body)
+    if(!d->fn.body || (d->fn.vi->storage & VS_MOD))
     {
-        return code;
+        return NULL;
     }
 
     RegAlloc* ra = V->ra = vp_ra_new((TargetInfo*)V->T);
     code->ra = ra;
     if(code->flags & FN_INLINE)
     {
-        return code;
+        return NULL;
     }
     code->bbs = vec_init(BB*);
     V->fncode = code;
@@ -1848,6 +1904,10 @@ static void glob_eval(Type* ty, Expr* e, DataEntry* entry, uint32_t baseofs, boo
         {
             VarInfo* vi = e->vi;
             vp_assertX(vi, "name not found");
+            if(vi->storage & VS_MOD && !vp_tab_get(&V->ifuncs, vi->name))
+            {
+                vp_tab_set(&V->ifuncs, vi->name, vi);
+            }
             if(isref || ty_isfn(e->ty))
             {
                 vp_reloc_add(entry, baseofs, e->name);
@@ -1933,7 +1993,8 @@ vec_t(Code*) vp_codegen(vec_t(Decl*) decls)
         if(d && d->kind == DECL_FN)
         {
             Code* code = gen_fn(d);
-            vec_push(codes, code);
+            if(code != NULL)
+                vec_push(codes, code);
         }
         else if(d && (d->kind == DECL_VAR || d->kind == DECL_LET))
         {

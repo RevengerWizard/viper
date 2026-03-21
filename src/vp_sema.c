@@ -1654,7 +1654,12 @@ static Operand sema_access(Expr* e, Type* ret)
         return opr;
     }
 
-    Decl* decl = sym_find(e->access.expr->name)->decl;
+    Sym* sym = sym_find(e->access.expr->name);
+    if(!sym)
+    {
+        vp_err_error(e->loc, "unresolved name '%s'", str_data(e->access.expr->name));
+    }
+    Decl* decl = sym->decl;
     if(decl->kind != DECL_ENUM)
     {
         vp_err_error(e->loc, "'%s' is not an enum and does not support '::' access", str_data(name));
@@ -2349,7 +2354,7 @@ static void sema_attrs(Decl* d, vec_t(Attr) attrs, Str* funcname)
 }
 
 /* Resolve fn declaration */
-static Type* sema_fn(Decl* d)
+static Type* sema_fn(Sym* sym, Decl* d)
 {
     vp_assertX(d->kind == DECL_FN, "fn declaration");
 
@@ -2367,13 +2372,19 @@ static Type* sema_fn(Decl* d)
         vec_push(params, typaram);
     }
     Type* ret = vp_type_decayempty(sema_typespec(d->fn.ret));
+    d->fn.rett = ret;
     if(ty_isarr(ret))
     {
         vp_err_error(d->loc, "function return type cannot be array");
     }
     Type* ty = vp_type_fn(ret, params);
     /* Add function name to global scope */
-    VarInfo* vi = vp_scope_add(V->globscope, d->name, ty);
+    VarInfo* vi = d->fn.vi = vp_scope_add(V->globscope, d->name, ty);
+    /* Distinguish from external module functions */
+    if(sym && sym->mod != S.root)
+    {
+        vi->storage |= VS_MOD;
+    }
     vi->storage |= VS_FN;
     if(d->fn.flags & FN_EXTERN)
     {
@@ -2644,7 +2655,7 @@ static void sema_resolve(Sym* sym)
             sym->type = sema_def(d, &sym->val);
             break;
         case SYM_FN:
-            sym->type = sema_fn(d);
+            sym->type = sema_fn(sym, d);
             break;
         default:
             vp_assertX(0, "unknown symbol");

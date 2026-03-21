@@ -98,6 +98,7 @@ static Str* mod_resolve(SrcLoc loc, Str* relpath)
     /* 2. Search relative to compiler executable directory */
     char execbuf[4096];
     const char* execdir = mod_execdir(execbuf, sizeof(execbuf));
+    /*printf("EXECDIR %s\n", execdir);*/
     if(execdir)
     {
         char trybuf[4096];

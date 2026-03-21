@@ -77,6 +77,11 @@ static VP_AINLINE bool vp_isimm8(int64_t x)
     return x >= INT8_MIN && x <= INT8_MAX;
 }
 
+static VP_AINLINE bool vp_isimm16(int64_t x)
+{
+    return x >= INT16_MIN && x <= INT16_MAX;
+}
+
 static VP_AINLINE bool vp_isimm32(int64_t x)
 {
     return x >= INT32_MIN && x <= INT32_MAX;

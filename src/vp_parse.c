@@ -8,6 +8,7 @@
 #include "vp_parse.h"
 #include "vp_asm.h"
 #include "vp_ast.h"
+#include "vp_buf.h"
 #include "vp_codegen.h"
 #include "vp_def.h"
 #include "vp_lex.h"
@@ -34,7 +35,9 @@ typedef enum
     PREC_TERM,       /*  + -  */
     PREC_FACTOR,     /*  * /  */
     PREC_UNARY,      /*  not ! - ~  */
-    PREC_CALL,       /*  () */
+    PREC_POSTFIX,    /*  ++ -- */
+    PREC_IDX,        /* [] */
+    PREC_CALL,       /* . () */
 } Prec;
 
 typedef Expr* (*ParsePrefixFn)(LexState* ls, SrcLoc loc);
@@ -52,6 +55,24 @@ static Decl* parse_decl(LexState* ls, bool top);
 static ParseRule expr_rule(LexToken t);
 static Expr* expr_prec(LexState* ls, Prec prec);
 static Expr* expr(LexState* ls);
+
+static Expr* parse_str(LexState* ls, SrcLoc loc, Str* s)
+{
+    if(lex_match(ls, TK_string))
+    {
+        SBuf* sb = vp_buf_tmp_(V);
+        vp_buf_putstr(sb, s);   /* Initial string */
+        vp_buf_putstr(sb, ls->val.name);    /* "str" "str" */
+        while(lex_match(ls, TK_string))
+        {
+            Str* s2 = ls->val.name;
+            vp_buf_putstr(sb, s2);
+        }
+        s = vp_buf_str(sb);
+        return vp_expr_str(loc, s);
+    }
+    return vp_expr_str(loc, s);
+}
 
 /* Parse literal expression */
 static Expr* expr_lit(LexState* ls, SrcLoc loc)
@@ -79,7 +100,7 @@ static Expr* expr_lit(LexState* ls, SrcLoc loc)
         case TK_number:
             return vp_expr_nlit(loc, ls->val.n);
         case TK_string:
-            return vp_expr_str(loc, ls->val.name);
+            return parse_str(ls, loc, ls->val.name);
         default:
             vp_assertX(false, "unknown literal");
             break;
@@ -204,7 +225,7 @@ static Expr* expr_dot(LexState* ls, Expr* lhs, SrcLoc loc)
 static Expr* expr_unary(LexState* ls, SrcLoc loc)
 {
     LexToken tok = ls->prev;
-    Expr* expr = expr_prec(ls, PREC_UNARY);
+    Expr* expr = expr_prec(ls, PREC_POSTFIX);
     ExprKind kind = 0;
     switch(tok)
     {
@@ -370,7 +391,7 @@ static ParseRule expr_rule(LexToken t)
         case '(':
             return RULE(expr_group, expr_call, PREC_CALL);
         case '[':
-            return RULE(NULL, expr_idx, PREC_CALL);
+            return RULE(NULL, expr_idx, PREC_IDX);
         case '.':
             return RULE(NULL, expr_dot, PREC_CALL);
         case TK_dcolon:
@@ -386,7 +407,7 @@ static ParseRule expr_rule(LexToken t)
         case '-':
             return RULE(expr_unary, expr_binary, PREC_TERM);
         case '*':
-            return RULE(expr_unary, expr_binary, PREC_CALL);
+            return RULE(expr_unary, expr_binary, PREC_FACTOR);
         case '/':
             return OPERATOR(expr_binary, PREC_FACTOR);
         case '%':
@@ -416,7 +437,7 @@ static ParseRule expr_rule(LexToken t)
             return OPERATOR(expr_ternary, PREC_TERNARY);
         case TK_inc:
         case TK_dec:
-            return RULE(expr_unary, expr_post, PREC_CALL);
+            return RULE(expr_unary, expr_post, PREC_POSTFIX);
         /* Casts */
         case TK_bool:
         case TK_uint8:

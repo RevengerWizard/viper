@@ -50,6 +50,7 @@ typedef struct Code
     VReg* inretvr;    /* Inline return vreg */
     Stmt* body;
     const ABIInfo* abi;
+    uint32_t paramofs;
 } Code;
 
 vec_t(Code*) vp_codegen(vec_t(Decl*) decls);

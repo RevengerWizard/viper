@@ -155,10 +155,12 @@ int64_t vp_type_min(Type* t)
     case TY_int16: return INT16_MIN;
     case TY_int32: return INT32_MIN;
     case TY_int64: return INT64_MIN;
+    case TY_isize: return INT64_MIN;
     case TY_uint8:
     case TY_uint16:
     case TY_uint32:
-    case TY_uint64: return 0;
+    case TY_uint64:
+    case TY_usize: return 0;
     default: vp_assertX(0, "?"); return -1;
     }
 }
@@ -176,6 +178,8 @@ int64_t vp_type_max(Type* t)
     case TY_int32: return INT32_MAX;
     case TY_uint64: return UINT64_MAX;
     case TY_int64: return INT64_MAX;
+    case TY_usize: return UINT64_MAX;
+    case TY_isize: return INT64_MAX;
     default: vp_assertX(0, "?"); return -1;
     }
 }
@@ -229,8 +233,7 @@ bool vp_type_isconv(Type* dst, Type* src)
     }
     else if(ty_isptr(dst) && ty_isptr(src))
     {
-        if(ty_isaggr(dst->p) && ty_isaggr(src->p) &&
-            dst->p == src->p->st.fields[0].ty)
+        if(ty_isaggr(dst->p) && ty_isaggr(src->p) )
         {
             return true;
         }
@@ -620,7 +623,7 @@ static void type_tostr(Type* ty, SBuf* sb)
     switch(ty->kind)
     {
         case TY_none:
-            vp_assertX(0, "none type");
+            //vp_assertX(0, "none type");
             break;
         case TY_bool:
         case TY_uint8:

@@ -19,11 +19,12 @@
 char* vp_buf_need2(SBuf* sb, size_t size);
 char* vp_buf_more2(SBuf* sb, size_t size);
 SBuf* vp_buf_putmem(SBuf* sb, const void* q, size_t len);
+SBuf* vp_buf_putstr(SBuf* sb, Str* s);
 
 Str* vp_buf_cat2str(Str* s1, Str* s2);
 
 #define vp_buf_putlit(sb, s) (vp_buf_putmem(sb, "" s, (sizeof(s)/sizeof(char))-1))
-#define vp_buf_putstr(sb, s) (vp_buf_putmem(sb, str_data((s)), (s)->len))
+#define vp_buf_puts(sb, s) (vp_buf_putmem(sb, str_data((s)), (s)->len))
 
 static VP_AINLINE void vp_buf_init(SBuf* sb)
 {

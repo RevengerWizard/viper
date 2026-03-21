@@ -170,6 +170,23 @@ static uint32_t lowX64_call_size(Code* code)
     return max;
 }
 
+uint32_t vp_lowX64_stack_params(Code* code)
+{
+    const ABIInfo* abi = code->abi;
+    uint32_t paramofs = TARGET_PTR_SIZE * 2;  /* Return address */
+
+    if(abi->flags & ABI_SHADOW)
+        paramofs += 32; /* Windows x64 shadow space */
+
+    RegAlloc* ra = code->ra;
+    vp_assertX(ra, "missing regalloc");
+    RegSet calleemask = ra->itemp & ra->iregbits;
+    uint32_t numcallee = __builtin_popcountll(calleemask);
+    paramofs += numcallee * TARGET_PTR_SIZE;    /* RBP is also callee saved */
+
+    return paramofs;
+}
+
 /* Push caller-save registers */
 void vp_lowX64_caller_push(Code* code, vec_t(RegSave) saves, uint32_t total)
 {
@@ -280,8 +297,8 @@ static void lowX64_body(Code* code)
         {
             /* Align frame size to 16 */
             size_t calleesize = numcallee * TARGET_PTR_SIZE;
-            framesize += -(framesize + calleesize + frameofs) & 15;
             framesize += shadow;    /* Shadow space */
+            framesize += -(framesize + calleesize + frameofs) & 15;
         }
 
         if(framesize > 0)

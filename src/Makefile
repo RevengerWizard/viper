@@ -116,6 +116,9 @@ VPCORE_O = vp_assert.o vp_mem.o vp_buf.o \
 VP_O = viper.o
 VP_A = libvp.a
 
+OUT_DIR ?= .
+VP_T := $(OUT_DIR)/$(VP_T)
+
 ALL_T = $(VP_T) $(VP_A)
 WIN_RM = *.obj *.lib *.exp *.dll *.exe *.manifest *.pdb *.ilk
 ALL_RM = $(ALL_T) *.o $(WIN_RM)

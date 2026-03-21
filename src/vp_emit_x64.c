@@ -130,25 +130,50 @@ void EMITX64(movRI)(X64Reg dst, int64_t imm)
     uint8_t rex = (size == 8) ? REX_W : 0;
 
     if(regext(rd)) rex |= REX_B;
-    if(size == 2) emit_u8(V, 0x66);
-    if(rex) emit_u8(V, rex);
 
     if(size == 1)
     {
+        /* MOV r8, imm8 — opcode B0+rb */
+        vp_assertX((imm >= -128 && imm <= 255), "imm8 out of range");
+        if(rd >= 4 || rex) rex |= 0x40;
+        if(rex) emit_u8(V, rex);
         emit_u8(V, 0xB0 | (rd & 7));
         emit_u8(V, (uint8_t)imm);
     }
+    else if(size == 2)
+    {
+        /* MOV r16, imm16 — 66 B8+rw imm16 */
+        vp_assertX(imm >= -32768 && imm <= 65535, "imm16 out of range");
+        emit_u8(V, 0x66);
+        if(rex) emit_u8(V, rex);
+        emit_u8(V, 0xB8 | (rd & 7));
+        emit_im16(V, (int16_t)imm);
+    }
     else if(size == 4)
     {
+        /* MOV r32, imm32 — B8+rd imm32 (also zeros upper 32 bits) */
+        vp_assertX(imm >= -2147483648LL && imm <= 4294967295LL, "imm32 out of range");
+        if(rex) emit_u8(V, rex);
         emit_u8(V, 0xB8 | (rd & 7));
         emit_im32(V, (int32_t)imm);
     }
-    else
+    else /* size == 8 */
     {
-        emit_u8(V, 0xC7);
-        emit_u8(V, MODRM(3, 0, rd & 7));
-        if(size == 2) emit_im16(V, (int16_t)imm);
-        else emit_im32(V, (int32_t)imm);
+        if(vp_isimm32(imm))
+        {
+            /* MOV r/m64, imm32 (sign-extended) — REX.W C7 /0 imm32 */
+            if(rex) emit_u8(V, rex);
+            emit_u8(V, 0xC7);
+            emit_u8(V, MODRM(3, 0, rd & 7));
+            emit_im32(V, (int32_t)imm);
+        }
+        else
+        {
+            /* MOV r64, imm64 — REX.W B8+rd imm64 */
+            if(rex) emit_u8(V, rex);
+            emit_u8(V, 0xB8 | (rd & 7));
+            emit_im64(V, imm);
+        }
     }
 }
 
@@ -338,19 +363,35 @@ static void emit_aluRI(VpState* V, uint8_t modrmreg, uint8_t raxop, X64Reg dst, 
     uint8_t size = REG_SIZE(dst);
     uint8_t rd = REG_NUM(dst);
 
+    vp_assertX(size != 8 || vp_isimm32(imm), "imm64 not encodable in ALU instruction");
+    vp_assertX(size != 2 || (imm >= -32768 && imm <= 65535), "imm16 out of range");
+    vp_assertX(size != 1 || (imm >= -128 && imm <= 255), "imm8 out of range");
+
     if(size == 2) emit_u8(V, 0x66);
 
-    uint8_t rex = rexRR(size, rd, 0);
+    uint8_t rex = (size == 8) ? REX_W : 0;
+    if(regext(rd)) rex |= REX_B;
     if(rex) emit_u8(V, rex);
 
-    /* AL/AX/EAX/RAX with non-imm8 */
-    if(rd == 0 && (size == 1 || !vp_isimm8(imm)))
+    /* Short-form optimization for RAX (AL/EAX only) */
+    if(rd == 0 && !regext(rd))
     {
-        emit_u8(V, raxop);
-        goto emit_imm;
+        if(size == 1)
+        {
+            emit_u8(V, raxop);
+            emit_u8(V, (uint8_t)imm);
+            return;
+        }
+        else if(size == 4 || size == 8)
+        {
+            /* 0x05/25/3D etc. always take 32-bit imm even in 64-bit mode */
+            emit_u8(V, raxop + 1);
+            emit_im32(V, (int32_t)imm);
+            return;
+        }
     }
 
-    /* Use imm8 encoding if possible */
+    /* 2. Use imm8 encoding (0x83) if possible (sign-extended by CPU) */
     if(size > 1 && vp_isimm8(imm))
     {
         emit_u8(V, 0x83);
@@ -362,13 +403,9 @@ static void emit_aluRI(VpState* V, uint8_t modrmreg, uint8_t raxop, X64Reg dst, 
     emit_u8(V, (size == 1) ? 0x80 : 0x81);
     emit_u8(V, MODRM(3, modrmreg, rd & 7));
 
-emit_imm:
-    switch(size)
-    {
-    case 1: emit_u8(V, (uint8_t)imm); break;
-    case 2: emit_im16(V, (int16_t)imm); break;
-    default: emit_im32(V, (int32_t)imm); break;
-    }
+    if(size == 1)      emit_u8(V, (uint8_t)imm);
+    else if(size == 2) emit_im16(V, (int16_t)imm);
+    else               emit_im32(V, (int32_t)imm);
 }
 
 /* ADD gpr, imm */
@@ -471,9 +508,8 @@ void EMITX64(sarRI)(X64Reg dst, int64_t imm) { emit_shift(V, dst, 7, imm, false)
 /* SAR gpr, CL */
 void EMITX64(sarRCL)(X64Reg reg) { emit_shift(V, reg, 7, 0, true); }
 
-static VP_AINLINE void emit_cvt(VpState* V, uint8_t prefix, uint8_t op, X64Reg dst, X64Reg src)
+static VP_AINLINE void emit_cvt(VpState* V, uint8_t prefix, uint8_t op, X64Reg dst, X64Reg src, uint8_t size)
 {
-    uint8_t size = REG_SIZE(src);
     uint8_t rd = REG_NUM(dst);
     uint8_t rs = REG_NUM(src);
 
@@ -489,22 +525,62 @@ static VP_AINLINE void emit_cvt(VpState* V, uint8_t prefix, uint8_t op, X64Reg d
 }
 
 /* CVTTSS2SI gpr, xmm */
-void EMITX64(cvttss2siRX)(X64Reg dst, X64Reg src) { emit_cvt(V, 0xF3, 0x2C, dst, src); }
+/* float -> int */
+void EMITX64(cvttss2siRX)(X64Reg dst, X64Reg src)
+{
+    vp_assertX(REG_CLASS(dst) == RC_GPR, "dst != gpr");
+    vp_assertX(REG_CLASS(src) == RC_XMM, "src != xmm");
+    vp_assertX(REG_SIZE(dst) == 4 || REG_SIZE(dst) == 8, "dst must be r32 or r64");
+    emit_cvt(V, 0xF3, 0x2C, dst, src, REG_SIZE(dst));
+}
 
 /* CVTTSD2SI gpr, xmm */
-void EMITX64(cvttsd2siRX)(X64Reg dst, X64Reg src) { emit_cvt(V, 0xF2, 0x2C, dst, src); }
+/* double -> int */
+void EMITX64(cvttsd2siRX)(X64Reg dst, X64Reg src)
+{
+    vp_assertX(REG_CLASS(dst) == RC_GPR, "dst != gpr");
+    vp_assertX(REG_CLASS(src) == RC_XMM, "src != xmm");
+    vp_assertX(REG_SIZE(dst) == 4 || REG_SIZE(dst) == 8, "dst must be r32 or r64");
+    emit_cvt(V, 0xF2, 0x2C, dst, src, REG_SIZE(dst));
+}
 
 /* CVTSI2SS xmm, gpr */
-void EMITX64(cvtsi2ssXR)(X64Reg dst, X64Reg src) { emit_cvt(V, 0xF3, 0x2A, dst, src); }
+/* int -> float */
+void EMITX64(cvtsi2ssXR)(X64Reg dst, X64Reg src)
+{
+    vp_assertX(REG_CLASS(dst) == RC_XMM, "dst != xmm");
+    vp_assertX(REG_CLASS(src) == RC_GPR, "src != gpr");
+    vp_assertX(REG_SIZE(src) == 4 || REG_SIZE(src) == 8, "src must be r32 or r64");
+    emit_cvt(V, 0xF3, 0x2A, dst, src, REG_SIZE(src));
+}
 
 /* CVTSI2SD xmm, gpr */
-void EMITX64(cvtsi2sdXR)(X64Reg dst, X64Reg src) { emit_cvt(V, 0xF2, 0x2A, dst, src); }
+/* int -> double */
+void EMITX64(cvtsi2sdXR)(X64Reg dst, X64Reg src)
+{
+    vp_assertX(REG_CLASS(dst) == RC_XMM, "dst != xmm");
+    vp_assertX(REG_CLASS(src) == RC_GPR, "src != gpr");
+    vp_assertX(REG_SIZE(src) == 4 || REG_SIZE(src) == 8, "src must be r32 or r64");
+    emit_cvt(V, 0xF2, 0x2A, dst, src, REG_SIZE(src));
+}
 
 /* CVTSD2SS xmm, xmm */
-void EMITX64(cvtsd2ssXX)(X64Reg dst, X64Reg src) { emit_cvt(V, 0xF2, 0x5A, dst, src); }
+/* double -> float */
+void EMITX64(cvtsd2ssXX)(X64Reg dst, X64Reg src)
+{
+    vp_assertX(REG_CLASS(dst) == RC_XMM, "dst != xmm");
+    vp_assertX(REG_CLASS(src) == RC_XMM, "src != xmm");
+    emit_cvt(V, 0xF2, 0x5A, dst, src, 0);
+}
 
 /* CVTSS2SD xmm, xmm */
-void EMITX64(cvtss2sdXX)(X64Reg dst, X64Reg src) { emit_cvt(V, 0xF3, 0x5A, dst, src); }
+/* float -> double */
+void EMITX64(cvtss2sdXX)(X64Reg dst, X64Reg src)
+{
+    vp_assertX(REG_CLASS(dst) == RC_XMM, "dst != xmm");
+    vp_assertX(REG_CLASS(src) == RC_XMM, "src != xmm");
+    emit_cvt(V, 0xF3, 0x5A, dst, src, 0);
+}
 
 /* Emit common SSE/SSE2 instructions */
 static VP_AINLINE void emit_sseRR(VpState* V, uint8_t prefix, uint8_t op, X64Reg dst, X64Reg src)
@@ -617,7 +693,7 @@ void EMITX64(pushR)(X64Reg reg)
     vp_assertX(REG_CLASS(reg) == RC_GPR, "reg != gpr");
     vp_assertX(REG_SIZE(reg) == 8, "reg must be 64 bit");
     uint8_t rr = REG_NUM(reg);
-    if(regext(rr)) emit_u8(V, REX_W | REX_B);
+    if(regext(rr)) emit_u8(V, REX_B);
     emit_u8(V, 0x50 + (rr & 7));
 }
 
@@ -627,7 +703,7 @@ void EMITX64(popR)(X64Reg reg)
     vp_assertX(REG_CLASS(reg) == RC_GPR, "reg != gpr");
     vp_assertX(REG_SIZE(reg) == 8, "reg must be 64 bit");
     uint8_t rr = REG_NUM(reg);
-    if(regext(rr)) emit_u8(V, REX_W | REX_B);
+    if(regext(rr)) emit_u8(V, REX_B);
     emit_u8(V, 0x58 + (rr & 7));
 }
 
@@ -686,10 +762,22 @@ void EMITX64(jccREL32)(X64CC cc, int32_t rel)
 void EMITX64(setcc)(X64CC cc, X64Reg reg)
 {
     vp_assertX(cc >= CC_O && cc <= CC_G, "invalid cc");
-    if(regext(reg)) emit_u8(V, REX_B);
+    vp_assertX(REG_CLASS(reg) == RC_GPR, "reg != gpr");
+    vp_assertX(REG_SIZE(reg) == 1, "SETcc requires 8-bit register");
+    uint8_t rr = REG_NUM(reg);
+    uint8_t sub = REG_SUB(reg);
+    vp_assertX(sub == SUB_LO, "SETcc cannot target AH/CH/DH/BH");
+
+    /* Without REX, encoding rr 4-7 would access AH/CH/DH/BH.
+    ** With REX present, encoding 4-7 gives SPL/BPL/SIL/DIL instead. */
+    uint8_t rex = 0;
+    if(regext(rr)) rex |= REX_B;
+    if(rr >= 4 || rex) rex |= 0x40;  /* force bare REX to unlock new byte regs */
+
+    if(rex) emit_u8(V, rex);
     emit_u8(V, 0x0F);
     emit_u8(V, 0x90 | (uint8_t)cc);
-    emit_u8(V, MODRM(3, 0, reg & 7));
+    emit_u8(V, MODRM(3, 0, rr & 7));
 }
 
 /* CWDE EAX, AX */

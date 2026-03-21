@@ -245,7 +245,7 @@ static void dump_ir(SBuf* sb, IR* ir)
             }
             else
             {
-                vp_buf_putstr(sb, label);
+                vp_buf_puts(sb, label);
             }
             break;
         }
@@ -319,7 +319,7 @@ static void dump_ir(SBuf* sb, IR* ir)
             for(uint32_t i = 0; i < ir->tjmp.len; i++)
             {
                 if(i == 0) vp_buf_putlit(sb, ", ["); else vp_buf_putlit(sb, ", ");
-                vp_buf_putstr(sb, ir->tjmp.bbs[i]->label);
+                vp_buf_puts(sb, ir->tjmp.bbs[i]->label);
             }
             vp_buf_putb(sb, ']');
             break;
@@ -358,7 +358,7 @@ static void dump_ir(SBuf* sb, IR* ir)
             }
             if(ir->call->label)
             {
-                vp_buf_putstr(sb, ir->call->label);
+                vp_buf_puts(sb, ir->call->label);
             }
             else
             {
@@ -496,7 +496,7 @@ static void dump_bbs(SBuf* sb, Code* code)
     for(uint32_t i = 0; i < vec_len(bbs); i++)
     {
         BB* bb = bbs[i];
-        vp_buf_putstr(sb, bb->label);
+        vp_buf_puts(sb, bb->label);
         if(vec_len(bb->frombbs) > 0)
         {
             vp_buf_putlit(sb, " from=[");
@@ -504,7 +504,7 @@ static void dump_bbs(SBuf* sb, Code* code)
             {
                 BB* fbb = bb->frombbs[j];
                 dump_fmt(sb, "%s", (j > 0 ? ", " : ""));
-                vp_buf_putstr(sb, fbb->label);
+                vp_buf_puts(sb, fbb->label);
             }
             vp_buf_putb(sb, ']');
         }
@@ -650,7 +650,7 @@ void vp_dump_strintern(void)
 static void dump_type(SBuf* sb, Type* ty)
 {
     Str* s = vp_type_tostr(ty);
-    vp_buf_putstr(sb, s);
+    vp_buf_puts(sb, s);
 }
 
 static void dump_typecache(SBuf* sb)
@@ -729,7 +729,7 @@ static void dot_esc(SBuf* sb, const char* str, uint32_t len)
 static void dot_node_id(SBuf* sb, Str* label, Str* fname)
 {
     /* Node ID: fname_label */
-    vp_buf_putstr(sb, fname);
+    vp_buf_puts(sb, fname);
     vp_buf_putb(sb, '_');
     vp_buf_putmem(sb, str_data(label) + 1, label->len - 1);
 }
@@ -750,7 +750,7 @@ static void dot_code(SBuf* sb, Code* code)
     if(!bbs || vec_len(bbs) == 0) return;
 
     vp_buf_putlit(sb, "  subgraph cluster_");
-    vp_buf_putstr(sb, code->name);
+    vp_buf_puts(sb, code->name);
     vp_buf_putlit(sb, " {\n");
     dump_fmt(sb, "    label=\"%.*s\";\n", code->name->len, str_data(code->name));
     vp_buf_putlit(sb, "    fontsize=16;\n"
@@ -848,7 +848,7 @@ static void dump_ast_expr(SBuf* sb, Expr* e);
 static void dump_ast_attr(SBuf* sb, Attr* attr)
 {
     vp_buf_putlit(sb, "[[");
-    vp_buf_putstr(sb, attr->name);
+    vp_buf_puts(sb, attr->name);
     uint32_t argsnum = vec_len(attr->args);
     if(argsnum)
     {
@@ -875,7 +875,7 @@ static void dump_typespec(SBuf* sb, TypeSpec* spec)
     switch(spec->kind)
     {
         case SPEC_NAME:
-            vp_buf_putstr(sb, spec->name);
+            vp_buf_puts(sb, spec->name);
             break;
         case SPEC_TYPE:
             vp_buf_putmem(sb, type_name(spec->ty), strlen(type_name(spec->ty)));
@@ -1052,7 +1052,7 @@ static void dump_ast_expr(SBuf* sb, Expr* e)
             dump_str(sb, e->name);
             break;
         case EX_NAME:
-            vp_buf_putstr(sb, e->name);
+            vp_buf_puts(sb, e->name);
             break;
         case EX_COMPLIT:
         {
@@ -1181,7 +1181,7 @@ static void dump_ast_expr(SBuf* sb, Expr* e)
             vp_buf_putlit(sb, "offsetof(");
             dump_typespec(sb, e->ofst.spec);
             vp_buf_putlit(sb, ", ");
-            vp_buf_putstr(sb, e->ofst.name);
+            vp_buf_puts(sb, e->ofst.name);
             vp_buf_putb(sb, ')');
             break;
         case EX_FIELD:
@@ -1390,7 +1390,7 @@ static void dump_decl(SBuf* sb, Decl* d)
                 for(uint32_t i = 0; i < vec_len(d->imp.items); i++)
                 {
                     ImportItem* item = &d->imp.items[i];
-                    vp_buf_putstr(sb, item->name);
+                    vp_buf_puts(sb, item->name);
                     if(item->alias)
                     {
                         dump_fmt(sb, " as %s", str_data(item->alias));
@@ -1461,7 +1461,7 @@ static void dump_decl(SBuf* sb, Decl* d)
             {
                 vp_buf_putlit(sb, "let ");
             }
-            vp_buf_putstr(sb, d->name);
+            vp_buf_puts(sb, d->name);
             if(d->var.spec)
             {
                 vp_buf_putlit(sb, " : ");
@@ -1523,7 +1523,7 @@ static void dump_decl(SBuf* sb, Decl* d)
             {
                 dump_indent(sb);
                 EnumItem* item = &d->enm.items[i];
-                vp_buf_putstr(sb, item->name);
+                vp_buf_puts(sb, item->name);
                 if(item->init)
                 {
                     vp_buf_putlit(sb, " = ");

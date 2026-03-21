@@ -86,8 +86,10 @@ static VP_AINLINE uint8_t vp_vflag(Type* ty)
 /* Convert type size to virtual register size */
 static VP_AINLINE VRSize vp_vsize(Type* ty)
 {
-    vp_assertX(ty_isscalar(ty) || ty_isnil(ty), "%s not a primitive type", type_str(ty));
     uint32_t size = vp_type_sizeof(ty);
+    //fix?
+    vp_assertX(size <= 8 || (ty_isscalar(ty) || ty_isarr(ty)) || ty_isnil(ty), "%s not a primitive type", type_str(ty));
+    if(ty_isarr(ty)) size = 8;
     return vp_msb(size);
 }
 

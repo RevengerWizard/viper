@@ -359,6 +359,7 @@ Decl* vp_decl_fn(SrcLoc loc, uint32_t flags, uint32_t fnflags, vec_t(Attr) attrs
     d->fn.ret = ret;
     d->fn.params = params;
     d->fn.body = body;
+    d->fn.vi = NULL;
     d->fn.scopes = vec_init(Scope*);
     return d;
 }

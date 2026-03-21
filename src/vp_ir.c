@@ -595,7 +595,7 @@ void vp_bb_analyze(vec_t(BB*) bbs)
                     bb_insert_vreg(&bb->inregs, vr);
                 }
             }
-            if(ir->dst)
+            if(ir->dst != NULL)
             {
                 bb_insert_vreg(&bb->assignregs, ir->dst);
             }

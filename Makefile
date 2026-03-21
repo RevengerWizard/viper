@@ -4,7 +4,7 @@
 
 default all:
 	@echo "==== Building Viper ===="
-	$(MAKE) -C src
+	@$(MAKE) -C src "OUT_DIR=$(CURDIR)"
 	@echo "==== Successfully built Viper ===="
 
 ##############################################################################

@@ -10,6 +10,8 @@
 #include "vp_codegen.h"
 #include "vp_regalloc.h"
 
+uint32_t vp_lowX64_stack_params(Code* code);
+
 void vp_lowX64_caller_push(Code* code, vec_t(struct RegSave) saves, uint32_t total);
 void vp_lowX64_caller_pop(Code* code, vec_t(struct RegSave) saves, uint32_t ofs);
 
