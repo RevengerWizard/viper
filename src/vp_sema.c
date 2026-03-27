@@ -2116,12 +2116,17 @@ static bool sema_st(Stmt* st, Type* ret)
 /* Resolve for statement */
 static bool sema_for(Stmt* st, Type* ret)
 {
+    Scope* scope = vp_scope_begin();
+    vec_push(S.currfn->fn.scopes, scope);
     uint32_t len = sym_enter();
-    sema_stmt(st->forst.init, ret);
-    sema_cond(st->forst.cond);
-    sema_stmt(st->forst.next, ret);
-    sema_stmt(st->forst.body, ret);
+    {
+        sema_stmt(st->forst.init, ret);
+        sema_cond(st->forst.cond);
+        sema_stmt(st->forst.next, ret);
+        sema_stmt(st->forst.body, ret);
+    }
     sym_leave(len);
+    vp_scope_end();
     return false;
 }
 

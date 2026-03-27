@@ -196,8 +196,8 @@ static void dump_vregs(SBuf* sb, const char* title, vec_t(VReg*) vregs)
 }
 
 static const char* const kcond[] = {
-    NULL, "MP", "EQ", "NEQ", "LT", "LE", "GT", "GE",
-    NULL, "MP", "EQ", "NEQ", "LT", "LE", "GT", "GE"
+    NULL, "MP", "EQ", "NEQ", "LT", "LE", "GE", "GT",
+    NULL, "MP", "EQ", "NEQ", "LT", "LE", "GE", "GT"
 };
 
 static const char* const kcond2[] = {

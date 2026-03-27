@@ -26,8 +26,10 @@ static const uint32_t winx64_fmap[] = {
     (1ULL << RN_8) | (1ULL << RN_9) | (1ULL << RN_10) | (1ULL << RN_11))
 
 /* Caller-save float registers */
+/* xmm0 - xmm5 volatile */
 #define WINX64_FCALLER \
-    ((1ULL << XN_0) | (1ULL << XN_1) | (1ULL << XN_2) | (1ULL << XN_3))
+    ((1ULL << XN_0) | (1ULL << XN_1) | (1ULL << XN_2) | \
+    (1ULL << XN_3) | (1ULL << XN_4) | (1ULL << XN_5))
 
 /* Callee-save int registers */
 #define WINX64_ICALLEE \
@@ -35,9 +37,12 @@ static const uint32_t winx64_fmap[] = {
     (1ULL << RN_12) | (1ULL << RN_13) | (1ULL << RN_14) | (1ULL << RN_15))
 
 /* Callee-save float registers */
+/* xmm6 - xmm15 nonvolatile */
 #define WINX64_FCALLEE \
-    ((1ULL << XN_0) | (1ULL << XN_1) | (1ULL << XN_2) | \
-    (1ULL << XN_3) | (1ULL << XN_4) | (1ULL << XN_5))
+    ((1ULL << XN_6) | (1ULL << XN_7) | (1ULL << XN_8) | \
+    (1ULL << XN_9) | (1ULL << XN_10) | (1ULL << XN_11) | \
+    (1ULL << XN_12) | (1ULL << XN_13) | (1ULL << XN_14) | \
+    (1ULL << XN_15))
 
 /* -- System V x64 ABI ---------------------------------------------- */
 

@@ -170,6 +170,7 @@ static uint32_t lowX64_call_size(Code* code)
     return max;
 }
 
+/* Get bottom of the stack for paramaters */
 uint32_t vp_lowX64_stack_params(Code* code)
 {
     const ABIInfo* abi = code->abi;
@@ -236,26 +237,59 @@ void vp_lowX64_caller_pop(Code* code, vec_t(RegSave) saves, uint32_t ofs)
     }
 }
 
-/* Push callee-save registers */
-static void lowX64_callee_push(RegSet mask, uint32_t max)
+/* Push callee-save GPRs (ascending order) */
+static void lowX64_icallee_push(RegSet imask, uint32_t imax)
 {
-    for(uint32_t i = 0; i < max; i++)
+    for(uint32_t i = 0; i < imax; i++)
     {
-        if(mask & (1ULL << i))
+        if(imask & (1ULL << i))
         {
             EMITX64(pushR)(X64REG(i, RC_GPR, 8, SUB_LO));
         }
     }
 }
 
-/* Pop callee-save registers */
-static void lowX64_callee_pop(RegSet mask, uint32_t max)
+/* Store callee-save XMMs (ascending order) */
+static uint32_t lowX64_fcallee_push(RegSet fmask, uint32_t fmax)
 {
-    for(uint32_t i = max; i-- > 0;)
+    uint32_t ofs = 0;
+    for(uint32_t i = 0; i < fmax; i++)
     {
-        if(mask & (1ULL << i))
+        if(fmask & (1ULL << i))
+        {
+            X64Reg xmmreg = X64REG(i, RC_XMM, 16, SUB_LO);
+            X64Mem mem = X64MEM(RN_SP, NOREG, 1, ofs, 8);
+            EMITX64(movdqaMX)(mem, xmmreg);
+            ofs += 16;
+        }
+    }
+    return ofs;
+}
+
+/* Pop callee-save GPRs (descending order) */
+static void lowX64_icallee_pop(RegSet imask, uint32_t imax)
+{
+    for(uint32_t i = imax; i-- > 0;)
+    {
+        if(imask & (1ULL << i))
         {
             EMITX64(popR)(X64REG(i, RC_GPR, 8, SUB_LO));
+        }
+    }
+}
+
+/* Load callee-save XMMs (descending order) */
+static void lowX64_fcallee_pop(RegSet fmask, uint32_t fmax)
+{
+    uint32_t ofs = 0;
+    for(uint32_t i = 0; i < fmax; i++)
+    {
+        if(fmask & (1ULL << i))
+        {
+            X64Reg xmmreg = X64REG(i, RC_XMM, 16, SUB_LO);
+            X64Mem mem = X64MEM(RN_SP, NOREG, 1, ofs, 8);
+            EMITX64(movdqaXM)(xmmreg, mem);
+            ofs += 16;
         }
     }
 }
@@ -268,21 +302,22 @@ static void lowX64_body(Code* code)
 
     bool saverbp = false;
     uint32_t framesize = 0;
-    uint32_t numcallee = 0;
     uint32_t frameofs = 8;
     uint32_t shadow = (code->abi->flags & ABI_SHADOW) ? 32 : 0;
 
     uint32_t stacksize = lowX64_call_size(code);
     code->stacksize = stacksize;
 
-    /* Compute callee-save mask */
-    RegSet calleemask = ra->itemp & ra->iregbits;
-    numcallee = __builtin_popcountll(calleemask);
+    /* Compute callee-save masks */
+    RegSet imask = ra->itemp & ra->iregbits;
+    RegSet fmask = ra->ftemp & ra->fregbits;
+    uint32_t icallee = __builtin_popcountll(imask);
+    uint32_t fcallee = __builtin_popcountll(fmask);
 
     /* Prologue */
     {
-        /* Callee save */
-        lowX64_callee_push(calleemask, ra->iphysmax);
+        /* Push callee-save GPRs and store callee-save XMMs */
+        lowX64_icallee_push(imask, ra->iphysmax);
         if(code->framesize > 0 || raf_stackframe(ra))
         {
             EMITX64(pushR)(RBP);
@@ -293,10 +328,11 @@ static void lowX64_body(Code* code)
         }
 
         framesize = code->framesize + stacksize;
-        if(vec_len(code->calls) > 0 || stacksize)
+        if(vec_len(code->calls) > 0 || stacksize || (fcallee > 0))
         {
             /* Align frame size to 16 */
-            size_t calleesize = numcallee * TARGET_PTR_SIZE;
+            size_t calleesize = (icallee * TARGET_PTR_SIZE);
+            framesize += (fcallee * 16);
             framesize += shadow;    /* Shadow space */
             framesize += -(framesize + calleesize + frameofs) & 15;
         }
@@ -305,6 +341,7 @@ static void lowX64_body(Code* code)
         {
             EMITX64(subRI)(RSP, framesize);
         }
+        lowX64_fcallee_push(fmask, ra->fphysmax);
         lowX64_params(code);
     }
 
@@ -323,6 +360,7 @@ static void lowX64_body(Code* code)
 
     /* Epilogue */
     {
+        lowX64_fcallee_pop(fmask, ra->fphysmax);
         if(framesize > 0)
         {
             EMITX64(addRI)(RSP, framesize);
@@ -332,7 +370,7 @@ static void lowX64_body(Code* code)
             EMITX64(movRR)(RSP, RBP);
             EMITX64(popR)(RBP);
         }
-        lowX64_callee_pop(calleemask, ra->iphysmax);
+        lowX64_icallee_pop(imask, ra->iphysmax);
         EMITX64(ret)();
     }
 }

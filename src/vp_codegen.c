@@ -678,11 +678,11 @@ static VReg* gen_call(Expr* e)
         args[0] = dst;
         regargs++;
     }
-    if(!abi_isstack(ret))
+    /*if(!abi_isstack(ret))
     {
         dst = vp_ra_spawn(vp_msb(vp_type_sizeof(ret)), 0);
     }
-    else if(ret->kind != TY_void)
+    else */if(ret->kind != TY_void)
     {
         dst = vp_vreg_new(ret);
     }
@@ -906,12 +906,12 @@ typedef struct CmpExpr
 /* Generate comparison expression */
 static CmpExpr gen_cmp(Expr* e, Expr* lhs, Expr* rhs)
 {
-    vp_assertX(EX_EQ <= e->kind && e->kind <= EX_GE, "cmp expression");
+    vp_assertX(EX_EQ <= e->kind && e->kind <= EX_GT, "cmp expression");
     CondKind cond = e->kind + (COND_EQ - EX_EQ);
-    uint8_t flag = cond_flag(e->ty);
+    uint8_t flag = cond_flag(lhs->ty);
     VReg* vlhs = gen_expr(lhs);
     VReg* vrhs = gen_expr(rhs);
-    vp_assertX(ty_isscalar(e->ty), "complex type");
+    vp_assertX(ty_isscalar(lhs->ty), "complex type");
     return (CmpExpr){.cond = cond | flag, .lhs = vlhs, .rhs = vrhs};
 }
 

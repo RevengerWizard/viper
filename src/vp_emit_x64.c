@@ -85,7 +85,8 @@ static void emit_mem(VpState* V, uint8_t reg, X64Mem mem)
     if(sib)
     {
         emit_u8(V, MODRM(mod, reg & 7, RM_SIB));
-        emit_u8(V, SIB(__builtin_ctz(scale), idx & 7, base & 7));
+        uint8_t s_idx = (idx == NOREG) ? 4 : (idx & 7);
+        emit_u8(V, SIB(__builtin_ctz(scale), s_idx, base & 7));
     }
     else
     {
@@ -115,6 +116,7 @@ void EMITX64(movRR)(X64Reg dst, X64Reg src)
     uint8_t op = size == 1 ? 0x88 : 0x89;
     uint8_t rex = rexRR(size, rd, rs);
 
+    if(size == 1 && (rd >= 4 || rs >= 4 || rex)) rex |= 0x40;
     if(size == 2) emit_u8(V, 0x66);
     if(rex) emit_u8(V, rex);
     emit_u8(V, op);
@@ -326,10 +328,10 @@ static VP_AINLINE void emit_aluRR(VpState* V, uint8_t op1, uint8_t op8, X64Reg d
     uint8_t size = REG_SIZE(dst);
     uint8_t rd = REG_NUM(dst);
     uint8_t rs = REG_NUM(src);
-
-    if(size == 2) emit_u8(V, 0x66);
-
     uint8_t rex = rexRR(size, rd, rs);
+
+    if(size == 1 && (rd >= 4 || rs >= 4 || rex)) rex |= 0x40;
+    if(size == 2) emit_u8(V, 0x66);
     if(rex) emit_u8(V, rex);
 
     emit_u8(V, (size == 1) ? op8 : op1);
@@ -590,8 +592,8 @@ static VP_AINLINE void emit_sseRR(VpState* V, uint8_t prefix, uint8_t op, X64Reg
     uint8_t rd = REG_NUM(dst);
     uint8_t rs = REG_NUM(src);
     uint8_t rex = 0;
-    if(regext(rs)) rex |= REX_R;
-    if(regext(rd)) rex |= REX_B;
+    if(regext(rd)) rex |= REX_R;
+    if(regext(rs)) rex |= REX_B;
     if(prefix) emit_u8(V, prefix);
     if(rex) emit_u8(V, rex);
     emit_u8(V, 0x0F);
@@ -609,6 +611,38 @@ static VP_AINLINE void emit_sseM(VpState* V, uint8_t prefix, uint8_t op, uint8_t
     emit_u8(V, op);
 
     emit_mem(V, reg, mem);
+}
+
+/* MOVDQA [mem], xmm */
+void EMITX64(movdqaMX)(X64Mem dst, X64Reg src)
+{
+    vp_assertX(REG_CLASS(src) == RC_XMM, "src != xmm");
+    /* Opcode: 66 0F 7F /r */
+    emit_sseM(V, 0x66, 0x7F, REG_NUM(src), dst);
+}
+
+/* MOVDQA xmm, [mem] */
+void EMITX64(movdqaXM)(X64Reg dst, X64Mem src)
+{
+    vp_assertX(REG_CLASS(dst) == RC_XMM, "dst != xmm");
+    /* Opcode: 66 0F 6F /r */
+    emit_sseM(V, 0x66, 0x6F, REG_NUM(dst), src);
+}
+
+/* MOVUPS xmm, [mem] */
+void EMITX64(movupsXM)(X64Reg dst, X64Mem src)
+{
+    vp_assertX(REG_CLASS(dst) == RC_XMM, "dst != xmm");
+    /* Opcode: 0F 10 /r */
+    emit_sseM(V, 0x00, 0x10, REG_NUM(dst), src);
+}
+
+/* MOVUPS [mem], xmm */
+void EMITX64(movupsMX)(X64Mem dst, X64Reg src)
+{
+    vp_assertX(REG_CLASS(src) == RC_XMM, "src != xmm");
+    /* Opcode: 0F 11 /r */
+    emit_sseM(V, 0x00, 0x11, REG_NUM(src), dst);
 }
 
 /* MOVSS [mem], gpr */

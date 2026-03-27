@@ -753,7 +753,7 @@ static void irX64_div(IR* ir)
     {
         vp_assertX(ir->dst->phys == ir->src1->phys, "dst != src1");
         vp_assertX(ir->src2->phys != RN_AX, "src2 == RAX");
-        /* Break ax */
+        /* Break AX */
         if(!irf_unsigned(ir))
         {
             if(ir->src1->phys != RN_AX)
