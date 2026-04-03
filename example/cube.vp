@@ -1,0 +1,280 @@
+import std::math as math
+import std::io as io
+import std::str as str
+
+from windows import *
+from gl import *
+from glfw3 import *
+
+let vshader : const uint8* =
+    "#version 330 core\n"
+    "layout(location=0) in vec3 aPos;\n"
+    "layout(location=1) in vec3 aColor;\n"
+    "out vec3 vColor;\n"
+    "uniform mat4 MVP;\n"
+    "void main(){\n"
+    "   gl_Position = MVP * vec4(aPos,1.0);\n"
+    "   vColor = aColor;\n"
+    "}\n";
+
+let fshader : const uint8* =
+    "#version 330 core\n"
+    "in vec3 vColor;\n"
+    "out vec4 FragColor;\n"
+    "void main(){ FragColor = vec4(vColor,1.0); }\n";
+
+var glDrawElements : GLDRAWELEMENTS = nil;
+var glUniformMatrix4fv : GLUNIFORMMATRIX4FV = nil;
+var glGetUniformLocation : GLGETUNIFORMLOCATION = nil;
+var glEnable : GLENABLE = nil;
+var glClearColor : GLCLEARCOLOR = nil;
+var glClear : GLCLEAR = nil;
+var glViewport : GLVIEWPORT = nil;
+var glGenVertexArrays : GLGENVERTEXARRAYS = nil;
+var glBindVertexArray : GLBINDVERTEXARRAY = nil;
+var glGenBuffers : GLGENBUFFERS = nil;
+var glBindBuffer : GLBINDBUFFER = nil;
+var glBufferData : GLBUFFERDATA = nil;
+var glVertexAttribPointer : GLVERTEXATTRIBPOINTER = nil;
+var glEnableVertexAttribArray : GLENABLEVERTEXATTRIBARRAY = nil;
+var glCreateShader : GLCREATESHADER = nil;
+var glShaderSource : GLSHADERSOURCE = nil;
+var glCompileShader : GLCOMPILESHADER = nil;
+var glGetShaderiv : GLGETSHADERIV = nil;
+var glGetShaderInfoLog : GLGETSHADERINFOLOG = nil;
+var glCreateProgram : GLCREATEPROGRAM = nil;
+var glAttachShader : GLATTACHSHADER = nil;
+var glLinkProgram : GLLINKPROGRAM = nil;
+var glGetProgramiv : GLGETPROGRAMIV = nil;
+var glGetProgramInfoLog : GLGETPROGRAMINFOLOG = nil;
+var glUseProgram : GLUSEPROGRAM = nil;
+var glDrawArrays : GLDRAWARRAYS = nil;
+var glDeleteShader : GLDELETESHADER = nil;
+var glDeleteProgram : GLDELETEPROGRAM = nil;
+var glGetAttribLocation : GLGETATTRIBLOCATION = nil;
+var glPolygonMode : GLPOLYGONMODE = nil;
+var glDeleteBuffers : GLGENBUFFERS = nil;
+var glDeleteVertexArrays : GLGENVERTEXARRAYS = nil;
+
+fn glload() : bool
+{
+    let wglGetProcAddress : WGLGETPROCADDRESS = ptrcast(WGLGETPROCADDRESS, GetProcAddress(GetModuleHandleA("opengl32"), "wglGetProcAddress"));
+    if wglGetProcAddress == nil return false;
+    glDrawElements = wglGetProcAddress("glDrawElements"); if glDrawElements == nil return false;
+    glUniformMatrix4fv = wglGetProcAddress("glUniformMatrix4fv"); if glUniformMatrix4fv == nil return false;
+    glGetUniformLocation = wglGetProcAddress("glGetUniformLocation"); if glGetUniformLocation == nil return false;
+    glEnable = wglGetProcAddress("glEnable"); if glEnable == nil return false;
+    glClearColor = wglGetProcAddress("glClearColor"); if glClearColor == nil return false;
+    glClear = wglGetProcAddress("glClear"); if glClear == nil return false;
+    glViewport = wglGetProcAddress("glViewport"); if glViewport == nil return false;
+    glGenVertexArrays = wglGetProcAddress("glGenVertexArrays"); if glGenVertexArrays == nil return false;
+    glBindVertexArray = wglGetProcAddress("glBindVertexArray"); if glBindVertexArray == nil return false;
+    glGenBuffers = wglGetProcAddress("glGenBuffers"); if glGenBuffers == nil return false;
+    glBindBuffer = wglGetProcAddress("glBindBuffer"); if glBindBuffer == nil return false;
+    glBufferData = wglGetProcAddress("glBufferData"); if glBufferData == nil return false;
+    glVertexAttribPointer = wglGetProcAddress("glVertexAttribPointer"); if glVertexAttribPointer == nil return false;
+    glEnableVertexAttribArray = wglGetProcAddress("glEnableVertexAttribArray"); if glEnableVertexAttribArray == nil return false;
+    glCreateShader = wglGetProcAddress("glCreateShader"); if glCreateShader == nil return false;
+    glShaderSource = wglGetProcAddress("glShaderSource"); if glShaderSource == nil return false;
+    glCompileShader = wglGetProcAddress("glCompileShader"); if glCompileShader == nil return false;
+    glGetShaderiv = wglGetProcAddress("glGetShaderiv"); if glGetShaderiv == nil return false;
+    glGetShaderInfoLog = wglGetProcAddress("glGetShaderInfoLog"); if glGetShaderInfoLog == nil return false;
+    glCreateProgram = wglGetProcAddress("glCreateProgram"); if glCreateProgram == nil return false;
+    glAttachShader = wglGetProcAddress("glAttachShader"); if glAttachShader == nil return false;
+    glLinkProgram = wglGetProcAddress("glLinkProgram"); if glLinkProgram == nil return false;
+    glGetProgramiv = wglGetProcAddress("glGetProgramiv"); if glGetProgramiv == nil return false;
+    glGetProgramInfoLog = wglGetProcAddress("glGetProgramInfoLog"); if glGetProgramInfoLog == nil return false;
+    glUseProgram = wglGetProcAddress("glUseProgram"); if glUseProgram == nil return false;
+    glDrawArrays = wglGetProcAddress("glDrawArrays"); if glDrawArrays == nil return false;
+    glDeleteShader = wglGetProcAddress("glDeleteShader"); if glDeleteShader == nil return false;
+    glDeleteProgram = wglGetProcAddress("glDeleteProgram"); if glDeleteProgram == nil return false;
+    glGetAttribLocation = wglGetProcAddress("glGetAttribLocation"); if glGetAttribLocation == nil return false;
+    glPolygonMode = wglGetProcAddress("glPolygonMode"); if glPolygonMode == nil return false;
+    glDeleteBuffers = wglGetProcAddress("glDeleteBuffers"); if glDeleteBuffers == nil return false;
+    glDeleteVertexArrays = wglGetProcAddress("glDeleteVertexArrays"); if glDeleteVertexArrays == nil return false;
+    return true;
+}
+
+fn print(s : const uint8*) : void
+{
+    io::write(io::stdout, s, str::len(s), nil);
+}
+
+inline fn DEG2RAD(x : float32) : float32
+{
+    return x * 0.017453292519943295769;
+}
+
+fn mat_identity(m : float32*) : void
+{
+    for var i : uint32 = 0; i < 16; i++ { m[i] = 0.0; }
+    m[0] = 1.0;
+    m[5] = 1.0;
+    m[10] = 1.0;
+    m[15] = 1.0;
+}
+
+fn mat_multiply(r : float32*, a : const float32*, b : const float32*) : void
+{
+    let tmp : float32[16] = undefined;
+    for var i : int32 = 0; i < 4; i++
+    {
+        for var j : int32 = 0; j < 4; j++
+        {
+            tmp[i * 4 + j] =
+                a[i * 4 + 0] * b[0 * 4 + j] +
+                a[i * 4 + 1] * b[1 * 4 + j] +
+                a[i * 4 + 2] * b[2 * 4 + j] +
+                a[i * 4 + 3] * b[3 * 4 + j];
+        }
+    }
+    for var i : uint32 = 0; i < 16; i++ { r[i] = tmp[i]; }
+}
+
+fn mat_perspective(m : float32*, fov : float32, aspect : float32, znear : float32, zfar : float32) : void
+{
+    let f : float32 = 1.0 / math::tanf32(DEG2RAD(fov) / 2.0);
+    mat_identity(m);
+    m[0] = f / aspect;
+    m[5] = f;
+    m[10] = (zfar + znear) / (znear - zfar);
+    m[11] = -1.0;
+    m[14] = (2.0 * zfar * znear) / (znear - zfar);
+    m[15] = 0.0;
+}
+
+fn mat_translate(m : float32*, x : float32, y : float32, z : float32) : void
+{
+    mat_identity(m);
+    m[12] = x;
+    m[13] = y;
+    m[14] = z;
+}
+
+fn mat_rotate(m : float32*, angle : float32, x : float32, y : float32, z : float32) : void
+{
+    let c : float32 = math::cosf32(angle);
+    let s : float32 = math::sinf32(angle);
+    let len : float32 = math::sqrtf32(x*x + y*y + z*z);
+    if len == 0.0 { mat_identity(m); return; }
+    x /= len; y /= len; z /= len;
+    mat_identity(m);
+    m[0] = x*x*(1.0-c)+c;   m[4] = x*y*(1.0-c)-z*s; m[8]  = x*z*(1.0-c)+y*s;
+    m[1] = y*x*(1.0-c)+z*s; m[5] = y*y*(1.0-c)+c;   m[9]  = y*z*(1.0-c)-x*s;
+    m[2] = x*z*(1.0-c)-y*s; m[6] = y*z*(1.0-c)+x*s; m[10] = z*z*(1.0-c)+c;
+}
+
+fn compile_shader(tt : GLenum, src : const uint8*) : GLuint
+{
+    let s : GLuint = glCreateShader(tt);
+    glShaderSource(s, 1, &src, nil);
+    glCompileShader(s);
+    let ok : GLint;
+    glGetShaderiv(s, GL_COMPILE_STATUS, &ok);
+    if ok == 0
+    {
+        let log : uint8[512];
+        glGetShaderInfoLog(s, 512, nil, log);
+        print("Shader error: ");
+        io::write(io::stderr, log, 512, nil);
+        io::write(io::stderr, "\n", 1, nil);
+    }
+    return s;
+}
+
+pub fn main() : int32
+{
+    io::init();
+
+    if glfwInit() == 0
+    {
+        return 1;
+    }
+
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+
+    let win : GLFWwindow* = glfwCreateWindow(800, 600, "Rotating cube", nil, nil);
+    if win == nil { return 2; }
+    glfwMakeContextCurrent(win);
+
+    if not glload()
+    {
+        return 190;
+    }
+
+    let vs : GLuint = compile_shader(GL_VERTEX_SHADER, vshader);
+    let fs : GLuint = compile_shader(GL_FRAGMENT_SHADER, fshader);
+    let prog : GLuint = glCreateProgram();
+    glAttachShader(prog, vs);
+    glAttachShader(prog, fs);
+    glLinkProgram(prog);
+    glDeleteShader(vs);
+    glDeleteShader(fs);
+
+    let vertices : float32[] = {
+        // positions          // colors
+        -1.0, -1.0, -1.0,  1.0, 0.0, 0.0,  1.0, -1.0, -1.0,  0.0, 1.0, 0.0,  1.0, 1.0, -1.0,  0.0, 0.0, 1.0,  -1.0, 1.0, -1.0,  1.0, 1.0, 0.0,
+        -1.0, -1.0,  1.0,  1.0, 0.0, 1.0,   1.0, -1.0, 1.0,  0.0, 1.0, 1.0,   1.0, 1.0, 1.0,  1.0, 1.0, 1.0,  -1.0, 1.0, 1.0,  0.0, 0.0, 0.0
+    };
+
+    let indices : uint32[] = {
+        0,1,2, 2,3,0,  1,5,6, 6,2,1,
+        5,4,7, 7,6,5,  4,0,3, 3,7,4,
+        3,2,6, 6,7,3,  4,5,1, 1,0,4
+    };
+
+    let VAO : GLuint;
+    let VBO : GLuint;
+    let EBO : GLuint;
+    glGenVertexArrays(1, &VAO);
+    glGenBuffers(1, &VBO);
+    glGenBuffers(1, &EBO);
+
+    glBindVertexArray(VAO);
+    glBindBuffer(GL_ARRAY_BUFFER,VBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(typeof(vertices)), vertices, GL_STATIC_DRAW);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(typeof(indices)), indices, GL_STATIC_DRAW);
+
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float32), ptrcast(void*, 0));
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float32), ptrcast(void*, 3 * sizeof(float32)));
+    glEnableVertexAttribArray(1);
+
+    glEnable(GL_DEPTH_TEST);
+
+    let mvpLoc : GLint = glGetUniformLocation(prog, "MVP");
+
+    while glfwWindowShouldClose(win) == 0
+    {
+        glClearColor(0.1, 0.1, 0.1, 1.0);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+        let t : float32 = floatcast(float32, glfwGetTime());
+        //let model : float32[16];
+        let rot : float32[16];
+        let view : float32[16];
+        let proj : float32[16];
+        let mv : float32[16];
+        let mvp : float32[16];
+        mat_rotate(rot, t, 1.0, 1.0, 0.5);
+        mat_translate(view, 0.0, 0.0, -6.0);
+        mat_perspective(proj, 45.0, 800.0 / 600.0, 0.1, 100.0);
+
+		mat_multiply(mv, rot, view);    // model * view (reversed)
+		mat_multiply(mvp, mv, proj);    // (model * view) * projection (reversed)
+
+        glUseProgram(prog);
+        glUniformMatrix4fv(mvpLoc, 1, GL_FALSE, mvp);
+        glBindVertexArray(VAO);
+        glDrawElements(GL_TRIANGLES, 36, GL_UNSIGNED_INT, nil);
+
+        glfwSwapBuffers(win);
+        glfwPollEvents();
+    }
+
+    glfwTerminate();
+    return 0;
+}
