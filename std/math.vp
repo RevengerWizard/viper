@@ -207,12 +207,12 @@ pub fn modf64(x : float64, y : float64) : float64
 }
 
 // tan kernel: p(z) ≈ tan(z) on [-π/4, π/4]
-def TAN_C1 : float32 =  3.3333334327e-1;
-def TAN_C2 : float32 =  1.3333334029e-1;
-def TAN_C3 : float32 =  5.3968254477e-2;
-def TAN_C4 : float32 =  2.1869488060e-2;
-def TAN_C5 : float32 =  8.8632395491e-3;
-def TAN_C6 : float32 =  3.5921201088e-3;
+def TAN_C1 : float32 = 3.3333334327e-1;
+def TAN_C2 : float32 = 1.3333334029e-1;
+def TAN_C3 : float32 = 5.3968254477e-2;
+def TAN_C4 : float32 = 2.1869488060e-2;
+def TAN_C5 : float32 = 8.8632395491e-3;
+def TAN_C6 : float32 = 3.5921201088e-3;
 
 inline fn tan_kernel_f32(z : float32) : float32
 {
@@ -226,6 +226,24 @@ pub fn tanf32(x : float32) : float32
     var r : float32 = x - floatcast(float32, j) * F32_PI_OVER_2;
     var q : int32 = j & 1;
 
-    if q == 0 return  tan_kernel_f32(r);
+    if q == 0 return tan_kernel_f32(r);
     return -1.0 / tan_kernel_f32(r);
+}
+
+pub fn sqrtf32(x : float32) : float32
+{
+    if x <= 0.0 return x;
+
+    var u : UF32;
+    u.f = x;
+
+    // Initial approximation: extract exponent and use as rough estimate
+    var y : float32 = bitcast(float32, (u.i >> 1) + 0x1fc00000);
+
+    // Newton-Raphson: y = (y + x/y) / 2 (3 iterations for float32 precision)
+    y = (y + x / y) * 0.5;
+    y = (y + x / y) * 0.5;
+    y = (y + x / y) * 0.5;
+
+    return y;
 }

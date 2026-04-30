@@ -32,7 +32,7 @@
 
 - [X] only allow `bool` type evaluated expressions in conditions, i.e. `if x != nil` instead of `if x`
 
-- [ ] explicit uninitialized variables with ` = undefined`
+- [X] explicit uninitialized variables with ` = undefined`
     - [X] zero initialization by default
 
 - [X] memory allocator; converted dlmalloc
@@ -138,6 +138,8 @@ custom-width integer types ?
 
 ---
 
+### now
+
 1. lex
 2. parse -> AST
 3. AST -> sema -> AST
@@ -148,6 +150,8 @@ custom-width integer types ?
 7. IR -> emit -> ISA
 
 ---
+
+### to-be
 
 1. lex
 2. parse -> AST
@@ -294,6 +298,41 @@ fn seek(f : FILE*) : void;
 
 ---
 
+
+### std::conv
+
+`booltos`
+
+`u8tos`
+`i8tos`
+`u16tos`
+`i16tos`
+`u32tos`
+`i32tos`
+`u64tos`
+`i64tos`
+
+`f32tos`
+`f64tos`
+
+`stou8`
+`stoi8`
+`stou16`
+`stoi16`
+`stou32`
+`stoi32`
+`stou64`
+`stoi64`
+
+`stof32`
+`stof64`
+
+```vp
+
+```
+
+---
+
 ### std::str
 
 - base `2`-`36` ?
@@ -305,35 +344,10 @@ fn isalpha(c : uint8) : bool;
 fn isdigit(c : uint8) : bool;
 ```
 
+`len`
+
 ```vp
-fn len(s : const uint8*) : usize;   // str::len
-
-enum ConvError : uint32
-{
-    OK,
-    EMPTY,
-    INVALID,
-    OVERFLOW,
-    UNDERFLOW,
-    INVALID_BASE
-}
-
-fn tou8(s : const uint8*, len : usize, base : Base, err : ConvError*?) : int8;   // str::tou8
-fn toi8(s : const uint8*, len : usize, base : Base, err : ConvError*?) : uint8;   // str::toi8
-
-fn tou16(s : const uint8*, len : usize, base : Base, err : ConvError*?) : int16;   // str::tou16
-fn toi16(s : const uint8*, len : usize, base : Base, err : ConvError*?) : uint16;   // str::toi16
-
-fn tou32(s : const uint8*, len : usize, base : Base, err : ConvError*?) : uint32;   // str::tou32
-fn toi32(s : const uint8*, len : usize, base : Base, err : ConvError*?) : int32;  // str::toi32
-
-fn tou64(s : const uint8*, len : usize, base : Base, err : ConvError*?) : uint64;   // str::tou64
-fn toi64(s : const uint8*, len : usize, base : Base, err : ConvError*?) : int64;   // str::toi64
-
-fn tof32(s : const uint8*, len : usize, err : ConvError*?) : float32;   // str::tof32
-fn tof64(s : const uint8*, len : usize, err : ConvError*?) : float64;   // str::tof64
-
-fn tobool(s : const uint8*, len : usize, err : ConvError*?) : bool; // str::tobool
+fn len(s : const uint8*) : usize;
 ```
 
 ---

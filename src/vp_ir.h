@@ -151,6 +151,8 @@ typedef struct IRCallInfo
     uint32_t regargs;   /* Number of register arguments */
     bool export;
     struct Code* fn;
+    FrameInfo* fi;  /* Stack slot if return is a small struct */
+    uint32_t retsize;    /* Small struct return size, or 0 */
 } IRCallInfo;
 
 /* IR flags */

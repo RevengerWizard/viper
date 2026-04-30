@@ -808,7 +808,21 @@ static void opr_fold(SrcLoc loc, Expr** e, Operand opr)
         {
             if(ty_issigned(ty))
             {
-                *e = vp_expr_ilit(loc, opr.val.i64);
+                int64_t i64 = 0;
+                switch(ty->kind)
+                {
+                case TY_int8: i64 = opr.val.i8; break;
+                //case TY_uint16: i64 = opr.val.u16; break;
+                case TY_int16: i64 = opr.val.i16; break;
+                //case TY_uint32: i64 = opr.val.u32; break;
+                case TY_int32: i64 = opr.val.i32; break;
+                //case TY_uint64: i64 = opr.val.u64; break;
+                case TY_isize: i64 = opr.val.u64; break;
+                //case TY_usize: i64 = opr.val.u64; break;
+                case TY_int64: i64 = opr.val.i64; break;
+                default: vp_assertX(0, "?"); break;
+                }
+                *e = vp_expr_ilit(loc, i64);
             }
             else
             {
@@ -2050,16 +2064,9 @@ static bool sema_stmt_assign(Stmt* st, Type* ret)
     }
     if(st->kind != ST_ASSIGN)
     {
-        ExprKind kind = st->kind - ST_ADD_ASSIGN + EX_ADD;
-        /* Semantically check binary lhs and rhs assignment */
-        Expr tmp = {
-            .kind   = kind,
-            .loc    = st->loc,
-            .binop  = { .lhs = st->lhs, .rhs = st->rhs },
-        };
-        sema_expr(&tmp, NULL);
-        st->lhs = tmp.binop.lhs;
-        st->rhs = tmp.binop.rhs;
+        Operand res = sema_expr(st->rhs, lop.ty);
+        opr_conv(st->loc, &res, lop.ty);
+        opr_fold(st->loc, &st->rhs, res);
     }
     else
     {
@@ -2493,14 +2500,15 @@ static Type* sema_var(Sym* sym, Decl* d)
     bool isglob = vp_scope_isglob(V->currscope);
     Type* ty = NULL;
     Type* inferty = NULL;
+    Expr* expr = d->var.expr;
     if(d->var.spec)
     {
         Type* declty = ty = sema_typespec(d->var.spec);
         sym_complete(declty);
-        if(d->var.expr)
+        if(expr && expr->kind != EX_UNDEFINED)
         {
             //Operand res = isglob ? sema_glob(d->var.expr, declty) : sema_init(declty, d->var.expr);
-            Operand res = sema_init(declty, d->var.expr);
+            Operand res = sema_init(declty, expr);
             inferty = ty = res.ty;
             if(ty_isarr0(declty) && ty_isarr(inferty))
             {
@@ -2508,24 +2516,27 @@ static Type* sema_var(Sym* sym, Decl* d)
             }
             opr_conv(d->loc, &res, declty);
             opr_fold(d->loc, &d->var.expr, res);
-            d->var.expr->ty = inferty;
+            expr->ty = inferty;
         }
     }
     else
     {
-        vp_assertX(d->var.expr, "expression");
-        //Operand res = isglob ? sema_glob(d->var.expr, NULL) : sema_expr(d->var.expr, NULL);
-        Operand res = sema_expr(d->var.expr, NULL);
-        inferty = ty = res.ty;
-        if(ty_isarr(ty) && d->var.expr->kind != EX_COMPLIT)
+        vp_assertX(expr, "expression");
+        if(expr->kind != EX_UNDEFINED)
         {
-            ty = vp_type_decay(ty);
+            //Operand res = isglob ? sema_glob(d->var.expr, NULL) : sema_expr(d->var.expr, NULL);
+            Operand res = sema_expr(expr, NULL);
+            inferty = ty = res.ty;
+            if(ty_isarr(ty) && expr->kind != EX_COMPLIT)
+            {
+                ty = vp_type_decay(ty);
+            }
+            opr_fold(d->loc, &d->var.expr, res);
+            expr->ty = inferty;
         }
-        opr_fold(d->loc, &d->var.expr, res);
-        d->var.expr->ty = inferty;
     }
     sym_complete(ty);
-    if(!d->var.expr || ty_isptr(inferty))
+    if((!expr || (expr && expr->kind == EX_UNDEFINED)) || ty_isptr(inferty))
     {
         ty = vp_type_decayempty(ty);
     }

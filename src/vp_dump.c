@@ -1019,6 +1019,9 @@ static void dump_ast_expr(SBuf* sb, Expr* e)
 {
     switch(e->kind)
     {
+        case EX_UNDEFINED:
+            vp_buf_putlit(sb, "undefined");
+            break;
         case EX_TRUE:
             vp_buf_putlit(sb, "true");
             break;

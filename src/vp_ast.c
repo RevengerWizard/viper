@@ -59,6 +59,13 @@ Expr* vp_expr_unary(SrcLoc loc, ExprKind kind, Expr* unary)
     return expr;
 }
 
+Expr* vp_expr_undefined(SrcLoc loc)
+{
+    Expr* expr = expr_new(EX_UNDEFINED, loc);
+    expr->ty = tynil;
+    return expr;
+}
+
 Expr* vp_expr_false(SrcLoc loc)
 {
     Expr* expr = expr_new(EX_FALSE, loc);

@@ -2,7 +2,7 @@
 
 pub alias tea_Number = float64;
 
-pub alias tea_Integer = int32;
+pub alias tea_Integer = int64;
 
 // Interpreter status
 pub def TEA_OK = 0;
@@ -163,7 +163,7 @@ pub extern fn tea_new_module(T : tea_State*, name : const uint8*) : void;
 pub extern fn tea_new_submodule(T : tea_State*, name : const uint8*) : void;
 pub extern fn tea_create_class(T : tea_State*, name : const uint8*, klass : const tea_Methods*) : void;
 pub extern fn tea_create_module(T : tea_State*, name : const uint8*, module : const tea_Reg*) : void;
-pub extern fn tea_create_submodule(T : tea_State*, name : const uint8*, module : const tea_Reg*) : void;
+pub extern fn tea_create_submodule(T : tea_State*, name : const uint8*, module : const tea_Reg*?) : void;
 pub extern fn tea_new_userdatav(T : tea_State*, size : usize, nuvs : int32) : void*;
 pub extern fn tea_new_udatav(T : tea_State*, size : usize, nuvs : int32, name : const uint8*) : void*;
 pub extern fn tea_new_userdata(T : tea_State*, size : usize) : void*;

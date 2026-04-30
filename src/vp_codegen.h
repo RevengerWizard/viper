@@ -34,7 +34,7 @@ enum
 typedef struct Code
 {
     Str* name;  /* Function name */
-    uint32_t flags;
+    uint32_t flags; /* Code flags */
     RegAlloc* ra;
     vec_t(BB*) bbs;
     vec_t(Scope*) scopes;
@@ -50,7 +50,7 @@ typedef struct Code
     VReg* inretvr;    /* Inline return vreg */
     Stmt* body;
     const ABIInfo* abi;
-    uint32_t paramofs;
+    uint32_t paramofs;  /* Stack offset of stack params, if any */
 } Code;
 
 vec_t(Code*) vp_codegen(vec_t(Decl*) decls);

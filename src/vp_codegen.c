@@ -324,11 +324,85 @@ static VReg* gen_name(Expr* e)
     return NULL;
 }
 
-/* Generate binary operation */
+/* Generate binary add expression */
+static VReg* gen_binop_add(Expr* e)
+{
+    vp_assertX(e->kind == EX_ADD, "not binary add operator");
+    Type* ty = e->ty;
+    Type* lty = e->binop.lhs->ty;
+    Type* rty = e->binop.rhs->ty;
+    vp_assertX(lty, "no left type");
+    vp_assertX(rty, "no right type");
+    uint8_t flag = ir_flag(ty);
+    VReg* lhs = gen_expr(e->binop.lhs);
+    VReg* rhs = gen_expr(e->binop.rhs);
+    /* Pointer arithmetic */
+    if((ty_isptr(lty) || ty_isarr(lty)) && ty_isint(rty))
+    {
+        /* ptr + int -> ptr + (int * sizeof(*ptr)) */
+        uint32_t size = vp_type_sizeof(lty->p);
+        if(size > 1)
+        {
+            rhs = vp_ir_binop(IR_MUL, rhs, vp_vreg_ki(size, rhs->vsize), rhs->vsize, IRF_UNSIGNED);
+        }
+    }
+    else if(ty_isint(lty) && (ty_isptr(rty) || ty_isarr(rty)))
+    {
+        /* int + ptr -> (int * sizeof(*ptr)) + ptr */
+        uint32_t size = vp_type_sizeof(rty->p);
+        if(size > 1)
+        {
+            lhs = vp_ir_binop(IR_MUL, lhs, vp_vreg_ki(size, lhs->vsize), lhs->vsize, IRF_UNSIGNED);
+        }
+    }
+    return vp_ir_binop(e->kind + (IR_ADD - EX_ADD), lhs, rhs, vp_vsize(ty), flag);
+}
+
+/* Generate binary subtract expression */
+static VReg* gen_binop_sub(Expr* e)
+{
+    vp_assertX(e->kind == EX_SUB, "not binary sub operator");
+    Type* ty = e->ty;
+    Type* lty = e->binop.lhs->ty;
+    Type* rty = e->binop.rhs->ty;
+    vp_assertX(lty, "no left type");
+    vp_assertX(rty, "no right type");
+    uint8_t flag = ir_flag(ty);
+    VReg* lhs = gen_expr(e->binop.lhs);
+    VReg* rhs = gen_expr(e->binop.rhs);
+    /* Pointer arithmetic */
+    if((ty_isptr(lty) || ty_isarr(lty)) && ty_isint(rty))
+    {
+        /* ptr - int -> ptr - (int * sizeof(*ptr)) */
+        uint32_t size = vp_type_sizeof(lty->p);
+        if(size > 1)
+        {
+            rhs = vp_ir_binop(IR_MUL, rhs, vp_vreg_ki(size, rhs->vsize), rhs->vsize, IRF_UNSIGNED);
+        }
+    }
+    else if((ty_isptr(lty) || ty_isarr(rty)) && (ty_isptr(rty) || ty_isarr(rty)))
+    {
+        /* ptr - ptr -> (ptr - ptr) / sizeof(*ptr) */
+        VReg* res = vp_ir_binop(IR_SUB, lhs, rhs, vp_vsize(ty), flag);
+        uint32_t size = vp_type_sizeof(lty->p);
+        if(size > 1)
+        {
+            return vp_ir_binop(IR_DIV, res, vp_vreg_ki(size, res->vsize), res->vsize, IRF_UNSIGNED);
+        }
+        return res;
+    }
+    return vp_ir_binop(e->kind + (IR_ADD - EX_ADD), lhs, rhs, vp_vsize(ty), flag);
+}
+
+/* Generate binary expression */
 static VReg* gen_binop(Expr* e)
 {
     vp_assertX(EX_ADD <= e->kind && e->kind <= EX_RSHIFT, "not a binary operator");
     Type* ty = e->ty;
+    Type* lty = e->binop.lhs->ty;
+    Type* rty = e->binop.rhs->ty;
+    vp_assertX(lty, "no left type");
+    vp_assertX(rty, "no right type");
     uint8_t flag = ir_flag(ty);
     VReg* lhs = gen_expr(e->binop.lhs);
     VReg* rhs = gen_expr(e->binop.rhs);
@@ -571,9 +645,11 @@ static VReg* gen_call(Expr* e)
     const ABIInfo* abi = fn ? fn->abi : V->T->abi;
     uint32_t shadow = (abi->flags & ABI_SHADOW) ? 32 : 0;
 
+    bool issmall = abi_issmall(ret);
     FrameInfo* fi = NULL;
-    if(abi_isstack(ret))
+    if(ty_isaggr(ret))
     {
+        /* Aggregate return needs a stack slot */
         fi = vp_frameinfo_new();
         slot_add(ret, fi);
     }
@@ -605,6 +681,7 @@ static VReg* gen_call(Expr* e)
         ArgInfo p = {.cls = cls, .size = vp_type_sizeof(argty)};
         switch(cls)
         {
+            case PC_SMALL:  /* Small structs consume GPRs */
             case PC_IREG:
                 p.idx = abi->imap[previidx];
                 regargs++;
@@ -661,6 +738,15 @@ static VReg* gen_call(Expr* e)
                 gen_memcpy(argty, dst, src);
                 break;
             }
+            case PC_SMALL:
+            {
+                /* Load the struct as an integer and pass in the GPR */
+                uint32_t size = vp_type_sizeof(argty);
+                VRSize vrsz = vp_msb(size);
+                VReg* val = vp_ir_load(src, vrsz, VRF_PARAM, IRF_UNSIGNED)->dst;
+                vp_ir_pusharg(val, p->idx);
+                break;
+            }
         }
     }
     if(fn && (fn->flags & FN_SYSCALL))
@@ -670,7 +756,7 @@ static VReg* gen_call(Expr* e)
 
     /* Handle stack return */
     VReg* dst = NULL;
-    if(fi != NULL)
+    if(fi != NULL && !issmall)
     {
         ret = vp_type_ptr(ret);
         VReg* dst = vp_ir_bofs(fi)->dst;
@@ -678,11 +764,7 @@ static VReg* gen_call(Expr* e)
         args[0] = dst;
         regargs++;
     }
-    /*if(!abi_isstack(ret))
-    {
-        dst = vp_ra_spawn(vp_msb(vp_type_sizeof(ret)), 0);
-    }
-    else */if(ret->kind != TY_void)
+    if(ret->kind != TY_void)
     {
         dst = vp_vreg_new(ret);
     }
@@ -691,6 +773,11 @@ static VReg* gen_call(Expr* e)
     ci->regargs = regargs;
     ci->stacksize = offset;
     ci->argtotal = argtotal;
+    if(issmall)
+    {
+        ci->fi = fi;
+        ci->retsize = vp_type_sizeof(ret);
+    }
     if(label)
     {
         ci->fn = fn;
@@ -744,7 +831,7 @@ static VReg* gen_cast(Expr* e)
             /* Assume two's complement */
             size_t bit = dstsize * 8;
             uint64_t mask = (-1ULL) << bit;
-            if(!ty_isunsigned(dstty) && (i & ((int64_t)1 << (bit - 1))))    /* signed and negative */
+            if(!ty_isunsigned(dstty) && (i & ((int64_t)1 << (bit - 1))))    /* Signed and negative */
                 i |= mask;
             else
                 i &= ~mask;
@@ -1064,7 +1151,7 @@ static const GenExprFn genexprtab[] = {
     [EX_NUM] = gen_num, [EX_FLO] = gen_flo,
     [EX_STR] = gen_str,
     [EX_NAME] = gen_name,
-    [EX_ADD] = gen_binop, [EX_SUB] = gen_binop,
+    [EX_ADD] = gen_binop_add, [EX_SUB] = gen_binop_sub,
     [EX_MUL] = gen_binop, [EX_DIV] = gen_binop, [EX_MOD] = gen_binop,
     [EX_BAND] = gen_binop, [EX_BOR] = gen_binop, [EX_BXOR] = gen_binop,
     [EX_LSHIFT] = gen_binop, [EX_RSHIFT] = gen_binop,
@@ -1228,6 +1315,10 @@ static void gen_var_assign(VarInfo* vi, Expr* e)
             VReg* base = vp_ir_bofs(vi->fi)->dst;
             gen_complit_init(base, e);
         }
+        else if(e->kind == EX_UNDEFINED)
+        {
+            /* Do nothing */
+        }
         else if(ty_isscalar(ty))
         {
             vp_assertX(vi->vreg, "empty vreg");
@@ -1279,10 +1370,17 @@ static void gen_ret(Stmt* st)
         Type* ty = st->expr->ty;
         VReg* vreg = gen_expr(st->expr);
         VReg* inretvr = V->fncode->inretvr;
-        if(inretvr == NULL)
+        if(inretvr == NULL) /* No inlining */
         {
-            /* No inlining */
-            if(!abi_isstack(ty))
+            if(abi_issmall(ty))
+            {
+                /* Load the struct as an integer and pass in the GPR */
+                uint32_t size = vp_type_sizeof(ty);
+                VRSize vrsz = vp_msb(size);
+                VReg* val = vp_ir_load(vreg, vrsz, 0, IRF_UNSIGNED)->dst;
+                vp_ir_ret(val, IRF_UNSIGNED);
+            }
+            else if(ty_isscalar(ty))
             {
                 vp_ir_ret(vreg, ir_flag(ty));
             }
@@ -1294,9 +1392,10 @@ static void gen_ret(Stmt* st)
                 vp_ir_ret(vreg, IRF_UNSIGNED);  /* Pointer is unsigned */
             }
         }
-        else
+        else    /* Inlining */
         {
-            /* Inlining */
+            /* Scalar -> return value */
+            /* Non-scalar -> return pointer */
             vp_ir_mov(inretvr, vreg, ty_isscalar(ty) ? ir_flag(ty) : IRF_UNSIGNED);
         }
     }
@@ -1778,6 +1877,15 @@ static void gen_params(Decl* d, Code* code)
                 vp_assertX(vi->fi, "aggregate param needs frame info");
                 V->ra->flag = RAF_STACK_FRAME;
                 pl.vi = vi;
+                break;
+            }
+            case PC_SMALL:
+            {
+                vp_assertX(!vr, "small aggr param must not have a vreg");
+                vp_assertX(vi->fi, "small aggr param needs frame info");
+                V->ra->flag = RAF_STACK_FRAME;
+                pl.vi = vi;
+                slot_add(ty, vi->fi);
                 break;
             }
         }

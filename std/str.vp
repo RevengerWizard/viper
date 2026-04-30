@@ -4,3 +4,126 @@ pub fn len(s : const uint8*) : usize
     while s[i] != '\0' { i++; }
     return i;
 }
+
+pub fn i32tos(buf : uint8*, len : usize, num : int32) : usize
+{
+    var neg : bool = num < 0;
+    var n : int32 = neg ? -num : num;
+
+    var digits : usize = 0;
+    var temp : int32 = n;
+    if temp == 0 { digits = 1; }
+    else
+    {
+        while temp > 0 { temp /= 10; digits++; }
+    }
+
+    if neg { digits++; }
+    if digits >= len return 0;
+
+    var idx : usize = digits;
+    buf[idx] = 0;
+
+    if n == 0
+    {
+        buf[0] = 48;
+    }
+    else
+    {
+        temp = n;
+        while temp > 0
+        {
+            idx--;
+            buf[idx] = intcast(uint8, 48 + (temp % 10));
+            temp /= 10;
+        }
+    }
+
+    if neg
+    {
+        idx--;
+        buf[idx] = 45;
+    }
+
+    return digits;
+}
+
+pub fn f32tos(buf : uint8*, len : usize, num : float32) : usize
+{
+    return f32tos_precision(buf, len, num, 6);
+}
+
+fn f32tos_precision(buf : uint8*, len : usize, num : float32, precision : usize) : usize
+{
+    if len < 2 return 0;
+
+    var neg : bool = false;
+    if num < 0.0 { neg = true; }
+    var n : float32 = neg ? -num : num;
+
+    // Extract integer and fractional parts
+    var int_part : int32 = floatcast(int32, n);
+    var frac_part : float32 = n - floatcast(float32, int_part);
+
+    // Calculate digits needed for integer part
+    var int_digits : usize = 0;
+    var temp : int32 = int_part;
+    if temp == 0 { int_digits = 1; }
+    else
+    {
+        while temp > 0 { temp /= 10; int_digits++; }
+    }
+
+    // Total digits: integer + decimal point + fractional + optional negative sign
+    var total_digits : usize = int_digits + 1 + precision;
+    if neg { total_digits++; }
+
+    if total_digits >= len return 0;
+
+    var idx : usize = 0;
+
+    // Write negative sign
+    if neg
+    {
+        buf[idx] = 45;
+        idx++;
+    }
+
+    // Write integer part
+    var int_idx : usize = idx + int_digits;
+    if int_part == 0
+    {
+        buf[idx] = 48;
+        idx++;
+    }
+    else
+    {
+        temp = int_part;
+        while temp > 0
+        {
+            int_idx--;
+            buf[int_idx] = intcast(uint8, 48 + (temp % 10));
+            temp /= 10;
+        }
+        idx += int_digits;
+    }
+
+    // Write decimal point
+    buf[idx] = 46;
+    idx++;
+
+    // Write fractional part
+    var frac_idx : usize = 0;
+    while frac_idx < precision
+    {
+        frac_part *= 10.0;
+        var digit : int32 = floatcast(int32, frac_part);
+        buf[idx] = intcast(uint8, 48 + digit);
+        frac_part -= floatcast(float32, digit);
+        idx++;
+        frac_idx++;
+    }
+
+    buf[idx] = 0;
+    return idx;
+}

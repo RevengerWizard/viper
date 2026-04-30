@@ -269,7 +269,17 @@ static void irX64_call(IR* ir)
         EMITX64(callR)(irx64R[VRSize8][ir->src1->phys]);
     }
 
-    if(ir->dst)
+    FrameInfo* fi = ir->call->fi;
+    if(fi != NULL)
+    {
+        vp_assertX(fi->ofs <= 0, "bad frame offset");
+        vp_assertX(ir->call->retsize != 0, "zero retsize");
+        /* Small struct returned in RAX, store into local frame slot */
+        uint32_t p = vp_msb(ir->call->retsize);
+        EMITX64(movMR)(X64MEM(RN_BP, NOREG, 1, fi->ofs, 8),
+                        irx64R[p][RN_AX]);
+    }
+    else if(ir->dst)
     {
         if(vrf_flo(ir->dst))
         {
@@ -504,17 +514,42 @@ static void irX64_cond(IR* ir)
 {
     VReg* src1 = ir->src1, *src2 = ir->src2;
     vp_assertX(!vrf_const(ir->dst), "const dst");
+    X64Reg dst = irx64R[VRSize1][ir->dst->phys];
     CondKind cond = ir->cond;
-    if(vrf_flo(ir->dst))
+    if(cond & COND_FLO)
     {
-        vp_assertX(0, "not implemented");
+        cond &= COND_MASK;
+        switch(cond)
+        {
+        case COND_EQ:
+        case COND_NEQ:
+        {
+            cmp_vregs(src1, src2, cond);
+            if(cond == COND_EQ) EMITX64(setcc)(CC_NP, dst);
+            else EMITX64(setcc)(CC_P, dst);
+            EMITX64(jccREL32)(CC_E, 5); /* Jump 5 bytes to movsx if equal */
+            EMITX64(movRI)(dst, cond != COND_EQ ? 1 : 0);
+            EMITX64(movsxRR)(irx64R[VRSize4][ir->dst->phys], dst);
+            return;
+        }
+        case COND_LT: case COND_LE:
+        {
+            VReg* tmp = src1;
+            src1 = src2;
+            src2 = tmp;
+            cond = vp_cond_swap(cond);
+            break;
+        }
+        default: break;
+        }
+        cond |= COND_UNSIGNED;
     }
 
     cmp_vregs(src1, src2, cond);
 
     X64CC cc = cond2cc(cond);
-    EMITX64(setcc)(cc, irx64R[VRSize1][ir->dst->phys]);
-    EMITX64(movsxRR)(irx64R[VRSize4][ir->dst->phys], irx64R[VRSize1][ir->dst->phys]);
+    EMITX64(setcc)(cc, dst);
+    EMITX64(movsxRR)(irx64R[VRSize4][ir->dst->phys], dst);
 }
 
 static void irX64_jmp(IR* ir)

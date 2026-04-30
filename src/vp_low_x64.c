@@ -109,6 +109,18 @@ static void lowX64_params(Code* code)
             case PC_MEM:
                 /* Already on stack */
                 break;
+            case PC_SMALL:
+            {
+                /* Small aggregate arrived in a GPR; store it into its local frame slot */
+                vp_assertX(vi->fi, "aggr param needs frame info");
+                uint32_t ofs = vi->fi->ofs;
+                vp_assertX(ofs, "0 offset");
+                uint32_t size = vp_type_sizeof(vi->type);
+                VRSize vrsz = vp_msb(size);
+                EMITX64(movMR)(X64MEM(RN_BP, NOREG, 1, ofs, 8),
+                                X64REG(pl->idx, RC_GPR, vrsz, SUB_LO));
+                break;
+            }
             default:
                 vp_assertX(0, "invalid param class");
         }

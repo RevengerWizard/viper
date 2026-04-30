@@ -1272,7 +1272,12 @@ static Decl* parse_var(LexState* ls, DeclKind kind, uint32_t flags)
     if(lex_match(ls, ':'))
         spec = parse_type(ls);
 
-    Expr* e = lex_match(ls, '=') ? expr(ls) : NULL;
+    Expr* e = NULL;
+    if(lex_match(ls, '='))
+    {
+        if(lex_match(ls, TK_undefined)) e = vp_expr_undefined(loc);
+        else e = expr(ls);
+    }
     vp_lex_consume(ls, ';');
 
     return vp_decl_var(loc, kind, flags, name, spec, e);

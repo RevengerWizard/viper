@@ -57,6 +57,7 @@ typedef struct TypeSpec
 typedef enum ExprKind
 {
     /* Literals */
+    EX_UNDEFINED,
     EX_TRUE,
     EX_FALSE,
     EX_NIL,
@@ -463,9 +464,33 @@ extern const char* const vp_ast_binop[];
 extern const char* const vp_ast_assign[];
 extern const char* const vp_ast_unary[];
 
+/* EX_ADD..EX_RSHIFT must map to IR_ADD..IR_RSHIFT */
+VP_STATIC_ASSERT(EX_ADD == EX_BINOP);
+VP_STATIC_ASSERT((IR_ADD - EX_ADD) == (IR_SUB - EX_SUB));
+VP_STATIC_ASSERT((IR_ADD - EX_ADD) == (IR_MUL - EX_MUL));
+VP_STATIC_ASSERT((IR_ADD - EX_ADD) == (IR_DIV - EX_DIV));
+VP_STATIC_ASSERT((IR_ADD - EX_ADD) == (IR_MOD - EX_MOD));
+VP_STATIC_ASSERT((IR_ADD - EX_ADD) == (IR_BAND - EX_BAND));
+VP_STATIC_ASSERT((IR_ADD - EX_ADD) == (IR_BOR - EX_BOR));
+VP_STATIC_ASSERT((IR_ADD - EX_ADD) == (IR_BXOR - EX_BXOR));
+VP_STATIC_ASSERT((IR_ADD - EX_ADD) == (IR_LSHIFT - EX_LSHIFT));
+VP_STATIC_ASSERT((IR_ADD - EX_ADD) == (IR_RSHIFT - EX_RSHIFT));
+
+/* EX_EQ..EX_GT must map to COND_EQ..COND_GT */
+VP_STATIC_ASSERT((COND_EQ - EX_EQ) == (COND_NEQ - EX_NOTEQ));
+VP_STATIC_ASSERT((COND_EQ - EX_EQ) == (COND_LT - EX_LT));
+VP_STATIC_ASSERT((COND_EQ - EX_EQ) == (COND_LE - EX_LE));
+VP_STATIC_ASSERT((COND_EQ - EX_EQ) == (COND_GE - EX_GE));
+VP_STATIC_ASSERT((COND_EQ - EX_EQ) == (COND_GT - EX_GT));
+
+/* EX_NEG..EX_BNOT must map to IR_NEG..IR_BNOT */
+VP_STATIC_ASSERT(EX_NEG == EX_UNARY);
+VP_STATIC_ASSERT((IR_NEG - EX_NEG) == (IR_BNOT - EX_BNOT));
+
 /* Expressions */
 Expr* vp_expr_binop(SrcLoc loc, ExprKind kind, Expr* lhs, Expr* rhs);
 Expr* vp_expr_unary(SrcLoc loc, ExprKind kind, Expr* expr);
+Expr* vp_expr_undefined(SrcLoc loc);
 Expr* vp_expr_false(SrcLoc loc);
 Expr* vp_expr_true(SrcLoc loc);
 Expr* vp_expr_nil(SrcLoc loc);
