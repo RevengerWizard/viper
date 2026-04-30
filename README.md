@@ -13,17 +13,21 @@ fn main() : int32
 
 ## Building
 
-You will need a C99 compiler (gcc or clang) and make
+You will need a C99 compiler (gcc or clang) and make. 
 
 ```bash
 git clone https://github.com/RevengerWizard/viper && cd viper
 make
 ```
 
-Run it using `vxc`, followed by the name of the file ending with the `.vp` extension:
+You can run the compiler using `vxc`, followed by the "mode" `comp` and the name of the file ending with the `.vp` extension.
+
+You may also need a linker like `ld` to link the object files:
 
 ```bash
-vxc hello.vp
+vxc comp hello.vp
+ld hello.obj -o out.exe --subsystem=console -e main
+./out
 ```
 
 ## License
