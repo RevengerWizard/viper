@@ -652,6 +652,7 @@ static VReg* gen_call(Expr* e)
         /* Aggregate return needs a stack slot */
         fi = vp_frameinfo_new();
         slot_add(ret, fi);
+        V->ra->flag = RAF_STACK_FRAME;
     }
 
     typedef struct
@@ -662,7 +663,7 @@ static VReg* gen_call(Expr* e)
     } ArgInfo;
 
     vec_t(ArgInfo) arginfos = vec_init(ArgInfo);
-    uint32_t argstart = (fi != NULL) ? 1 : 0;
+    uint32_t argstart = (fi != NULL && !issmall) ? 1 : 0;
     uint32_t iidx = argstart;
     uint32_t fidx = 0;
     uint32_t offset = 0;
@@ -767,6 +768,10 @@ static VReg* gen_call(Expr* e)
     if(ret->kind != TY_void)
     {
         dst = vp_vreg_new(ret);
+    }
+    if(fi != NULL && issmall)
+    {
+        dst = vp_ir_bofs(fi)->dst;
     }
 
     IRCallInfo* ci = vp_ircallinfo_new(args, argnum, label);
@@ -1841,6 +1846,10 @@ static void gen_params(Decl* d, Code* code)
         paramofs = ALIGN_UP(paramofs, TARGET_PTR_SIZE);
         paramofs += TARGET_PTR_SIZE;
     }
+    if(abi_issmall(ret))
+    {
+        V->ra->flag = RAF_STACK_FRAME;
+    }
 
     code->paramofs = paramofs;
 
@@ -1884,6 +1893,7 @@ static void gen_params(Decl* d, Code* code)
                 vp_assertX(!vr, "small aggr param must not have a vreg");
                 vp_assertX(vi->fi, "small aggr param needs frame info");
                 V->ra->flag = RAF_STACK_FRAME;
+                pl.idx = abi->imap[previidx];
                 pl.vi = vi;
                 slot_add(ty, vi->fi);
                 break;

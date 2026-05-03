@@ -45,14 +45,11 @@ static void lowX64_params(Code* code)
     {
         VarInfo* vi = code->scopes[0]->vars[i];
         ParamLoc* pl = &code->plocs[i + start];
-        VReg* vr = vi->vreg;
-        if(!vr)
-            continue;
-
         switch(pl->cls)
         {
             case PC_IREG:
             {
+                VReg* vr = vi->vreg;
                 if(vrf_spill(vr))
                 {
                     uint32_t ofs = vr->fi.ofs;
@@ -70,6 +67,7 @@ static void lowX64_params(Code* code)
             }
             case PC_FREG:
             {
+                VReg* vr = vi->vreg;
                 X64Reg src = X64REG(pl->idx, RC_XMM, 16, SUB_LO);
 
                 if(vrf_spill(vr))
@@ -116,9 +114,8 @@ static void lowX64_params(Code* code)
                 uint32_t ofs = vi->fi->ofs;
                 vp_assertX(ofs, "0 offset");
                 uint32_t size = vp_type_sizeof(vi->type);
-                VRSize vrsz = vp_msb(size);
                 EMITX64(movMR)(X64MEM(RN_BP, NOREG, 1, ofs, 8),
-                                X64REG(pl->idx, RC_GPR, vrsz, SUB_LO));
+                                X64REG(pl->idx, RC_GPR, size, SUB_LO));
                 break;
             }
             default:
