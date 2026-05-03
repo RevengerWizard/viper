@@ -1,0 +1,84 @@
+from windows import *
+from std::str import *
+
+fn print(h : HANDLE, s : const uint8*) : void
+{
+    WriteConsoleA(h, s, intcast(DWORD, len(s)), nil, nil);
+}
+
+fn WndProc(hWnd : HWND, msg : UINT, wParam : WPARAM, lParam : LPARAM) : LRESULT
+{
+    if msg == WM_DESTROY
+    {
+        PostQuitMessage(0);
+        return 0;
+    }
+    return DefWindowProcA(hWnd, msg, wParam, lParam);
+}
+
+fn window() : void
+{
+    var hInst : HINSTANCE = GetModuleHandleA(nil);
+
+    var wc : WNDCLASSA = {};
+    wc.lpfnWndProc = WndProc;
+    wc.hInstance = hInst;
+    wc.lpszClassName = "MyWindowClass";
+    wc.hbrBackground = ptrcast(HBRUSH, COLOR_BACKGROUND + 1);
+
+    RegisterClassA(&wc);
+
+    var hWnd : HWND = CreateWindowExA(
+        0,
+        "MyWindowClass",
+        "Hello Window",
+        WS_OVERLAPPEDWINDOW,
+        CW_USEDEFAULT, CW_USEDEFAULT,
+        400, 300,
+        nil, nil,
+        hInst,
+        nil
+    );
+
+    var y : UINT = 90;
+    var x : UINT = 90;
+
+    ShowWindow(hWnd, SW_SHOW);
+    UpdateWindow(hWnd);
+
+    var msg : MSG;
+    while GetMessageA(&msg, nil, 0, 0) != 0
+    {
+        TranslateMessage(&msg);
+        DispatchMessageA(&msg);
+    }
+}
+
+pub fn main() : DWORD
+{
+    var h : HANDLE = GetStdHandle(STD_OUTPUT_HANDLE);
+
+    print(h, "Hello, World!\n");
+    print(h, "This is Viper calling Win32 directly\n");
+
+    print(h, "Counting: ");
+    print(h, "1 ");
+    print(h, "2 ");
+    print(h, "3\n");
+
+    print(h, "Multiple lines:\n");
+    print(h, " - line A\n");
+    print(h, " - line B\n");
+    print(h, "Hex sample: 0xDEADBEEF\n");
+
+    MessageBoxA(
+        nil,
+        "Here is a nice message box",
+        "Win32 Example",
+        MB_OKCANCEL | MB_ICONWARNING
+    );
+
+    window();
+
+    return STD_ERROR_HANDLE;
+}
