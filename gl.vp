@@ -96,5 +96,7 @@ pub alias GLBINDTEXTURE = fn?(target : GLenum, texture : GLuint) : void;
 pub alias GLTEXPARAMETERI = fn?(target : GLenum, pname : GLenum, param : GLint) : void;
 pub alias GLTEXIMAGE2D = fn?(target : GLenum, level : GLint, internalFormat : GLint, width : GLsizei, height : GLsizei, border : GLint, format : GLenum, type_ : GLenum, data : const void*) : void;
 pub alias GLPOLYGONMODE = fn?(face : GLenum, mode : GLenum) : void;
+pub alias GLGETUNIFORMLOCATION = fn?(program : GLuint, name : const uint8*) : GLint;
+pub alias GLUNIFORMMATRIX4FV = fn?(location : GLint, count : GLsizei, transpose : GLboolean, value : const GLfloat*) : void;
 
 pub alias WGLGETPROCADDRESS = fn(const uint8*) : void*;
