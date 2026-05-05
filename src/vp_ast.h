@@ -38,7 +38,10 @@ typedef struct TypeSpec
     union
     {
         Type* ty;
-        Str* name;
+        struct
+        {
+            vec_t(Str*) names;
+        };
         struct TypeSpec* ptr;
         struct Expr* expr;
         struct
@@ -542,7 +545,7 @@ Decl* vp_decl_from(SrcLoc loc, Str* name, vec_t(ImportItem) items, bool wildcard
 Aggregate* vp_aggr_new(SrcLoc loc, AggregateKind kind, AggregateItem* items);
 
 /* Type specs */
-TypeSpec* vp_typespec_name(SrcLoc loc, Str* name);
+TypeSpec* vp_typespec_name(SrcLoc loc, vec_t(Str*) names);
 TypeSpec* vp_typespec_type(SrcLoc loc, Type* ty);
 TypeSpec* vp_typespec_ptr(SrcLoc loc, TypeSpec* base);
 TypeSpec* vp_typespec_arr(SrcLoc loc, TypeSpec* base, Expr* e);

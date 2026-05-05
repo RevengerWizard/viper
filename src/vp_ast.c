@@ -445,10 +445,10 @@ static TypeSpec* new_typespec(TypeSpecKind kind, SrcLoc loc)
     return ts;
 }
 
-TypeSpec* vp_typespec_name(SrcLoc loc, Str* name)
+TypeSpec* vp_typespec_name(SrcLoc loc, vec_t(Str*) names)
 {
     TypeSpec* ts = new_typespec(SPEC_NAME, loc);
-    ts->name = name;
+    ts->names = names;
     return ts;
 }
 

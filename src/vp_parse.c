@@ -351,7 +351,9 @@ static Expr* expr_access(LexState* ls, Expr* lhs, SrcLoc loc)
     {
         if(lhs->kind != EX_NAME)
             vp_err_error(lhs->loc, "expected name");
-        return expr_comp_type(ls, vp_typespec_name(loc, lhs->name));
+        vec_t(Str*) names = vec_init(Str*);
+        vec_push(names, lhs->name);
+        return expr_comp_type(ls, vp_typespec_name(loc, names));
     }
     Str* name = lex_name(ls);
     return vp_expr_access(loc, lhs, name);
@@ -613,8 +615,15 @@ static TypeSpec* parse_type(LexState* ls)
     if(lex_match(ls, TK_name))
     {
         SrcLoc loc = lex_srcloc(ls);
+        vec_t(Str*) names = vec_init(Str*);
         Str* name = ls->val.name;
-        spec = vp_typespec_name(loc, name);
+        vec_push(names, name);
+        while(lex_match(ls, TK_dcolon))
+        {
+            name = lex_name(ls);
+            vec_push(names, name);
+        }
+        spec = vp_typespec_name(loc, names);
     }
     else if(lex_match(ls, TK_fn))
     {

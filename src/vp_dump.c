@@ -875,8 +875,15 @@ static void dump_typespec(SBuf* sb, TypeSpec* spec)
     switch(spec->kind)
     {
         case SPEC_NAME:
-            vp_buf_puts(sb, spec->name);
+        {
+            for(uint32_t i = 0; i < vec_len(spec->names); i++)
+            {
+                Str* name = spec->names[i];
+                vp_buf_puts(sb, name);
+                if(i != 0) vp_buf_putlit(sb, "::");
+            }
             break;
+        }
         case SPEC_TYPE:
             vp_buf_putmem(sb, type_name(spec->ty), strlen(type_name(spec->ty)));
             break;

@@ -938,11 +938,30 @@ static Type* sema_typespec(TypeSpec* spec)
             break;
         case SPEC_NAME:
         {
-            Sym* sym = sym_name(spec->name);
+            Module* mod = V->mod;
+            uint32_t len = vec_len(spec->names);
+            Str* name;
+            for(uint32_t i = 0; i < len - 1; i++)
+            {
+                name = spec->names[i];
+                Sym* sym = vp_tab_get(&mod->symstab, name);
+                if(!sym)
+                {
+                    vp_err_error(spec->loc, "unresolved module '%s'", str_data(name));
+                }
+                if(sym->kind != SYM_MODULE)
+                {
+                    vp_err_error(spec->loc, "'%s' must denote a module", str_data(name));
+                }
+                mod = sym->mod;
+            }
+            name = spec->names[len - 1];
+            Sym* sym = vp_tab_get(&mod->symstab, name);
             if(!sym)
             {
-                vp_err_error(spec->loc, "unresolved type name '%s'", str_data(spec->name));
+                vp_err_error(spec->loc, "unresolved type name '%s'", str_data(name));
             }
+            sema_resolve(sym);
             switch(sym->kind)
             {
             case SYM_ENUM:
@@ -951,7 +970,7 @@ static Type* sema_typespec(TypeSpec* spec)
                 ty = sym->type;
                 break;
             default:
-                vp_err_error(spec->loc, "'%s' must denote a type", str_data(spec->name));
+                vp_err_error(spec->loc, "'%s' must denote a type", str_data(name));
                 break;
             }
             break;
@@ -1356,11 +1375,22 @@ static Operand sema_binary_relcmp(Expr* e, Type* ret)
     return opr_nil;
 }
 
+/* Prologue for binary comparison operators */
+#define SEMA_BINOP_CMP(e, ret, lopr_out, ropr_out) \
+    do \
+    { \
+        (lopr_out) = sema_expr_rval((e)->binop.lhs, NULL); \
+        (ropr_out) = sema_expr_rval((e)->binop.rhs, NULL); \
+        opr_fold((e)->loc, &(e)->binop.lhs, (lopr_out)); \
+        opr_fold((e)->loc, &(e)->binop.rhs, (ropr_out)); \
+    } \
+    while(false)
+
 /* Resolve equality comparisons ==, != */
 static Operand sema_binary_eqcmp(Expr* e, Type* ret)
 {
     Operand lop, rop;
-    SEMA_BINOP(e, ret, lop, rop);
+    SEMA_BINOP_CMP(e, ret, lop, rop);
     if(ty_isnum(lop.ty) && ty_isnum(rop.ty))
     {
         Operand res = opr_binop(e->loc, e->kind, lop, rop, NULL);
