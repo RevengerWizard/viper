@@ -1,0 +1,18 @@
+pub struct VkInstance;
+pub struct VkDevice;
+
+pub enum VkStructureType : int32
+{
+    VK_STRUCTURE_TYPE_APPLICATION_INFO = 0
+}
+
+pub struct VkApplicationInfo
+{
+    sType : VkStructureType;
+    pNext : const void*;
+    pApplicationName : const uint8*;
+    applicationVersion : uint32;
+    pEngineName : const uint8*;
+    engineVersion : uint32;
+    apiVersion : uint32;
+}
