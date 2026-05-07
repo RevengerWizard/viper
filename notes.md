@@ -263,206 +263,28 @@ asm
 
 ---
 
-### std
+### variadics
 
-- `io`
-- `fmt`
-- `str`
-- `mem`
-- `os`
-- `conv` ?
-
----
-
-### std::os
+`type va_list`
+`@va_start(args : va_list)`
+`@va_end(args : va_list)`
+`@va_next(T, args : va_list)`
+`@va_copy(dst : va_list, src : va_list)`
 
 ```vp
-noreturn fn exit(x : uint32) : void;
-fn getenv() : void;
+fn print(fmt : const uint8*, args : ...) : void
+{
+    let x : int32 = @va_next(int32, args);
+}
 ```
-
----
-
-### std::io
 
 ```vp
-//io::stdout, io::stdin, io::stderr
-
-fn open(path : const uint8*, flags : OpenFlags, err : IOError*) : FILE*;
-fn close(FILE* f, ) : void;
-fn write(f : FILE*, buf : const uint8*, n : usize) : usize;
-fn read(f : FILE*, buf : uint8*, n : usize) : usize;
-fn flush(f : FILE*) : void;
-fn seek(f : FILE*) : void;
+fn vprint(fmt : const uint8*, args : va_list) : void;
+fn print(fmt : const uint8*, args : ...) : void
+{
+    vprint(fmt, args);
+}
 ```
-
----
-
-
-### std::conv
-
-`booltos`
-
-`u8tos`
-`i8tos`
-`u16tos`
-`i16tos`
-`u32tos`
-`i32tos`
-`u64tos`
-`i64tos`
-
-`f32tos`
-`f64tos`
-
-`stou8`
-`stoi8`
-`stou16`
-`stoi16`
-`stou32`
-`stoi32`
-`stou64`
-`stoi64`
-
-`stof32`
-`stof64`
-
-```vp
-
-```
-
----
-
-### std::str
-
-- base `2`-`36` ?
-- base `0` auto-detect base (`0x`, `0b`, `0o`)
-- on conversion error, always return `0`
-
-```vp
-fn isalpha(c : uint8) : bool;
-fn isdigit(c : uint8) : bool;
-```
-
-`len`
-
-```vp
-fn len(s : const uint8*) : usize;
-```
-
----
-
-### std::fmt
-
----
-
-### std::mem
-
-```vp
-fn copy(dst : void*, src : const void*, n : usize) : void;
-fn move(dst : void*, src : const void*, n : usize) : void;
-fn set(dst : void*, val : uint8, n : usize) : void;
-fn cmp(a : const void*, b : const void*, n : usize) : int32;
-
-fn alloc(n : usize) : void*;
-fn realloc(p : void*, n : usize) : void*;
-fn free(p : void*) : void;
-```
-
----
-
-### std::math
-
-```vp
-// math::abs
-fn absi64(x : int64) : int64;
-fn absf64(x : float64) : float64;
-
-// math::sin
-fn sinf32(x : float32) : float32;
-fn sinf64(x : float64) : float64;
-
-// math::cos
-fn cosf32(x : float32) : float32;
-fn cosf64(x : float64) : float64;
-
-// math::sqrt
-fn sqrtf32(x : float32) : float32;
-fn sqrtf64(x : float64) : float64;
-
-// math::min(a : T, b : T) : T
-// math::max(a : T, b : T) : T
-
-//math::pi : float64;
-//math::e : float64;
-```
-
----
-
-### fmt
-
-```
-%[flags][width][.precision]type
-```
-
-- `%` start specifier
-- `%%` -> `%`
-
-- integers
-`%u8` `%i8` 
-`%u16` `%i16`
-`%u32` `%i32` 
-`%u64` `%i64`
-`%uz` `%iz` -> `usize`/`isize`
-- floats
-`%f32` `%f64`
-`%e32` `%e64` scientific
-- bool
-`%b` -> `true`/`false`
-`%B` -> `1`/`0`
-- strings
-`%s` -> `const uint8*` (nil-terminated)
-`%S` -> `(const uint8*, usize)`
-
-`%s` with `nil` -> `(nil)`
-`%s` with `(nil, n)` -> `(nil)`
-- pointers
-`%p` -> hex, `0x` prefixed, pointer-sized
-- others
-`%c` single byte `uint8`, ASCII
-
-- `%i32` -> `-42`
-- `8%i32`
-
-Flags
-
-Single-char, order-independent, optional
-- `-` left align
-- `0` zero pad
-- `#` alternate form
-- `+` always show sign
-
-Width
-
-Number digit
-- `%8i32`
-- `-16s`
-- `%08u32`
-
-Base
-
-- `#x` hex (lower)
-- `#H` hex (upper)
-- `#b` binary
-
-- `%#xu32` -> `0xDEADBEEF`
-- `%#bu8` -> `0b101010`
-
-Precision
-
-- `%.4i32` -> `0042`
-- `%.2f32` -> `3.14`
-- `%.5s` -> at most 5 bytes
 
 ---
 
@@ -494,9 +316,9 @@ Precision
 
 `extern "C"`
 
----
+`undefined`
 
-`undefined` ?
+---
 
 `goto` ?
 
@@ -677,8 +499,8 @@ int64 <- int32 | uint32 | int16 | uint16 | int8 | uint8 | bool
 | `cast`     | Numeric, bool, typed* | Numeric, bool, void*   | **Safe** - No data loss or well-defined behavior |
 | `intcast`  | Integer only          | Numeric                | **Unsafe** - Potential data loss, wrap-around    |
 | `floatcast`| Float only            | Numeric                | **Unsafe** - Truncation, precision loss          |
+| `ptrcast`  | Pointer               | Pointer, numeric       | **Unsafe** - Memory safety concerns              |
 | `bitcast`  | Same-size type        | Same size type         | **Unsafe** - Raw reinterpretation                |
-| `ptrcast`  | Pointer, integer      | Pointer, integer       | **Unsafe** - Memory safety concerns              |
 
 ---
 
