@@ -1822,7 +1822,7 @@ static Operand sema_intcast(Expr* e, Type* ret)
     Type* ty = sema_typespec(e->cast.spec);
     Operand opr = sema_expr_rval(e->cast.expr, NULL);
     bool isconst = opr_isconst(opr);
-    if(!ty_isint(ty) || !ty_isint(opr.ty))
+    if(!ty_isint(ty))
     {
         vp_err_error(e->loc, "invalid intcast from '%s' to '%s'", type_str(opr.ty), type_str(ty));
     }
@@ -1837,7 +1837,7 @@ static Operand sema_floatcast(Expr* e, Type* ret)
     Type* ty = sema_typespec(e->cast.spec);
     Operand opr = sema_expr_rval(e->cast.expr, NULL);
     bool isconst = opr_isconst(opr);
-    if(!ty_isnum(ty) || !ty_isnum(opr.ty) || (!ty_isflo(ty) && !ty_isflo(opr.ty)))
+    if(!ty_isflo(ty) || !ty_isnum(opr.ty))
     {
         vp_err_error(e->loc, "invalid floatcast from '%s' to '%s'", type_str(opr.ty), type_str(ty));
     }
@@ -1853,8 +1853,8 @@ static Operand sema_ptrcast(Expr* e, Type* ret)
     Operand opr = sema_expr_rval(e->cast.expr, NULL);
     bool isconst = opr_isconst(opr);
     bool srcvalid = ty_isptrlike(opr.ty) || ty_isint(opr.ty);
-    bool dstvalid = ty_isptrlike(ty) || ty_isint(ty);
-    if(!srcvalid || !dstvalid)
+    bool dstvalid = ty_isptrlike(ty);
+    if(!dstvalid || !srcvalid)
     {
         /*vp_err_note(e->loc, "ptrcast requires a combination of pointer, function pointer, or integer types");*/
         vp_err_error(e->loc, "invalid ptrcast between '%s' and '%s'", type_str(opr.ty), type_str(ty));

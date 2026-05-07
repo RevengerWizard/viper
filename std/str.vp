@@ -62,7 +62,7 @@ fn f32tos_precision(buf : uint8*, len : usize, num : float32, precision : usize)
     var n : float32 = neg ? -num : num;
 
     // Extract integer and fractional parts
-    var int_part : int32 = floatcast(int32, n);
+    var int_part : int32 = intcast(int32, n);
     var frac_part : float32 = n - floatcast(float32, int_part);
 
     // Calculate digits needed for integer part
@@ -117,7 +117,7 @@ fn f32tos_precision(buf : uint8*, len : usize, num : float32, precision : usize)
     while frac_idx < precision
     {
         frac_part *= 10.0;
-        var digit : int32 = floatcast(int32, frac_part);
+        var digit : int32 = intcast(int32, frac_part);
         buf[idx] = intcast(uint8, 48 + digit);
         frac_part -= floatcast(float32, digit);
         idx++;

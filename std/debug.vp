@@ -1,0 +1,12 @@
+import std::os as os
+import std::io as io
+
+pub fn assert(cond : bool) : void
+{
+    io::init();
+    if not cond
+    {
+        io::write(io::stderr, "assertion\n", 10, nil);
+        os::exit(1);
+    }
+}
