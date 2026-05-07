@@ -1,0 +1,13 @@
+//! stage: check
+//! expect-compile: fail
+//! expect-error: implicit
+
+struct Point2D {x : int32; y : int32;}
+struct Vector2D {x : int32; y : int32;}
+
+pub fn main() : int32
+{
+    var p : Point2D = {x = 10, y = 20};
+    var v : Vector2D = p;
+    return v.x;
+}

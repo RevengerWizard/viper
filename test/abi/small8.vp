@@ -1,0 +1,35 @@
+//! stage: run
+//! expect-compile: ok
+//! expect-exit: 68
+
+struct Pair
+{
+    lo : uint32;
+    hi : uint32;
+}
+
+#staticassert(sizeof(Pair) == 8);
+
+fn make_pair(lo : uint32, hi : uint32) : Pair
+{
+    let p : Pair = {lo = lo, hi = hi};
+    return p;
+}
+
+fn sum_pair(p : Pair) : uint32
+{
+    return p.lo + p.hi;
+}
+
+fn swap_pair(p : Pair) : Pair
+{
+    let q : Pair = {lo = p.hi, hi = p.lo};
+    return q;
+}
+
+pub fn main() : uint32
+{
+    let p : Pair = make_pair(21, 47);
+    let q : Pair = swap_pair(p);
+    return sum_pair(q);
+}

@@ -1,0 +1,17 @@
+//! stage: run
+//! expect-compile: ok
+//! expect-exit: 9
+
+enum Mode : uint8
+{
+    A,
+    B = 4,
+    C,
+}
+
+#staticassert(sizeof(Mode) == 1);
+
+pub fn main() : uint32
+{
+    return uint32(Mode::B) + uint32(Mode::C);
+}

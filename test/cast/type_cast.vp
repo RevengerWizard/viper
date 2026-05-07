@@ -1,0 +1,17 @@
+//! stage: run
+//! expect-compile: ok
+//! expect-exit: 19
+
+type Count = uint32;
+
+fn add(a : Count, b : Count) : Count
+{
+    return Count(cast(uint32, a) + cast(uint32, b));
+}
+
+pub fn main() : uint32
+{
+    let x : Count = Count(9);
+    let y : Count = Count(10);
+    return cast(uint32, add(x, y));
+}

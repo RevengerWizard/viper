@@ -1,0 +1,9 @@
+//! stage: check
+//! expect-compile: fail
+//! expect-error: invalid intcast
+
+pub fn main() : uint32
+{
+    let p : uint32* = nil;
+    return intcast(uint32, p);
+}

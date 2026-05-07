@@ -1,0 +1,9 @@
+//! stage: check
+//! expect-compile: fail
+//! expect-error: literal out of range for 'int16'
+
+pub fn main() : int32
+{
+    let x : int16 = 32768;
+    return int32(x);
+}

@@ -1,0 +1,31 @@
+//! stage: run
+//! expect-compile: ok
+//! expect-exit: 94
+
+struct S4
+{
+    lo : uint16;
+    hi : uint16;
+}
+
+#staticassert(sizeof(S4) == 4);
+
+fn make(lo : uint16, hi : uint16) : S4
+{
+    return S4::{lo = lo, hi = hi};
+}
+
+fn flip(s : S4) : S4
+{
+    return S4::{lo = s.hi, hi = s.lo};
+}
+
+fn sum(s : S4) : uint16
+{
+    return s.lo + s.hi;
+}
+
+pub fn main() : uint32
+{
+    return uint32(sum(flip(make(31, 63))));
+}

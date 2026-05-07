@@ -1,0 +1,31 @@
+//! stage: run
+//! expect-compile: ok
+//! expect-exit: 100
+
+struct A
+{
+    x : uint32;
+}
+
+struct B
+{
+    a : A;
+    y : uint32;
+}
+
+#staticassert(sizeof(B) == 8);
+
+fn make(x : uint32, y : uint32) : B
+{
+    return B::{a = A::{x = x}, y = y};
+}
+
+fn sum(v : B) : uint32
+{
+    return v.a.x + v.y;
+}
+
+pub fn main() : uint32
+{
+    return sum(make(44, 56));
+}

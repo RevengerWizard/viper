@@ -1,0 +1,11 @@
+//! stage: run
+//! expect-compile: ok
+//! expect-exit: 34
+
+pub fn main() : uint32
+{
+    var x : uint32 = 34;
+    let p : void* = &x;
+    let q : uint32* = cast(uint32*, p);
+    return *q;
+}

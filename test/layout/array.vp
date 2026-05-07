@@ -1,0 +1,6 @@
+//! stage: compile
+//! expect-compile: ok
+
+#staticassert(sizeof(uint16[4]) == 8);
+#staticassert(alignof(uint16[4]) == 2);
+#staticassert(sizeof(uint8[3][2]) == 6);

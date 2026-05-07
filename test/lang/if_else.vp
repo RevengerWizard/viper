@@ -1,0 +1,16 @@
+//! stage: run
+//! expect-compile: ok
+//! expect-exit: 37
+
+fn pick(a : int32, b : int32) : int32
+{
+    if a > b
+        return a - b;
+    else
+        return b - a;
+}
+
+pub fn main() : int32
+{
+    return pick(10, 47);
+}

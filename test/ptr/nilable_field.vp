@@ -1,0 +1,14 @@
+//! stage: run
+//! expect-compile: ok
+//! expect-exit: 1
+
+struct Node
+{
+    next : Node*?;
+}
+
+pub fn main() : uint32
+{
+    var n : Node = {next = nil};
+    return cast(uint32, n.next == nil);
+}

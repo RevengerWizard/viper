@@ -1,0 +1,11 @@
+//! stage: run
+//! expect-compile: ok
+//! expect-exit: 19
+
+import std::str as str
+
+pub fn main() : uint32
+{
+    let x : usize = str::len("viper") + str::len("") + str::len("compiler tests");
+    return intcast(uint32, x);
+}

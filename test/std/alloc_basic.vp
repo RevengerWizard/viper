@@ -1,0 +1,19 @@
+//! stage: run
+//! expect-compile: ok
+//! expect-exit: 37
+
+import std::mem as mem
+
+pub fn main() : int32
+{
+    let raw : void*? = mem::alloc(4);
+    if raw == nil return 1;
+
+    let bytes : uint8* = ptrcast(uint8*, raw);
+    bytes[0] = 7;
+    bytes[1] = 11;
+    bytes[2] = 19;
+    let result : int32 = int32(bytes[0]) + int32(bytes[1]) + int32(bytes[2]);
+    mem::free(raw);
+    return result;
+}

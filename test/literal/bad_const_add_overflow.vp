@@ -1,0 +1,9 @@
+//! stage: check
+//! expect-compile: fail
+//! expect-error: arithmetic operation overflow of '+'
+
+pub fn main() : uint32
+{
+    let x : uint8 = uint8::max + 1;
+    return uint32(x);
+}

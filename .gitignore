@@ -9,3 +9,4 @@
 *.dot
 *.dll
 *.obj
+test/tmp/

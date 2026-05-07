@@ -1,0 +1,19 @@
+//! stage: run
+//! expect-compile: ok
+//! expect-exit: 61
+
+struct P
+{
+    x : int32;
+    y : int32;
+}
+
+var p : P = {x = 20, y = 30};
+var a : int32[] = {4, 5, 6};
+var g : int32 = 3;
+
+pub fn main() : int32
+{
+    g += 1;
+    return p.x + p.y + a[0] + a[1] + a[2] - g;
+}

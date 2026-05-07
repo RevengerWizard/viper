@@ -1,0 +1,5 @@
+//! stage: check
+//! expect-compile: fail
+//! expect-error: cannot be nil-able
+
+var x : int32? = 0;

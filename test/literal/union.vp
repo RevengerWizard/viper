@@ -1,0 +1,67 @@
+//! stage: run
+//! expect-compile: ok
+
+from std::debug import assert
+
+union U1
+{
+    a : int32;
+    b : uint8[6];
+}
+
+union U2
+{
+    a : int32;
+    b : uint8[4];
+}
+
+union U3
+{
+    a, b : int32;
+}
+
+union U4
+{
+    struct
+    {
+        a, b, c, d : uint8;
+    }
+    e : int64;
+}
+
+pub fn main() : int32
+{
+    let x : U1;
+    assert(sizeof(typeof(x)) == 8);
+
+    let y : U2;
+    y.a = 515;
+    assert(y.b[0] == 3);
+    assert(y.b[1] == 2);
+    assert(y.b[2] == 0);
+    assert(y.b[3] == 0);
+
+    let z : U3;
+    var w : U3;
+    z.a = 3;
+    w.a = 5;
+    w = z;
+    assert(w.a == 3);
+
+    let e1 : U4;
+    e1.e = 0xdeadbeef;
+    assert(e1.a == 0xef);
+
+    let e2 : U4;
+    e2.e = 0xdeadbeef;
+    assert(e2.b == 0xbe);
+
+    let e3 : U4;
+    e3.e = 0xdeadbeef;
+    assert(e3.c == 0xad);
+
+    let e4 : U4;
+    e4.e = 0xdeadbeef;
+    assert(e4.d == 0xde);
+    return 0;
+}

@@ -1,0 +1,15 @@
+//! stage: compile
+//! expect-compile: ok
+
+struct S
+{
+    a : uint8;
+    b : uint32;
+    c : uint16;
+}
+
+#staticassert(sizeof(S) == 12);
+#staticassert(alignof(S) == 4);
+#staticassert(offsetof(S, a) == 0);
+#staticassert(offsetof(S, b) == 4);
+#staticassert(offsetof(S, c) == 8);

@@ -1,0 +1,26 @@
+//! stage: run
+//! expect-compile: ok
+//! expect-exit: 25
+
+struct B4
+{
+    a : uint8;
+    b : uint16;
+}
+
+#staticassert(sizeof(B4) == 4);
+
+fn make(a : uint8, b : uint16) : B4
+{
+    return B4::{a = a, b = b};
+}
+
+fn use(v : B4) : uint32
+{
+    return v.a + v.b;
+}
+
+pub fn main() : uint32
+{
+    return use(make(7, 18));
+}

@@ -1,0 +1,18 @@
+//! stage: run
+//! expect-compile: ok
+//! expect-exit: 19
+
+type Count = uint32;
+alias CountPtr = Count*;
+
+fn inc(p : CountPtr) : void
+{
+    *p += 1;
+}
+
+pub fn main() : Count
+{
+    var x : Count = 18;
+    inc(&x);
+    return x;
+}

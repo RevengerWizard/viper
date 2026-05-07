@@ -1,0 +1,56 @@
+//! stage: run
+//! expect-compile: ok
+
+from std::debug import assert
+
+struct S1
+{
+    a, b : int32;
+}
+
+pub fn main() : int32
+{
+    {
+    let x : int32[3] = {1, 2, 3};
+    assert(x[0] == 1);
+    assert(x[1] == 2);
+    assert(x[2] == 3);
+    }
+
+    {
+    let x : int32[3][3] = {{1, 2, 3}, {4, 5, 6}};
+    assert(x[0][1] == 2);
+    assert(x[1][0] == 4);
+    assert(x[1][2] == 6);
+    }
+
+    {
+    let x : int32[3] = {};
+    assert(x[0] == 0);
+    assert(x[1] == 0);
+    assert(x[2] == 0);
+    }
+
+    {
+    let x : int32[2][3] = {{1, 2}};
+    assert(x[0][1] == 2);
+    assert(x[1][0] == 0);
+    assert(x[1][2] == 0);
+    }
+
+    {
+    let x : uint8[4] = "abc";
+    assert(x[0] == 'a');
+    assert(x[2] == 'c');
+    assert(x[3] == '\0');
+    }
+
+    {
+    let x : int32[] = {1, 2, 3, 4};
+    assert(x[3] == 4);
+    assert(sizeof(typeof(x)) == 16);
+    let y : uint8[] = "foo";
+    assert(sizeof(typeof(y)) == 4);
+    }
+    return 0;
+}

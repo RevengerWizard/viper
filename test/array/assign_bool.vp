@@ -1,0 +1,10 @@
+//! stage: run
+//! expect-compile: ok
+//! expect-exit: 2
+
+pub fn main() : uint32
+{
+    var a : bool[3] = {false, false, true};
+    a[0] = true;
+    return cast(uint32, a[0]) + cast(uint32, a[2]);
+}

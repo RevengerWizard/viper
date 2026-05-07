@@ -1,0 +1,15 @@
+//! stage: run
+//! expect-compile: ok
+//! expect-exit: 42
+
+pub fn main() : int32
+{
+    var f32s : float32[3] = {1.5, -2.5, 3.0};
+    var f64s : float64[3] = {4.25, -5.25, 6.0};
+
+    f32s[1] = f32s[0] + f32s[2];
+    f64s[1] = f64s[0] + f64s[2];
+
+    return floatcast(int32, f32s[1] * 4.0)
+         + floatcast(int32, f64s[1] * float64(4.0));
+}

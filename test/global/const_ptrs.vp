@@ -1,0 +1,12 @@
+//! stage: run
+//! expect-compile: ok
+//! expect-exit: 13
+
+var w : int32 = 13;
+let p : const int32* = &w;
+let arr : const int32*[] = {&w};
+
+pub fn main() : int32
+{
+    return *p + *arr[0] - 13;
+}

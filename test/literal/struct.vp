@@ -1,0 +1,71 @@
+//! stage: run
+//! expect-compile: ok
+
+from std::debug import assert
+
+struct S1
+{
+    a, b : int32;
+}
+
+struct S2
+{
+    a : uint8;
+    b : int32;
+    c : uint8;
+}
+
+struct S3
+{
+    a, b : uint8;
+}
+
+struct S4
+{
+    a : uint8[3];
+    b : uint8[5];
+}
+
+pub fn main() : int32
+{
+    {
+    let x : S1;
+    x.a = 1;
+    x.b = 2;
+    assert(x.a == 1);
+    assert(x.b == 2);
+    }
+
+    {
+    let x : S2;
+    x.a = 1;
+    x.b = 2;
+    x.c = 3;
+    assert(x.a == 1);
+    assert(x.b == 2);
+    assert(x.c == 3);
+    }
+
+    {
+    let x : S3[3];
+    let p : uint8* = ptrcast(uint8*, x);
+    p[0] = 0;
+    assert(x[0].a == 0);
+    p[1] = 1;
+    assert(x[0].b == 1);
+    p[2] = 2;
+    assert(x[1].a == 2);
+    p[3] = 3;
+    assert(x[1].b == 3);
+    }
+
+    {
+    let x : S4;
+    let p : uint8* = ptrcast(uint8*, &x);
+    x.a[0] = 6;
+    assert(p[0] == 6);
+    x.b[0] = 7;
+    assert(p[3] == 7);
+    }
+    return 0;
+}

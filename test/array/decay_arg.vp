@@ -1,0 +1,14 @@
+//! stage: run
+//! expect-compile: ok
+//! expect-exit: 42
+
+fn sum(a : int32*) : int32
+{
+    return a[0] + a[1] + a[2];
+}
+
+pub fn main() : int32
+{
+    var a : int32[3] = {10, 12, 20};
+    return sum(a);
+}

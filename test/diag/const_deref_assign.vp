@@ -1,0 +1,11 @@
+//! stage: skip
+//! expect-compile: fail
+//! expect-error: cannot assign to non-lvalue
+
+pub fn main() : int32
+{
+    var x : int32 = 1;
+    let p : const int32* = &x;
+    *p = 2;
+    return x;
+}

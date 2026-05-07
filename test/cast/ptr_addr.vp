@@ -1,0 +1,12 @@
+//! stage: run
+//! expect-compile: ok
+//! expect-exit: 1
+
+pub fn main() : uint32
+{
+    var x : uint32 = 7;
+    let p : uint32* = &x;
+    let addr : usize = ptrcast(usize, p);
+    let q : uint32* = ptrcast(uint32*, addr);
+    return cast(uint32, q == p);
+}

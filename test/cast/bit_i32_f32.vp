@@ -1,0 +1,10 @@
+//! stage: run
+//! expect-compile: ok
+//! expect-exit: 1
+
+pub fn main() : uint32
+{
+    let bits : uint32 = 0x3f800000;
+    let one : float32 = bitcast(float32, bits);
+    return cast(uint32, one == 1.0);
+}

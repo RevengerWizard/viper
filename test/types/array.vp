@@ -1,0 +1,13 @@
+//! stage: run
+//! expect-compile: ok
+//! expect-exit: 60
+
+pub fn main() : int32
+{
+    var a : int32[4];
+    a[0] = 10;
+    a[1] = 20;
+    a[2] = 30;
+    a[3] = 40;
+    return a[1] + a[2] + a[3] - a[0] - 20;
+}

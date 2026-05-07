@@ -1,0 +1,20 @@
+//! stage: compile
+//! expect-compile: ok
+
+struct A
+{
+    x : uint8;
+    y : uint64;
+}
+
+struct B
+{
+    a : A;
+    z : uint8;
+}
+
+#staticassert(sizeof(A) == 16);
+#staticassert(alignof(A) == 8);
+#staticassert(offsetof(A, y) == 8);
+#staticassert(sizeof(B) == 24);
+#staticassert(offsetof(B, z) == 16);

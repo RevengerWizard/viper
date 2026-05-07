@@ -1,0 +1,9 @@
+//! stage: check
+//! expect-compile: fail
+//! expect-error: literal out of range for 'uint32'
+
+pub fn main() : uint32
+{
+    let x : uint32 = 4294967296;
+    return x;
+}

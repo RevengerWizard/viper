@@ -1,0 +1,19 @@
+//! stage: check
+//! expect-compile: fail
+//! expect-error: implicit
+
+fn read_only(data : const int32*) : void
+{
+}
+
+fn read_write(data : int32*) : void
+{
+}
+
+var f1 : fn(const int32*) : void = read_only;
+var f2 : fn(const int32*) : void = read_write;
+
+pub fn main() : int32
+{
+    return 0;
+}

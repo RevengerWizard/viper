@@ -1,0 +1,17 @@
+//! stage: run
+//! expect-compile: ok
+//! expect-exit: 40
+
+fn val(x : int32) : int32
+{
+    switch(x)
+    case 1 return 10;
+    case 2 return 20;
+    case 3 return 40;
+    default return 70;
+}
+
+pub fn main() : int32
+{
+    return val(3);
+}

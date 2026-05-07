@@ -1,0 +1,10 @@
+//! stage: check
+//! expect-compile: fail
+//! expect-error: no field
+
+struct S
+{
+    x : int32;
+}
+
+var off : usize = offsetof(S, y);

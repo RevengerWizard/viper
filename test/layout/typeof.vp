@@ -1,0 +1,10 @@
+//! stage: compile
+//! expect-compile: ok
+
+pub fn main() : int32
+{
+    var a : int32[5];
+    #staticassert(sizeof(typeof(a)) == 20);
+    #staticassert(alignof(typeof(a[0])) == 4);
+    return 0;
+}

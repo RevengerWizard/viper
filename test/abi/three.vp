@@ -1,0 +1,27 @@
+//! stage: run
+//! expect-compile: ok
+//! expect-exit: 66
+
+struct S3
+{
+    a : uint8;
+    b : uint8;
+    c : uint8;
+}
+
+#staticassert(sizeof(S3) == 3);
+
+fn make(a : uint8, b : uint8, c : uint8) : S3
+{
+    return S3::{a = a, b = b, c = c};
+}
+
+fn sum(v : S3) : uint32
+{
+    return v.a + v.b + v.c;
+}
+
+pub fn main() : uint32
+{
+    return sum(make(11, 22, 33));
+}

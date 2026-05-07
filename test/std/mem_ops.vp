@@ -1,0 +1,20 @@
+//! stage: run
+//! expect-compile: ok
+//! expect-exit: 44
+
+import std::mem as mem
+
+pub fn main() : int32
+{
+    var src : uint8[6] = {1, 2, 3, 4, 5, 6};
+    var dst : uint8[6];
+
+    mem::set(dst, 9, 6);
+    if dst[3] != 9 return 1;
+
+    mem::copy(dst, src, 6);
+    if mem::cmp(dst, src, 6) != 0 return 2;
+
+    mem::move(&dst[1], dst, 5);
+    return int32(dst[0]) + int32(dst[1]) + int32(dst[2]) + int32(dst[5]) + 29;
+}

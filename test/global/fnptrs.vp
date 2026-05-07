@@ -1,0 +1,16 @@
+//! stage: run
+//! expect-compile: ok
+//! expect-exit: 19
+
+fn add(a : int32, b : int32) : int32
+{
+    return a + b;
+}
+
+var fns : fn?[3](int32, int32) : int32 = {nil, add, nil};
+
+pub fn main() : int32
+{
+    if fns[0] != nil return 1;
+    return fns[1](9, 10);
+}

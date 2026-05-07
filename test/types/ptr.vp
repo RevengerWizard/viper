@@ -1,0 +1,15 @@
+//! stage: run
+//! expect-compile: ok
+//! expect-exit: 42
+
+fn set(p : int32*) : void
+{
+    *p = 42;
+}
+
+pub fn main() : int32
+{
+    var x : int32 = 0;
+    set(&x);
+    return x;
+}

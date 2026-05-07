@@ -1,0 +1,18 @@
+//! stage: run
+//! expect-compile: ok
+//! expect-exit: 78
+
+union U
+{
+    i : uint32;
+    b : uint8[4];
+}
+
+#staticassert(sizeof(U) == 4);
+
+pub fn main() : uint32
+{
+    var u : U;
+    u.i = 78;
+    return u.b[0];
+}

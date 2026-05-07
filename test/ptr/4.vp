@@ -1,0 +1,9 @@
+//! stage: run
+//! expect-compile: ok
+//! expect-exit: 5
+
+pub fn main() : int32
+{
+    let x : int32 = 3;
+    return ptrcast(int32, (&x + 2) - &x + 3);
+}

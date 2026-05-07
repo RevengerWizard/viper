@@ -1,0 +1,11 @@
+//! stage: run
+//! expect-compile: ok
+//! expect-exit: 3
+
+pub fn main() : int32
+{
+    let x : int32[2];
+    let y : int32* = ptrcast(int32*, &x);
+    *y = 3;
+    return *x;
+}

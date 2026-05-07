@@ -1,0 +1,17 @@
+//! stage: run
+//! expect-compile: ok
+//! expect-exit: 23
+
+fn maybe(ok : bool, p : int32*) : int32*?
+{
+    if ok return p;
+    return nil;
+}
+
+pub fn main() : int32
+{
+    var x : int32 = 23;
+    let p : int32*? = maybe(true, &x);
+    if p == nil return 1;
+    return *p;
+}

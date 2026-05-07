@@ -1,0 +1,10 @@
+//! stage: check
+//! expect-compile: fail
+//! expect-error: cannot assign to 'let' variable
+
+pub fn main() : int32
+{
+    let x : int32 = 1;
+    x += 2;
+    return x;
+}

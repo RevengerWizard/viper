@@ -1,0 +1,11 @@
+//! stage: run
+//! expect-compile: ok
+//! expect-exit: 2
+
+pub fn main() : uint32
+{
+    var x : uint32 = 2;
+    var a : uint32*?[2] = {nil, &x};
+    if a[0] != nil return 1;
+    return *a[1];
+}

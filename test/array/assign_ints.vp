@@ -1,0 +1,39 @@
+//! stage: run
+//! expect-compile: ok
+//! expect-exit: 89
+
+pub fn main() : uint32
+{
+    var u8s : uint8[2] = {1, 2};
+    var i8s : int8[2] = {-3, 4};
+    var u16s : uint16[2] = {5, 6};
+    var i16s : int16[2] = {-7, 8};
+    var u32s : uint32[2] = {9, 10};
+    var i32s : int32[2] = {-11, 12};
+    var u64s : uint64[2] = {13, 14};
+    var i64s : int64[2] = {-15, 16};
+    var usizes : usize[2] = {17, 18};
+    var isizes : isize[2] = {-19, 20};
+
+    u8s[0] = 21;
+    i8s[0] = -22;
+    u16s[0] = 23;
+    i16s[0] = -24;
+    u32s[0] = 25;
+    i32s[0] = -26;
+    u64s[0] = 27;
+    i64s[0] = -28;
+    usizes[0] = 29;
+    isizes[0] = -30;
+
+    return uint32(u8s[0])
+         + uint32(i8s[1] - i8s[0])
+         + uint32(u16s[0] - u16s[1])
+         + uint32(i16s[1] - i16s[0])
+         + uint32(u32s[0] - u32s[1])
+         + uint32(i32s[1] - i32s[0])
+         + uint32(u64s[0] - u64s[1])
+         + uint32(i64s[1] - i64s[0])
+         + uint32(usizes[0] - usizes[1])
+         + uint32(isizes[1] - isizes[0]);
+}

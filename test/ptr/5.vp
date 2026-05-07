@@ -1,0 +1,12 @@
+//! stage: run
+//! expect-compile: ok
+//! expect-exit: 8
+
+pub fn main() : int32
+{
+    var x : int32;
+    var y : int32;
+    x = 3;
+    y = 5;
+    return x + y;
+}

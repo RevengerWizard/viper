@@ -1,0 +1,25 @@
+//! stage: run
+//! expect-compile: ok
+//! expect-exit: 201
+
+struct S1
+{
+    x : uint8;
+}
+
+#staticassert(sizeof(S1) == 1);
+
+fn make(x : uint8) : S1
+{
+    return S1::{x = x};
+}
+
+fn get(s : S1) : uint32
+{
+    return s.x;
+}
+
+pub fn main() : uint32
+{
+    return get(make(201));
+}

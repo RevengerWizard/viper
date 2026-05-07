@@ -1,0 +1,11 @@
+//! stage: run
+//! expect-compile: ok
+//! expect-exit: 2
+
+pub fn main() : uint32
+{
+    let a : bool = cast(bool, 23);
+    let b : uint32 = cast(uint32, a);
+    let c : bool = cast(bool, 0);
+    return b + cast(uint32, !c);
+}

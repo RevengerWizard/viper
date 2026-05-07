@@ -1,0 +1,26 @@
+//! stage: run
+//! expect-compile: ok
+//! expect-exit: 85
+
+struct S2
+{
+    a : uint8;
+    b : uint8;
+}
+
+#staticassert(sizeof(S2) == 2);
+
+fn make(a : uint8, b : uint8) : S2
+{
+    return S2::{a = a, b = b};
+}
+
+fn sum(s : S2) : uint32
+{
+    return s.a + s.b;
+}
+
+pub fn main() : uint32
+{
+    return sum(make(42, 43));
+}

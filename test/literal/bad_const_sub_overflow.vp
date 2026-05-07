@@ -1,0 +1,9 @@
+//! stage: check
+//! expect-compile: fail
+//! expect-error: arithmetic operation overflow of '-'
+
+pub fn main() : int32
+{
+    let x : int16 = int16::min - 1;
+    return int32(x);
+}

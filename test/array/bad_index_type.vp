@@ -1,0 +1,9 @@
+//! stage: check
+//! expect-compile: fail
+//! expect-error: index expression must have type int
+
+pub fn main() : int32
+{
+    var a : int32[2] = {1, 2};
+    return a[true];
+}

@@ -1,0 +1,17 @@
+//! stage: run
+//! expect-compile: ok
+//! expect-exit: 63
+
+import std::str as str
+
+pub fn main() : uint32
+{
+    var buf : uint8[16];
+    let n : usize = str::i32tos(buf, 16, -12345);
+    if n != 6 return 1;
+    if buf[0] != '-' return 2;
+    if buf[1] != '1' return 3;
+    if buf[5] != '5' return 4;
+    if buf[6] != 0 return 5;
+    return uint32(buf[1] - '0') + uint32(buf[2] - '0') * 10 + uint32(buf[5] - '0') * 8;
+}

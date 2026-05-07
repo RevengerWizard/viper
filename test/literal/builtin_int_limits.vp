@@ -1,0 +1,33 @@
+//! stage: run
+//! expect-compile: ok
+//! expect-exit: 0
+
+pub fn main() : int32
+{
+    if uint8::min != 0 return 1;
+    if uint8::max != 255 return 2;
+    if int8::min != -128 return 3;
+    if int8::max != 127 return 4;
+
+    if uint16::min != 0 return 5;
+    if uint16::max != 65535 return 6;
+    if int16::min != -32768 return 7;
+    if int16::max != 32767 return 8;
+
+    if uint32::min != 0 return 9;
+    if uint32::max != 4294967295 return 10;
+    if int32::min + 1 != -2147483647 return 11;
+    if int32::max != 2147483647 return 12;
+
+    if uint64::min != 0 return 13;
+    if uint64::max <= uint64::min return 14;
+    if int64::min + 1 != -9223372036854775807 return 15;
+    if int64::max != 9223372036854775807 return 16;
+
+    if usize::min != 0 return 17;
+    if usize::max <= usize::min return 18;
+    if isize::min >= 0 return 19;
+    if isize::max <= 0 return 20;
+
+    return 0;
+}

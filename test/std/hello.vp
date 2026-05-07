@@ -1,0 +1,15 @@
+//! stage: run
+//! expect-compile: ok
+//! expect-exit: 0
+//! expect-stdout: "hello\n"
+//! expect-stderr: ""
+
+import std::io as io
+
+pub fn main() : uint32
+{
+    io::init();
+    let err : io::IOError;
+    io::write(io::stdin, "hello\n", 6, &err);
+    return uint32(err);
+}

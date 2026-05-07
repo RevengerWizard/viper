@@ -1,0 +1,38 @@
+//! stage: run
+//! expect-compile: ok
+
+from std::debug import assert
+
+struct S
+{
+    a, b : int32;
+}
+
+pub fn main() : int32
+{
+    assert(sizeof(uint8) == 1);
+    assert(sizeof(uint16) == 2);
+    assert(sizeof(uint32) == 4);
+    assert(sizeof(uint64) == 8);
+    assert(sizeof(int8) == 1);
+    assert(sizeof(int16) == 2);
+    assert(sizeof(int32) == 4);
+    assert(sizeof(int64) == 8);
+    assert(sizeof(int8*) == 8);
+    assert(sizeof(int16*) == 8);
+    assert(sizeof(int32*) == 8);
+    assert(sizeof(int64*) == 8);
+    assert(sizeof(int32**) == 8);
+    assert(sizeof(fn[4]() : int32) == 32);
+    assert(sizeof(int32*[4]) == 32);
+    assert(sizeof(int32[4]) == 16);
+    assert(sizeof(int32[3][4]) == 48);
+    assert(sizeof(S) == 8);
+
+    assert(sizeof(float32) == 4);
+    assert(sizeof(float64) == 8);
+
+    assert((sizeof(uint8) << 31 >> 31) == 1);
+    assert((sizeof(uint8) << 63 >> 63) == 1);
+    return 0;
+}

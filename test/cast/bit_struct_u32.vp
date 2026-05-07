@@ -1,0 +1,10 @@
+//! stage: compile
+//! expect-compile: ok
+
+struct Rgba { r : uint8; g : uint8; b : uint8; a : uint8; }
+
+pub fn main() : uint32
+{
+    var color : Rgba = {r = 255, g = 128, b = 64, a = 255};
+    return bitcast(uint32, color);
+}

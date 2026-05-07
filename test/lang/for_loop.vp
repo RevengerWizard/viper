@@ -1,0 +1,13 @@
+//! stage: run
+//! expect-compile: ok
+//! expect-exit: 55
+
+pub fn main() : int32
+{
+    var sum : int32 = 0;
+    for var i : int32 = 1; i <= 10; i += 1
+    {
+        sum += i;
+    }
+    return sum;
+}

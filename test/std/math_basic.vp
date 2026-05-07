@@ -1,0 +1,14 @@
+//! stage: run
+//! expect-compile: ok
+//! expect-exit: 47
+
+import std::math as math
+
+pub fn main() : int32
+{
+    let a : int32 = math::absi32(-12);
+    let b : int64 = math::absi64(-13);
+    let c : float32 = math::absf32(-4.5);
+    let d : float64 = math::floorf64(18.75);
+    return a + intcast(int32, b) + floatcast(int32, c) + floatcast(int32, d);
+}

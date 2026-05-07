@@ -1,0 +1,14 @@
+//! stage: check
+//! expect-compile: fail
+//! expect-error: literal out of range for 'uint8'
+
+enum TooMany : uint8
+{
+    A = 255,
+    B,
+}
+
+pub fn main() : int32
+{
+    return int32(TooMany::A);
+}

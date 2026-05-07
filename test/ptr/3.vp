@@ -1,0 +1,11 @@
+//! stage: run
+//! expect-compile: ok
+//! expect-exit: 5
+
+pub fn main() : int32
+{
+    let x : int32 = 3;
+    let y : int32* = &x;
+    *y = 5;
+    return *y;
+}

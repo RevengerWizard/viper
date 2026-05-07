@@ -1,0 +1,17 @@
+//! stage: run
+//! expect-compile: ok
+//! expect-exit: 78
+
+pub fn main() : int32
+{
+    var grid : int16[3][3];
+    for var y : int32 = 0; y < 3; y++
+    {
+        for var x : int32 = 0; x < 3; x++
+        {
+            grid[y][x] = intcast(int16, y * 10 + x);
+        }
+    }
+    grid[2][1] = 55;
+    return int32(grid[0][2]) + int32(grid[1][2]) + int32(grid[2][1]) + int32(grid[2][2]) - 13;
+}

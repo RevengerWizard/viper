@@ -1,0 +1,12 @@
+//! stage: run
+//! expect-compile: ok
+//! expect-exit: 33
+
+pub fn main() : int32
+{
+    var m : int32[2][3];
+    m[0][0] = 7;
+    m[0][1] = 8;
+    m[1][2] = 18;
+    return m[0][0] + m[0][1] + m[1][2];
+}

@@ -1,0 +1,9 @@
+//! stage: check
+//! expect-compile: fail
+//! expect-error: cannot assign 'nil' to non-nilable type
+
+pub fn main() : int32
+{
+    var p : int32* = nil;
+    return 0;
+}

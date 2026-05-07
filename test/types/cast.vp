@@ -1,0 +1,10 @@
+//! stage: run
+//! expect-compile: ok
+//! expect-exit: 244
+
+pub fn main() : uint32
+{
+    let a : int32 = -12;
+    let b : uint8 = intcast(uint8, a);
+    return uint32(b);
+}

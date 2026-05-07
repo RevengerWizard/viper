@@ -1,0 +1,10 @@
+//! stage: run
+//! expect-compile: ok
+//! expect-exit: 17
+
+pub fn main() : int32
+{
+    let x : int32 = 17;
+    let y : float64 = floatcast(float64, x);
+    return floatcast(int32, y);
+}

@@ -1,0 +1,11 @@
+//! stage: check
+//! expect-compile: fail
+//! expect-error: cannot assign to array
+
+pub fn main() : int32
+{
+    var a1 : int32[5] = {1, 2, 3, 4, 5};
+    var a2 : int32[5];
+    a2 = a1;
+    return 0;
+}
