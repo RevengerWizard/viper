@@ -1,0 +1,10 @@
+//! stage: run
+//! expect-compile: error
+
+struct Foo;         // forward declaration, incomplete
+
+pub fn main() : uint32
+{
+    var p : Foo* = nil;
+    var x = *p;         // error: cannot dereference incomplete type
+}

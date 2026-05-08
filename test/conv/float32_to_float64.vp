@@ -1,0 +1,8 @@
+//! stage: check
+//! expect-compile: error
+
+pub fn main() : void
+{
+    var a : float32 = 1.0f32;
+    var b : float64 = a; // error: no implicit float32->float64
+}

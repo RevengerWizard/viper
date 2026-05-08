@@ -1,0 +1,9 @@
+//! stage: check
+//! expect-compile: ok
+
+pub fn main() : void
+{
+    var a : int32 = 0;
+    var p : int32* = &a;
+    var v : void* = p;   // ok: T* -> void*
+}

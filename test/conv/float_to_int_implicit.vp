@@ -1,0 +1,8 @@
+//! stage: check
+//! expect-compile: error
+
+pub fn main() : void
+{
+    var a : float32 = 1.5;
+    var b : int32 = a;   // error: no implicit float->int
+}

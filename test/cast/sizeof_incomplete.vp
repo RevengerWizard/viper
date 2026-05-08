@@ -1,0 +1,9 @@
+//! stage: run
+//! expect-compile: error
+
+struct Foo;         // forward declaration, incomplete
+
+pub fn main() : uint32
+{
+    var n : usize = sizeof(Foo); // error: sizeof incomplete type
+}

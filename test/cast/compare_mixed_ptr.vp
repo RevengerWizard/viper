@@ -1,0 +1,9 @@
+//! stage: run
+//! expect-compile: error
+
+pub fn main() : uint32
+{
+    var p : int32* = nil;
+    var q : uint8* = nil;
+    var b : bool = p == q;   // error: different pointer types
+}

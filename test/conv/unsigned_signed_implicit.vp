@@ -1,0 +1,8 @@
+//! stage: check
+//! expect-compile: error
+
+pub fn main() : void
+{
+    var a : uint16 = 5;
+    var b : int16 = a;   // error: no implicit unsigned->signed
+}

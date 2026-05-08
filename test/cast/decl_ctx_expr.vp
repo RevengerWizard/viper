@@ -1,0 +1,7 @@
+//! stage: run
+//! expect-compile: ok
+
+pub fn main() : uint32
+{
+    var x : uint16 = 100 + 200; // literals adopt uint16, result is uint16
+}

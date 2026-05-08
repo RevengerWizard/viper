@@ -1,0 +1,8 @@
+//! stage: check
+//! expect-compile: ok
+
+pub fn main() : void
+{
+    var a : int32 = 256;
+    var b : uint8 = intcast(uint8, a);   // ok: truncates to 0
+}

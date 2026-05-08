@@ -1,0 +1,9 @@
+//! stage: run
+//! expect-compile: error
+
+pub fn main() : uint32
+{
+    var a : int32 = 5;
+    var b : int64 = 10;
+    var c = a + b;       // error: types must match (need explicit cast)
+}

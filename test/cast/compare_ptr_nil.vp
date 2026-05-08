@@ -1,0 +1,8 @@
+//! stage: run
+//! expect-compile: ok
+
+pub fn main() : uint32
+{
+    var p : int32* = nil;
+    var b : bool = p == nil; // ok
+}

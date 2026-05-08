@@ -1,0 +1,8 @@
+//! stage: check
+//! expect-compile: ok
+
+pub fn main() : void
+{
+    var f : float32 = 1.0;
+    var bits : uint32 = bitcast(uint32, f); // ok: same size, type pun
+}

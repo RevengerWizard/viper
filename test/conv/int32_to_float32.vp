@@ -1,0 +1,8 @@
+//! stage: check
+//! expect-compile: error
+
+pub fn main() : void
+{
+    var a : int32 = 1;
+    var b : float32 = a; // error: int32 not representable in float32
+}

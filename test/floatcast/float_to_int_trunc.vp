@@ -1,0 +1,8 @@
+//! stage: check
+//! expect-compile: ok
+
+pub fn main() : void
+{
+    var a : float32 = 3.9;
+    var b : int32 = floatcast(int32, a); // ok: truncates to 3
+}

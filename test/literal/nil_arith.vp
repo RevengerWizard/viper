@@ -1,0 +1,7 @@
+//! stage: check
+//! expect-compile: fail
+
+pub fn main() : void
+{
+    let p = nil + 1;  // error: arithmetic on nil
+}

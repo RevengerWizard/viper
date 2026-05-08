@@ -1,0 +1,8 @@
+//! stage: check
+//! expect-compile: error
+
+pub fn main() : void
+{
+    var v : void* = nil;
+    var p : int32* = v;  // error: void* -> T* requires explicit cast
+}

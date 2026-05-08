@@ -1,0 +1,8 @@
+//! stage: check
+//! expect-compile: ok
+
+pub fn main() : void
+{
+    var addr : usize = 0xFFFF0000;
+    var p : uint8* = ptrcast(uint8*, addr); // ok: address as pointer
+}

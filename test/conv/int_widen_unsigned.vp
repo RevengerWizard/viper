@@ -1,0 +1,10 @@
+//! stage: check
+//! expect-compile: ok
+
+pub fn main() : void
+{
+    var a : uint8 = 10;
+    var b : uint16 = a;  // ok: uint8 -> uint16
+    var c : uint32 = b;  // ok: uint16 -> uint32
+    var d : uint64 = c;  // ok: uint32 -> uint64
+}

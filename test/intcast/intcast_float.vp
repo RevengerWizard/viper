@@ -1,0 +1,8 @@
+//! stage: check
+//! expect-compile: error
+
+pub fn main() : void
+{
+    var a : int32 = 5;
+    var b : float32 = intcast(float32, a); // error: target must be integer
+}

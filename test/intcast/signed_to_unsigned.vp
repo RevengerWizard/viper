@@ -1,0 +1,8 @@
+//! stage: check
+//! expect-compile: ok
+
+pub fn main() : void
+{
+    var a : int32 = -1;
+    var b : uint32 = intcast(uint32, a); // ok: wrap-around, b = 0xFFFFFFFF
+}

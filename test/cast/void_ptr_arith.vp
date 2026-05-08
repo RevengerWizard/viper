@@ -1,0 +1,8 @@
+//! stage: run
+//! expect-compile: error
+
+pub fn main() : uint32
+{
+    var v : void* = nil;
+    var q = v + 1;       // error: arithmetic on void*
+}

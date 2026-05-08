@@ -1,0 +1,8 @@
+//! stage: check
+//! expect-compile: ok
+
+pub fn main() : void
+{
+    var a : int32 = 1;
+    var b : float64 = a; // ok: int32 -> float64
+}

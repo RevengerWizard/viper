@@ -1,0 +1,8 @@
+//! stage: check
+//! expect-compile: error
+
+pub fn main() : void
+{
+    var a : uint32 = 0;
+    var b : uint64 = bitcast(uint64, a); // error: size mismatch (4 vs 8 bytes)
+}

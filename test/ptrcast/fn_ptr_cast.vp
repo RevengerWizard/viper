@@ -1,0 +1,11 @@
+//! stage: check
+//! expect-compile: ok
+
+fn foo(x : int32) : int32;
+
+type FnVoid = fn() : void;
+
+pub fn main() : void
+{
+    var fp : FnVoid = ptrcast(FnVoid, foo); // ok: function pointer cast
+}

@@ -1,0 +1,9 @@
+//! stage: run
+//! expect-compile: ok
+
+pub fn main() : uint32
+{
+    var arr : uint8[10];
+    var p : uint8* = cast(uint8*, arr);
+    var q : uint8* = p + 3; // ok: ptr + int
+}

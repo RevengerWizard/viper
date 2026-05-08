@@ -1,0 +1,9 @@
+//! stage: check
+//! expect-compile: ok
+
+pub fn main() : void
+{
+    var p : int32*? = nil;
+    var v : void* = nil;
+    var s : const uint8* = nil;
+}

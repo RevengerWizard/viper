@@ -1,0 +1,9 @@
+//! stage: run
+//! expect-compile: ok
+
+struct Foo;         // forward declaration, incomplete
+
+pub fn main() : uint32
+{
+    var p : Foo* = nil; // ok: pointer to incomplete type
+}

@@ -1,0 +1,9 @@
+//! stage: run
+//! expect-compile: error
+
+pub fn main() : uint32
+{
+    var a : float32 = 1.0;
+    var b : float32 = 1.0;
+    var c = a & b;  // error: & only valid for integer types
+}

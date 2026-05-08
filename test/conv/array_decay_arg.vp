@@ -1,0 +1,10 @@
+//! stage: check
+//! expect-compile: ok
+
+fn takes_ptr(p : uint8*) : void;
+
+pub fn main() : void
+{
+    var buf : uint8[64];
+    takes_ptr(buf);      // ok: T[N] decays to T* in arg ctx
+}

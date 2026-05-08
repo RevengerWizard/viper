@@ -1,0 +1,8 @@
+//! stage: check
+//! expect-compile: error
+
+pub fn main() : void
+{
+    var buf : uint8[64];
+    var p : uint8* = buf; // error: decay only in function arg context
+}

@@ -1,0 +1,8 @@
+//! stage: run
+//! expect-compile: ok
+
+pub fn main() : uint32
+{
+    var a : float64 = 1.0;
+    var b : float64 = -a;   // ok
+}

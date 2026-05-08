@@ -1,0 +1,8 @@
+//! stage: check
+//! expect-compile: ok
+
+pub fn main() : void
+{
+    var a : int64 = 9007199254740993; // > 2^53, not exact in f64
+    var b : float64 = floatcast(float64, a); // ok, precision loss accepted
+}

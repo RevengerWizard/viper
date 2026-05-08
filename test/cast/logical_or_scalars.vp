@@ -1,0 +1,9 @@
+//! stage: run
+//! expect-compile: ok
+
+pub fn main() : uint32
+{
+    var a : int32 = 0;
+    var b : int32 = 1;
+    var r : bool = a or b;  // ok: scalars converted to bool first
+}
