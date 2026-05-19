@@ -78,6 +78,15 @@ Searches backwards for *first occurrence* of `needle` inside `hay`
 ## std::conv
 
 ```vp
+pub enum ConvError : uint32
+{
+    OK,
+    INVALID,    // bad characters
+    OVERFLOW,   // out of range for target type
+    UNDERFLOW,
+    EMPTY       // zero-length input 
+}
+
 // int -> str
 pub fn i8tos(buf : uint8*, len : usize, num : int8) : usize;
 pub fn u8tos(buf : uint8*, len : usize, num : uint8) : usize;
@@ -96,22 +105,21 @@ pub fn f64tos(buf : uint8*, len : usize, num : float64) : usize;
 pub fn booltos(buf : uint8*, len : usize, val : bool) : usize;
 
 // str -> int
-pub fn stoi8(s : const uint8*, slen : usize, base : uint8, ok : bool*?) : int8;
-pub fn stou8(s : const uint8*, slen : usize, base : uint8, ok : bool*?) : uint8;
-pub fn stoi16(s : const uint8*, slen : usize, base : uint8, ok : bool*?) : int16;
-pub fn stou16(s : const uint8*, slen : usize, base : uint8, ok : bool*?) : uint16;
-pub fn stoi32(s : const uint8*, slen : usize, base : uint8, ok : bool*?) : int32;
-pub fn stou32(s : const uint8*, slen : usize, base : uint8, ok : bool*?) : uint32;
-pub fn stoi64(s : const uint8*, slen : usize, base : uint8, ok : bool*?) : int64;
-pub fn stou64(s : const uint8*, slen : usize, base : uint8, ok : bool*?) : uint64;
+pub fn stoi8(s : const uint8*, slen : usize, base : uint8, err : ConvError*?) : int8;
+pub fn stou8(s : const uint8*, slen : usize, base : uint8, err : ConvError*?) : uint8;
+pub fn stoi16(s : const uint8*, slen : usize, base : uint8, err : ConvError*?) : int16;
+pub fn stou16(s : const uint8*, slen : usize, base : uint8, err : ConvError*?) : uint16;
+pub fn stoi32(s : const uint8*, slen : usize, base : uint8, err : ConvError*?) : int32;
+pub fn stou32(s : const uint8*, slen : usize, base : uint8, err : ConvError*?) : uint32;
+pub fn stoi64(s : const uint8*, slen : usize, base : uint8, err : ConvError*?) : int64;
+pub fn stou64(s : const uint8*, slen : usize, base : uint8, err : ConvError*?) : uint64;
  
 // str -> float
-pub fn stof32(s : const uint8*, slen : usize, ok : bool*?) : float32;
-pub fn stof64(s : const uint8*, slen : usize, ok : bool*?) : float64;
+pub fn stof32(s : const uint8*, slen : usize, err : ConvError*?) : float32;
+pub fn stof64(s : const uint8*, slen : usize, err : ConvError*?) : float64;
  
 // str -> bool
-pub fn stobool(s : const uint8*, slen : usize, ok : bool*?) : bool;
-
+pub fn stobool(s : const uint8*, slen : usize, err : ConvError*?) : bool;
 ```
 
 ---
@@ -188,6 +196,14 @@ Precision
 - `%.2f32` -> `3.14`
 - `%.5s` -> at most 5 bytes
 
+```vp
+pub fn print(fmt : const uint8*, args : ...) : void;
+
+pub fn fprint(f : FILE*, fmt : const uint8*, args : ...) : void;
+
+pub fn sprint(buf : uint8*?, n : usize, fmt : const uint8*, args : ...) : usize;
+```
+
 ---
 
 ## std::io
@@ -236,6 +252,8 @@ pub fn seek(f : FILE*, ofs : isize, pos : SeekPos, res : IOError*?) : usize;
 pub fn tell(f : FILE*, res : IOError*?) : usize;
 
 pub fn eof(f : FILE*) : bool;
+
+pub fn putc(c : uint8) : void;
 ```
 
 ---
