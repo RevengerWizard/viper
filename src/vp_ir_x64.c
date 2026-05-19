@@ -17,17 +17,6 @@
 #include "vp_low.h"
 #include "vp_buf.h"
 
-static const X64Reg irx64R[][X64_IREG] = {
-    {AL,  CL,  DL,  BL,  SPL, BPL, SIL, DIL, R8B, R9B, R10B, R11B, R12B, R13B, R14B, R15B},
-    {AX,  CX,  DX,  BX,  SP,  BP,  SI,  DI,  R8W, R9W, R10W, R11W, R12W, R13W, R14W, R15W},
-    {EAX, ECX, EDX, EBX, ESP, EBP, ESI, EDI, R8D, R9D, R10D, R11D, R12D, R13D, R14D, R15D},
-    {RAX, RCX, RDX, RBX, RSP, RBP, RSI, RDI, R8,  R9,  R10,  R11,  R12,  R13,  R14,  R15}
-};
-
-static const X64Reg irx64X[] = {
-    XMM0, XMM1, XMM2, XMM3, XMM4, XMM5, XMM6, XMM7, XMM8, XMM9, XMM10, XMM11, XMM12, XMM13, XMM14, XMM15
-};
-
 static void emit_mov(VReg* dst, VReg* src)
 {
     if(vrf_flo(dst))
@@ -37,8 +26,8 @@ static void emit_mov(VReg* dst, VReg* src)
         {
             switch(src->vsize)
             {
-            case VRSize4: EMITX64(movdXR)(irx64X[dst->phys], irx64R[VRSize8][src->phys]); break;
-            case VRSize8: EMITX64(movqXR)(irx64X[dst->phys], irx64R[VRSize8][src->phys]); break;
+            case VRSize4: EMITX64(movdXR)(x64X[dst->phys], x64R[VRSize8][src->phys]); break;
+            case VRSize8: EMITX64(movqXR)(x64X[dst->phys], x64R[VRSize8][src->phys]); break;
             default: vp_assertX(0, "?"); break;
             }
         }
@@ -48,8 +37,8 @@ static void emit_mov(VReg* dst, VReg* src)
             {
                 switch(src->vsize)
                 {
-                case VRSize4: EMITX64(movssXX)(irx64X[dst->phys], irx64X[src->phys]); break;
-                case VRSize8: EMITX64(movsdXX)(irx64X[dst->phys], irx64X[src->phys]); break;
+                case VRSize4: EMITX64(movssXX)(x64X[dst->phys], x64X[src->phys]); break;
+                case VRSize8: EMITX64(movsdXX)(x64X[dst->phys], x64X[src->phys]); break;
                 default: vp_assertX(0, "?"); break;
                 }
             }
@@ -60,13 +49,13 @@ static void emit_mov(VReg* dst, VReg* src)
         VRSize p = src->vsize;
         if(vrf_const(src))
         {
-            EMITX64(movRI)(irx64R[p][dst->phys], src->i64);
+            EMITX64(movRI)(x64R[p][dst->phys], src->i64);
         }
         else
         {
             if(dst->phys != src->phys)
             {
-                EMITX64(movRR)(irx64R[p][dst->phys], irx64R[p][src->phys]);
+                EMITX64(movRR)(x64R[p][dst->phys], x64R[p][src->phys]);
             }
         }
     }
@@ -75,7 +64,7 @@ static void emit_mov(VReg* dst, VReg* src)
 static void irX64_bofs(IR* ir)
 {
     int64_t ofs = ir->bofs.fi->ofs + ir->bofs.ofs;
-    EMITX64(leaRM)(irx64R[VRSize8][ir->dst->phys], X64MEM(RN_BP, NOREG, 1, ofs, 8));
+    EMITX64(leaRM)(x64R[VRSize8][ir->dst->phys], X64MEM(RN_BP, NOREG, 1, ofs, 8));
 }
 
 static void irX64_iofs(IR* ir)
@@ -84,11 +73,11 @@ static void irX64_iofs(IR* ir)
     int64_t ofs = ir->iofs.ofs;
     if(ir->iofs.got)
     {
-        EMITX64(movRM)(irx64R[VRSize8][ir->dst->phys], X64MEM_RIP(ofs, 8));
+        EMITX64(movRM)(x64R[VRSize8][ir->dst->phys], X64MEM_RIP(ofs, 8));
     }
     else
     {
-        EMITX64(leaRM)(irx64R[VRSize8][ir->dst->phys], X64MEM_RIP(ofs, 8));
+        EMITX64(leaRM)(x64R[VRSize8][ir->dst->phys], X64MEM_RIP(ofs, 8));
     }
     uint32_t patch = sbuf_len(&V->code) - 4;
     if(ir->iofs.isfn)
@@ -110,7 +99,7 @@ static void irX64_iofs(IR* ir)
 static void irX64_sofs(IR* ir)
 {
     int64_t ofs = ir->sofs.ofs;
-    EMITX64(leaRM)(irx64R[VRSize8][ir->dst->phys], X64MEM(RN_SP, NOREG, 1, ofs, 8));
+    EMITX64(leaRM)(x64R[VRSize8][ir->dst->phys], X64MEM(RN_SP, NOREG, 1, ofs, 8));
 }
 
 static void irX64_mov(IR* ir)
@@ -139,7 +128,7 @@ static void irX64_store(IR* ir)
     if(vrf_flo(ir->src1))
     {
         vp_assertX(!vrf_const(ir->src1), "const src1");
-        X64Reg src = irx64X[ir->src1->phys];
+        X64Reg src = x64X[ir->src1->phys];
         switch(ir->src1->vsize)
         {
         case VRSize4: EMITX64(movssMX)(dst, src); break;
@@ -157,7 +146,7 @@ static void irX64_store(IR* ir)
         }
         else
         {
-            X64Reg src = irx64R[p][ir->src1->phys];
+            X64Reg src = x64R[p][ir->src1->phys];
             EMITX64(movMR)(dst, src);
         }
     }
@@ -186,8 +175,8 @@ static void irX64_load(IR* ir)
         vp_assertX(!vrf_const(ir->src1), "const src1");
         switch(ir->dst->vsize)
         {
-        case VRSize4: EMITX64(movssXM)(irx64X[ir->dst->phys], mem); break;
-        case VRSize8: EMITX64(movsdXM)(irx64X[ir->dst->phys], mem); break;
+        case VRSize4: EMITX64(movssXM)(x64X[ir->dst->phys], mem); break;
+        case VRSize8: EMITX64(movsdXM)(x64X[ir->dst->phys], mem); break;
         default: vp_assertX(0, "?"); break;
         }
     }
@@ -201,7 +190,7 @@ static void irX64_load(IR* ir)
         }
         else
         {
-            EMITX64(movRM)(irx64R[p][ir->dst->phys], mem);
+            EMITX64(movRM)(x64R[p][ir->dst->phys], mem);
         }
     }
 }
@@ -222,8 +211,8 @@ static void irX64_pusharg(IR* ir)
         {
             switch(ir->src1->vsize)
             {
-            case VRSize4: EMITX64(movssXX)(irx64X[dst], irx64X[ir->src1->phys]); break;
-            case VRSize8: EMITX64(movsdXX)(irx64X[dst], irx64X[ir->src1->phys]); break;
+            case VRSize4: EMITX64(movssXX)(x64X[dst], x64X[ir->src1->phys]); break;
+            case VRSize8: EMITX64(movsdXX)(x64X[dst], x64X[ir->src1->phys]); break;
             default: vp_assertX(0, "?"); break;
             }
         }
@@ -233,11 +222,11 @@ static void irX64_pusharg(IR* ir)
         VRSize p = ir->src1->vsize;
         if(vrf_const(ir->src1))
         {
-            EMITX64(movRI)(irx64R[p][dst], ir->src1->i64);
+            EMITX64(movRI)(x64R[p][dst], ir->src1->i64);
         }
         else if(dst != ir->src1->phys)
         {
-            EMITX64(movRR)(irx64R[p][dst], irx64R[p][ir->src1->phys]);
+            EMITX64(movRR)(x64R[p][dst], x64R[p][ir->src1->phys]);
         }
     }
 }
@@ -266,7 +255,7 @@ static void irX64_call(IR* ir)
     else
     {
         vp_assertX(!vrf_const(ir->src1), "const src1");
-        EMITX64(callR)(irx64R[VRSize8][ir->src1->phys]);
+        EMITX64(callR)(x64R[VRSize8][ir->src1->phys]);
     }
 
     FrameInfo* fi = ir->call->fi;
@@ -277,7 +266,7 @@ static void irX64_call(IR* ir)
         /* Small struct returned in RAX, store into local frame slot */
         uint32_t p = vp_msb(ir->call->retsize);
         EMITX64(movMR)(X64MEM(RN_BP, NOREG, 1, fi->ofs, 8),
-                        irx64R[p][RN_AX]);
+                        x64R[p][RN_AX]);
     }
     else if(ir->dst)
     {
@@ -287,8 +276,8 @@ static void irX64_call(IR* ir)
             {
                 switch(ir->dst->vsize)
                 {
-                case VRSize4: EMITX64(movssXX)(irx64X[ir->dst->phys], irx64X[XN_0]); break;
-                case VRSize8: EMITX64(movsdXX)(irx64X[ir->dst->phys], irx64X[XN_0]); break;
+                case VRSize4: EMITX64(movssXX)(x64X[ir->dst->phys], x64X[XN_0]); break;
+                case VRSize8: EMITX64(movsdXX)(x64X[ir->dst->phys], x64X[XN_0]); break;
                 default: vp_assertX(0, "?");
                 }
             }
@@ -299,7 +288,7 @@ static void irX64_call(IR* ir)
             {
                 VRSize p = ir->dst->vsize;
                 vp_assertVSize(p, VRSize1, VRSize8);
-                EMITX64(movRR)(irx64R[p][ir->dst->phys], irx64R[p][RN_AX]);
+                EMITX64(movRR)(x64R[p][ir->dst->phys], x64R[p][RN_AX]);
             }
         }
     }
@@ -318,8 +307,8 @@ static void irX64_cast(IR* ir)
             /* float -> float */
             vp_assertX(!vrf_const(ir->src1), "const src1");
             vp_assertX(ir->dst->vsize != ir->src1->vsize, "dst == src1");
-            X64Reg dst = irx64X[ir->dst->phys];
-            X64Reg src = irx64X[ir->src1->phys];
+            X64Reg dst = x64X[ir->dst->phys];
+            X64Reg src = x64X[ir->src1->phys];
             switch(ir->dst->vsize)
             {
             case VRSize4: EMITX64(cvtsd2ssXX)(dst, src); break;
@@ -335,16 +324,16 @@ static void irX64_cast(IR* ir)
             {
                 if(ir->cast.srcunsigned)
                 {
-                    EMITX64(movzxRR)(irx64R[VRSize4][ir->src1->phys], irx64R[ps][ir->src1->phys]);
+                    EMITX64(movzxRR)(x64R[VRSize4][ir->src1->phys], x64R[ps][ir->src1->phys]);
                 }
                 else
                 {
-                    EMITX64(movsxRR)(irx64R[VRSize4][ir->src1->phys], irx64R[ps][ir->src1->phys]);
+                    EMITX64(movsxRR)(x64R[VRSize4][ir->src1->phys], x64R[ps][ir->src1->phys]);
                 }
                 ps = VRSize4;
             }
-            X64Reg dst = irx64X[ir->dst->phys];
-            X64Reg src = irx64R[ps][ir->src1->phys];
+            X64Reg dst = x64X[ir->dst->phys];
+            X64Reg src = x64R[ps][ir->src1->phys];
             if(!ir->cast.srcunsigned)
             {
                 switch(ir->dst->vsize)
@@ -358,8 +347,8 @@ static void irX64_cast(IR* ir)
             {
                 switch(ir->dst->vsize)
                 {
-                case VRSize4: EMITX64(cvtsi2ssXR)(dst, irx64R[VRSize8][ir->src1->phys]); break;
-                case VRSize8: EMITX64(cvtsi2sdXR)(dst, irx64R[VRSize8][ir->src1->phys]); break;
+                case VRSize4: EMITX64(cvtsi2ssXR)(dst, x64R[VRSize8][ir->src1->phys]); break;
+                case VRSize8: EMITX64(cvtsi2sdXR)(dst, x64R[VRSize8][ir->src1->phys]); break;
                 default: vp_assertX(0, "?"); break;
                 }
             }
@@ -380,8 +369,8 @@ static void irX64_cast(IR* ir)
         }
         switch(ir->src1->vsize)
         {
-        case VRSize4: EMITX64(cvttss2siRX)(irx64R[pd][ir->dst->phys], irx64X[ir->src1->phys]); break;
-        case VRSize8: EMITX64(cvttsd2siRX)(irx64R[pd][ir->dst->phys], irx64X[ir->src1->phys]); break;
+        case VRSize4: EMITX64(cvttss2siRX)(x64R[pd][ir->dst->phys], x64X[ir->src1->phys]); break;
+        case VRSize8: EMITX64(cvttsd2siRX)(x64R[pd][ir->dst->phys], x64X[ir->src1->phys]); break;
         default: vp_assertX(0, "?"); break;
         }
     }
@@ -394,7 +383,7 @@ static void irX64_cast(IR* ir)
             {
                 VRSize p = ir->dst->vsize;
                 vp_assertVSize(p, VRSize1, VRSize8);
-                EMITX64(movRR)(irx64R[p][ir->dst->phys], irx64R[p][ir->src1->phys]);
+                EMITX64(movRR)(x64R[p][ir->dst->phys], x64R[p][ir->src1->phys]);
             }
         }
         else
@@ -408,16 +397,16 @@ static void irX64_cast(IR* ir)
                 if(ps == VRSize4)
                 {
                     /* MOVZX 64bit, 32bit doesn't exist! */
-                    EMITX64(movRR)(irx64R[ps][ir->dst->phys], irx64R[ps][ir->src1->phys]);
+                    EMITX64(movRR)(x64R[ps][ir->dst->phys], x64R[ps][ir->src1->phys]);
                 }
                 else
                 {
-                    EMITX64(movzxRR)(irx64R[pd][ir->dst->phys], irx64R[ps][ir->src1->phys]);
+                    EMITX64(movzxRR)(x64R[pd][ir->dst->phys], x64R[ps][ir->src1->phys]);
                 }
             }
             else
             {
-                EMITX64(movsxRR)(irx64R[pd][ir->dst->phys], irx64R[ps][ir->src1->phys]);
+                EMITX64(movsxRR)(x64R[pd][ir->dst->phys], x64R[ps][ir->src1->phys]);
             }
         }
     }
@@ -439,8 +428,8 @@ static void cmp_vregs(VReg* src1, VReg* src2, CondKind cond)
     if(vrf_flo(src1))
     {
         vp_assertX((src2->flag & (VRF_FLO | VRF_CONST)) == VRF_FLO, "?");
-        X64Reg s1 = irx64X[src1->phys];
-        X64Reg s2 = irx64X[src2->phys];
+        X64Reg s1 = x64X[src1->phys];
+        X64Reg s2 = x64X[src2->phys];
         if((cond & COND_MASK) <= COND_NEQ)
         {
             switch(src1->vsize)
@@ -465,7 +454,7 @@ static void cmp_vregs(VReg* src1, VReg* src2, CondKind cond)
         vp_assertX(!vrf_const(src1), "const src");
         VRSize p = src1->vsize;
         vp_assertVSize(p, VRSize1, VRSize8);
-        X64Reg s1 = irx64R[p][src1->phys];
+        X64Reg s1 = x64R[p][src1->phys];
         X64Reg s2;
         if(vrf_const(src2) && src2->i64 == 0)
         {
@@ -479,7 +468,7 @@ static void cmp_vregs(VReg* src1, VReg* src2, CondKind cond)
             }
             else
             {
-                s2 = irx64R[p][src2->phys];
+                s2 = x64R[p][src2->phys];
                 EMITX64(cmpRR)(s1, s2);
             }
         }
@@ -514,7 +503,7 @@ static void irX64_cond(IR* ir)
 {
     VReg* src1 = ir->src1, *src2 = ir->src2;
     vp_assertX(!vrf_const(ir->dst), "const dst");
-    X64Reg dst = irx64R[VRSize1][ir->dst->phys];
+    X64Reg dst = x64R[VRSize1][ir->dst->phys];
     CondKind cond = ir->cond;
     if(cond & COND_FLO)
     {
@@ -529,7 +518,7 @@ static void irX64_cond(IR* ir)
             else EMITX64(setcc)(CC_P, dst);
             EMITX64(jccREL32)(CC_E, 5); /* Jump 5 bytes to movsx if equal */
             EMITX64(movRI)(dst, cond != COND_EQ ? 1 : 0);
-            EMITX64(movsxRR)(irx64R[VRSize4][ir->dst->phys], dst);
+            EMITX64(movsxRR)(x64R[VRSize4][ir->dst->phys], dst);
             return;
         }
         case COND_LT: case COND_LE:
@@ -549,7 +538,7 @@ static void irX64_cond(IR* ir)
 
     X64CC cc = cond2cc(cond);
     EMITX64(setcc)(cc, dst);
-    EMITX64(movsxRR)(irx64R[VRSize4][ir->dst->phys], dst);
+    EMITX64(movsxRR)(x64R[VRSize4][ir->dst->phys], dst);
 }
 
 static void irX64_jmp(IR* ir)
@@ -612,12 +601,12 @@ static void irX64_tjmp(IR* ir)
     {
         if(vs == VRSize4)
         {
-            EMITX64(movRR)(irx64R[vs][phys], irx64R[vs][phys]);
+            EMITX64(movRR)(x64R[vs][phys], x64R[vs][phys]);
         }
         else
         {
             /* VRSize1: zero-extend */
-            EMITX64(movzxRR)(irx64R[VRSize8][phys], irx64R[vs][phys]);
+            EMITX64(movzxRR)(x64R[VRSize8][phys], x64R[vs][phys]);
         }
     }
 
@@ -646,7 +635,7 @@ static void irX64_tjmp(IR* ir)
         vec_push(V->relocs, rel);
     }
 
-    EMITX64(leaRM)(irx64R[VRSize8][tab], X64MEM_RIP(0, 8));
+    EMITX64(leaRM)(x64R[VRSize8][tab], X64MEM_RIP(0, 8));
     patchinfo_leaabs(jtname, sbuf_len(&V->code) - 4);
 
     X64Mem indirect = X64MEM(tab, phys, 8, 0, 8);
@@ -660,8 +649,8 @@ static void irX64_add(IR* ir)
     {
         vp_assertX(!vrf_const(ir->src1), "const src1");
         vp_assertX(!vrf_const(ir->src2), "const src2");
-        X64Reg dst = irx64X[ir->dst->phys];
-        X64Reg src = irx64X[ir->src2->phys];
+        X64Reg dst = x64X[ir->dst->phys];
+        X64Reg src = x64X[ir->src2->phys];
         switch(ir->dst->vsize)
         {
         case VRSize4: EMITX64(addssXX)(dst, src); break;
@@ -674,7 +663,7 @@ static void irX64_add(IR* ir)
         vp_assertX(!vrf_const(ir->src1), "const src1");
         VRSize p = ir->dst->vsize;
         vp_assertVSize(p, VRSize1, VRSize8);
-        X64Reg dst = irx64R[p][ir->dst->phys];
+        X64Reg dst = x64R[p][ir->dst->phys];
         if(vrf_const(ir->src2))
         {
             switch(ir->src2->i64)
@@ -687,7 +676,7 @@ static void irX64_add(IR* ir)
         }
         else
         {
-            EMITX64(addRR)(dst, irx64R[p][ir->src2->phys]);
+            EMITX64(addRR)(dst, x64R[p][ir->src2->phys]);
         }
     }
 }
@@ -699,8 +688,8 @@ static void irX64_sub(IR* ir)
     {
         vp_assertX(!vrf_const(ir->src1), "const src1");
         vp_assertX(!vrf_const(ir->src2), "const src2");
-        X64Reg dst = irx64X[ir->dst->phys];
-        X64Reg src = irx64X[ir->src2->phys];
+        X64Reg dst = x64X[ir->dst->phys];
+        X64Reg src = x64X[ir->src2->phys];
         switch(ir->dst->vsize)
         {
         case VRSize4: EMITX64(subssXX)(dst, src); break;
@@ -713,7 +702,7 @@ static void irX64_sub(IR* ir)
         vp_assertX(!vrf_const(ir->src1), "const src1");
         VRSize p = ir->dst->vsize;
         vp_assertVSize(p, VRSize1, VRSize8);
-        X64Reg dst = irx64R[p][ir->dst->phys];
+        X64Reg dst = x64R[p][ir->dst->phys];
         if(vrf_const(ir->src2))
         {
             switch(ir->src2->i64)
@@ -726,7 +715,7 @@ static void irX64_sub(IR* ir)
         }
         else
         {
-            EMITX64(subRR)(dst, irx64R[p][ir->src2->phys]);
+            EMITX64(subRR)(dst, x64R[p][ir->src2->phys]);
         }
     }
 }
@@ -738,8 +727,8 @@ static void irX64_mul(IR* ir)
     if(vrf_flo(ir->dst))
     {
         vp_assertX(ir->dst->phys == ir->src1->phys, "dst != src1");
-        X64Reg dst = irx64X[ir->dst->phys];
-        X64Reg src = irx64X[ir->src2->phys];
+        X64Reg dst = x64X[ir->dst->phys];
+        X64Reg src = x64X[ir->src2->phys];
         switch(ir->dst->vsize)
         {
         case VRSize4: EMITX64(mulssXX)(dst, src); break;
@@ -754,15 +743,15 @@ static void irX64_mul(IR* ir)
         vp_assertX(ir->src2->phys != RN_AX, "src2 == RAX");
         VRSize p = ir->dst->vsize;
         vp_assertVSize(p, VRSize1, VRSize8);
-        X64Reg a = irx64R[p][RN_AX];
+        X64Reg a = x64R[p][RN_AX];
         if(ir->src1->phys != RN_AX)
         {
-            EMITX64(movRR)(a, irx64R[p][ir->src1->phys]);
+            EMITX64(movRR)(a, x64R[p][ir->src1->phys]);
         }
-        EMITX64(mulR)(irx64R[p][ir->src2->phys]);
+        EMITX64(mulR)(x64R[p][ir->src2->phys]);
         if(ir->dst->phys != RN_AX)
         {
-            EMITX64(movRR)(irx64R[p][ir->dst->phys], a);
+            EMITX64(movRR)(x64R[p][ir->dst->phys], a);
         }
     }
 }
@@ -775,8 +764,8 @@ static void irX64_div(IR* ir)
     {
         vp_assertX(!vrf_const(ir->src1), "const src1");
         vp_assertX(!vrf_const(ir->src2), "const src2");
-        X64Reg dst = irx64X[ir->dst->phys];
-        X64Reg src = irx64X[ir->src2->phys];
+        X64Reg dst = x64X[ir->dst->phys];
+        X64Reg src = x64X[ir->src2->phys];
         switch(ir->dst->vsize)
         {
         case VRSize4: EMITX64(divssXX)(dst, src); break;
@@ -792,17 +781,17 @@ static void irX64_div(IR* ir)
         if(!irf_unsigned(ir))
         {
             if(ir->src1->phys != RN_AX)
-                EMITX64(movsxRR)(AX, irx64R[VRSize1][ir->src1->phys]);
-            EMITX64(divR)(irx64R[VRSize1][ir->src2->phys]);
+                EMITX64(movsxRR)(AX, x64R[VRSize1][ir->src1->phys]);
+            EMITX64(idivR)(x64R[VRSize1][ir->src2->phys]);
         }
         else
         {
             if(ir->src1->phys != RN_AX)
-                EMITX64(movzxRR)(AX, irx64R[VRSize1][ir->src1->phys]);
-            EMITX64(idivR)(irx64R[VRSize1][ir->src2->phys]);
+                EMITX64(movzxRR)(AX, x64R[VRSize1][ir->src1->phys]);
+            EMITX64(divR)(x64R[VRSize1][ir->src2->phys]);
         }
         if(ir->dst->phys != RN_AX)
-            EMITX64(movRR)(irx64R[VRSize1][ir->dst->phys], AL);
+            EMITX64(movRR)(x64R[VRSize1][ir->dst->phys], AL);
     }
     else
     {
@@ -811,10 +800,10 @@ static void irX64_div(IR* ir)
         /* Break RAX, RDX */
         VRSize p = ir->dst->vsize;
         vp_assertVSize(p, VRSize1, VRSize8);
-        X64Reg a = irx64R[p][RN_AX];
+        X64Reg a = x64R[p][RN_AX];
         if(ir->src1->phys != RN_AX)
         {
-            EMITX64(movRR)(a, irx64R[p][ir->src1->phys]);
+            EMITX64(movRR)(a, x64R[p][ir->src1->phys]);
         }
         if(!irf_unsigned(ir))
         {
@@ -825,18 +814,18 @@ static void irX64_div(IR* ir)
             case VRSize8: EMITX64(cqo)(); break;
             default: vp_assertX(0, "?");
             }
-            EMITX64(idivR)(irx64R[p][ir->src2->phys]);
+            EMITX64(idivR)(x64R[p][ir->src2->phys]);
         }
         else
         {
             vp_assertX(p != VRSize1, "r8?");
-            X64Reg d = irx64R[p][RN_DX];
+            X64Reg d = x64R[p][RN_DX];
             EMITX64(xorRR)(d, d);
-            EMITX64(divR)(irx64R[p][ir->src2->phys]);
+            EMITX64(divR)(x64R[p][ir->src2->phys]);
         }
         if(ir->dst->phys != RN_AX)
         {
-            EMITX64(movRR)(irx64R[p][ir->dst->phys], a);
+            EMITX64(movRR)(x64R[p][ir->dst->phys], a);
         }
     }
 }
@@ -847,34 +836,63 @@ static void irX64_mod(IR* ir)
             !vrf_const(ir->src2), "const src1 and src2");
     vp_assertX(ir->dst->phys == ir->src1->phys, "dst != src1");
     vp_assertX(ir->src2->phys != 0, "dst == RAX");
-    /* Break RAX, RDX */
-    VRSize p = ir->dst->vsize;
-    vp_assertVSize(p, VRSize1, VRSize8);
-    X64Reg a = irx64R[p][RN_AX];
-    X64Reg d = irx64R[p][RN_DX];
-    if(ir->src1->phys != RN_AX)
+    if(ir->dst->vsize == VRSize1)
     {
-        EMITX64(movRR)(a, irx64R[p][ir->src1->phys]);
-    }
-    if(!irf_unsigned(ir))
-    {
-        switch(p)
+        /* Break AX */
+        if(!irf_unsigned(ir))
         {
-        case VRSize2: EMITX64(cwde)(); break;
-        case VRSize4: EMITX64(cdq)(); break;
-        case VRSize8: EMITX64(cqo)(); break;
-        default: vp_assertX(0, "?");
+            if(ir->src1->phys != RN_AX)
+                EMITX64(movsxRR)(AX, x64R[VRSize1][ir->src1->phys]);
+            EMITX64(idivR)(x64R[VRSize1][ir->src2->phys]);
         }
-        EMITX64(idivR)(ir->src2->phys);
+        else
+        {
+            if(ir->src1->phys != RN_AX)
+                EMITX64(movzxRR)(AX, x64R[VRSize1][ir->src1->phys]);
+            EMITX64(divR)(x64R[VRSize1][ir->src2->phys]);
+        }
+        /* Cannot MOV directly from AH to R8B */
+        EMITX64(movRR)(AH, AL);
+        if(ir->dst->phys != RN_AX)
+            EMITX64(movRR)(x64R[VRSize1][ir->dst->phys], AL);
     }
     else
     {
-        EMITX64(xorRR)(d, d);
-        EMITX64(divR)(ir->src2->phys);
-    }
-    if(ir->dst->phys != RN_DX)
-    {
-        EMITX64(movRR)(irx64R[p][ir->dst->phys], d);
+        /* Break RAX, RDX */
+        VRSize p = ir->dst->vsize;
+        vp_assertVSize(p, VRSize1, VRSize8);
+        X64Reg a = x64R[p][RN_AX];
+        X64Reg d = x64R[p][RN_DX];
+        if(ir->src1->phys != RN_AX)
+        {
+            EMITX64(movRR)(a, x64R[p][ir->src1->phys]);
+        }
+        if(!irf_unsigned(ir))
+        {
+            switch(p)
+            {
+            case VRSize2: EMITX64(cwde)(); break;
+            case VRSize4: EMITX64(cdq)(); break;
+            case VRSize8: EMITX64(cqo)(); break;
+            default: vp_assertX(0, "?");
+            }
+            EMITX64(idivR)(ir->src2->phys);
+        }
+        else
+        {
+            switch(p)
+            {
+            case VRSize2: EMITX64(xorRR)(DX, DX); break;
+            case VRSize4: EMITX64(xorRR)(EDX, EDX); break;
+            case VRSize8: EMITX64(xorRR)(EDX, EDX); break;
+            default: vp_assertX(0, "?");
+            }
+            EMITX64(divR)(x64R[p][ir->src2->phys]);
+        }
+        if(ir->dst->phys != RN_DX)
+        {
+            EMITX64(movRR)(x64R[p][ir->dst->phys], d);
+        }
     }
 }
 
@@ -884,14 +902,14 @@ static void irX64_band(IR* ir)
     vp_assertX(!vrf_const(ir->src1), "const src1");
     VRSize p = ir->dst->vsize;
     vp_assertVSize(p, VRSize1, VRSize8);
-    X64Reg dst = irx64R[p][ir->dst->phys];
+    X64Reg dst = x64R[p][ir->dst->phys];
     if(vrf_const(ir->src2))
     {
         EMITX64(andRI)(dst, ir->src2->i64);
     }
     else
     {
-        EMITX64(andRR)(dst, irx64R[p][ir->src2->phys]);
+        EMITX64(andRR)(dst, x64R[p][ir->src2->phys]);
     }
 }
 
@@ -901,14 +919,14 @@ static void irX64_bor(IR* ir)
     vp_assertX(!vrf_const(ir->src1), "const src1");
     VRSize p = ir->dst->vsize;
     vp_assertVSize(p, VRSize1, VRSize8);
-    X64Reg dst = irx64R[p][ir->dst->phys];
+    X64Reg dst = x64R[p][ir->dst->phys];
     if(vrf_const(ir->src2))
     {
         EMITX64(orRI)(dst, ir->src2->i64);
     }
     else
     {
-        EMITX64(orRR)(dst, irx64R[p][ir->src2->phys]);
+        EMITX64(orRR)(dst, x64R[p][ir->src2->phys]);
     }
 }
 
@@ -917,14 +935,14 @@ static void irX64_bxor(IR* ir)
     vp_assertX(ir->dst->phys == ir->src1->phys, "dst != src1");
     vp_assertX(!vrf_const(ir->src1), "const src1");
     VRSize p = ir->dst->vsize;
-    X64Reg dst = irx64R[p][ir->dst->phys];
+    X64Reg dst = x64R[p][ir->dst->phys];
     if(vrf_const(ir->src2))
     {
         EMITX64(xorRI)(dst, ir->src2->i64);
     }
     else
     {
-        EMITX64(xorRR)(dst, irx64R[p][ir->src2->phys]);
+        EMITX64(xorRR)(dst, x64R[p][ir->src2->phys]);
     }
 }
 
@@ -933,7 +951,7 @@ static void irX64_lshift(IR* ir)
     vp_assertX(ir->dst->phys == ir->src1->phys, "dst != src1");
     vp_assertX(!vrf_const(ir->src1), "const src1");
     VRSize p = ir->dst->vsize;
-    X64Reg dst = irx64R[p][ir->dst->phys];
+    X64Reg dst = x64R[p][ir->dst->phys];
     if(vrf_const(ir->src2))
     {
         EMITX64(shlRI)(dst, ir->src2->i64 & 255);
@@ -942,7 +960,7 @@ static void irX64_lshift(IR* ir)
     {
         vp_assertX(ir->src2->phys != RN_CX, "src2 == RCX");
         vp_assertX(ir->dst->phys != RN_CX, "dst == RCX");
-        EMITX64(movRR)(CL, irx64R[VRSize1][ir->src2->phys]);
+        EMITX64(movRR)(CL, x64R[VRSize1][ir->src2->phys]);
         EMITX64(shlRCL)(dst);
     }
 }
@@ -952,7 +970,7 @@ static void irX64_rshift(IR* ir)
     vp_assertX(ir->dst->phys == ir->src1->phys, "dst != src1");
     vp_assertX(!vrf_const(ir->src1), "const src1");
     VRSize p = ir->dst->vsize;
-    X64Reg dst = irx64R[p][ir->dst->phys];
+    X64Reg dst = x64R[p][ir->dst->phys];
     if(vrf_const(ir->src2))
     {
         if(ir->flag & IRF_UNSIGNED)
@@ -968,7 +986,7 @@ static void irX64_rshift(IR* ir)
     {
         vp_assertX(ir->src2->phys != RN_CX, "src2 == RCX");
         vp_assertX(ir->dst->phys != RN_CX, "dst == RCX");
-        EMITX64(movRR)(CL, irx64R[VRSize1][ir->src2->phys]);
+        EMITX64(movRR)(CL, x64R[VRSize1][ir->src2->phys]);
         if(ir->flag & IRF_UNSIGNED)
         {
             EMITX64(shrRCL)(dst);
@@ -995,7 +1013,7 @@ static void irX64_neg(IR* ir)
                 bool single = ir->src1->vsize == VRSize4;
                 EMITX64(pushR)(RAX);
                 uint64_t mask = single ? (1ULL << 31) : (1ULL << 63);
-                X64Reg dst = irx64X[ir->dst->phys];
+                X64Reg dst = x64X[ir->dst->phys];
                 EMITX64(movRI)(RAX, mask);
                 if(single)
                 {
@@ -1006,7 +1024,7 @@ static void irX64_neg(IR* ir)
                     EMITX64(movqXR)(dst, RAX);
                 }
                 EMITX64(popR)(RAX);
-                X64Reg src = irx64X[ir->src1->phys];
+                X64Reg src = x64X[ir->src1->phys];
                 if(single)
                 {
                     EMITX64(xorpsXX)(dst, src);
@@ -1025,7 +1043,7 @@ static void irX64_neg(IR* ir)
         vp_assertX(ir->dst->phys == ir->src1->phys, "dst != src1");
         VRSize p = ir->dst->vsize;
         vp_assertVSize(p, VRSize1, VRSize8);
-        EMITX64(negR)(irx64R[p][ir->dst->phys]);
+        EMITX64(negR)(x64R[p][ir->dst->phys]);
     }
 }
 
@@ -1035,7 +1053,7 @@ static void irX64_bnot(IR* ir)
     vp_assertX(!vrf_const(ir->dst), "const dst");
     VRSize p = ir->dst->vsize;
     vp_assertVSize(p, VRSize1, VRSize8);
-    EMITX64(notR)(irx64R[p][ir->dst->phys]);
+    EMITX64(notR)(x64R[p][ir->dst->phys]);
 }
 
 typedef void (*IRX64Fn)(IR* ir);
@@ -1127,10 +1145,13 @@ static void irX64_3to2(vec_t(BB*) bbs)
                 case IR_RSHIFT:
                 case IR_BNOT:
                 {
-                    vp_assertX(!vrf_const(ir->dst), "const dst");
-                    IR* mov = vp_ir_mov(ir->dst, ir->src1, ir->flag);
-                    vec_insert(bb->irs, j, mov); j++;
-                    ir->src1 = ir->dst;
+                    if(ir->dst != ir->src1)
+                    {
+                        vp_assertX(!vrf_const(ir->dst), "const dst");
+                        IR* mov = vp_ir_mov(ir->dst, ir->src1, ir->flag);
+                        vec_insert(bb->irs, j, mov); j++;
+                        ir->src1 = ir->dst;
+                    }
                     break;
                 }
                 default:

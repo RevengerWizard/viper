@@ -10,18 +10,20 @@
 
 /* Register encoding
 **
-** uint64_t: [reserved:48][sub:4][size:4][class:4][num:4]
-**           63        16  15  12 11   8  7     4  3    0
+** uint32_t: [reserved:16][sub:4][size:4][class:4][num:4]
+**           31        16 15  12 11    8 7     4  3    0
+**
+** log2size: 0=1B, 1=2B, 2=4B, 3=8B, 4=16B
 */
 
-#define REG_NUM(r) ((r) & 0xF)
-#define REG_CLASS(r) ((r >> 4) & 0XF)
-#define REG_SIZE(r) ((r >> 8) & 0XF)
-#define REG_SUB(r) ((r >> 12) & 0XF)
+#define REG_NUM(r)   ((r) & 0xF)
+#define REG_CLASS(r) (((r) >> 4) & 0xF)
+#define REG_SIZE(r)  (1u << (((r) >> 8) & 0xF))
+#define REG_SUB(r)   (((r) >> 12) & 0xF)
 
 #define X64REG(num, cls, size, sub) \
-    ((uint64_t)(num) | ((uint64_t)(cls) << 4) | \
-    ((uint64_t)(size) << 8) | ((uint64_t)(sub) << 12))
+    ((uint32_t)(num) | ((uint32_t)(cls) << 4) | \
+    ((uint32_t)(__builtin_ctz(size)) << 8) | ((uint32_t)(sub) << 12))
 
 /* Register class */
 enum
@@ -139,9 +141,6 @@ enum
 
 #define RIP X64REG(0, RC_IP, 8, SUB_LO)
 
-typedef uint64_t X64Reg;
-typedef uint64_t X64Mem;
-
 /* Register indices */
 enum
 {
@@ -246,5 +245,16 @@ typedef enum
 
 #define X64_IREG (16)
 #define X64_FREG (16)
+
+typedef uint32_t X64Reg;
+typedef uint64_t X64Mem;
+
+extern const X64Reg irx64R8[X64_IREG];
+extern const X64Reg x64R16[X64_IREG];
+extern const X64Reg x64R32[X64_IREG];
+extern const X64Reg x64R64[X64_IREG];
+extern const X64Reg* x64R[];
+
+extern const X64Reg x64X[X64_FREG];
 
 #endif

@@ -116,11 +116,32 @@ void EMITX64(movRR)(X64Reg dst, X64Reg src)
     uint8_t op = size == 1 ? 0x88 : 0x89;
     uint8_t rex = rexRR(size, rd, rs);
 
-    if(size == 1 && (rd >= 4 || rs >= 4 || rex)) rex |= 0x40;
+    bool is_high = (REG_SUB(dst) == SUB_HI || REG_SUB(src) == SUB_HI);
+
+    /* 1. Map AH, CH, DH, BH (num 0-3 + SUB_HI) to encoding indices 4-7 */
+    uint8_t rd_enc = (REG_SUB(dst) == SUB_HI) ? rd + 4 : rd;
+    uint8_t rs_enc = (REG_SUB(src) == SUB_HI) ? rs + 4 : rs;
+
+    if(size == 1)
+    {
+        if(is_high)
+        {
+            /* 2. High-byte registers cannot be used with ANY REX prefix */
+            vp_assertX(rex == 0, "Cannot use high-byte registers with REX prefix (size=8 or R8-R15)");
+        }
+        else if(rd >= 4 || rs >= 4 || rex)
+        {
+            /* 3. Force REX prefix (0x40) to access SPL, BPL, SIL, DIL instead of AH, CH, etc. */
+            rex |= 0x40;
+        }
+    }
+
     if(size == 2) emit_u8(V, 0x66);
     if(rex) emit_u8(V, rex);
+
     emit_u8(V, op);
-    emit_u8(V, MODRM(3, rs & 7, rd & 7));
+    /* Use adjusted encoding indices */
+    emit_u8(V, MODRM(3, rs_enc & 7, rd_enc & 7));
 }
 
 /* MOV gpr, imm */
@@ -276,8 +297,9 @@ void EMITX64(movzxRR)(X64Reg dst, X64Reg src)
     uint8_t rd = REG_NUM(dst);
     uint8_t rs = REG_NUM(src);
     uint8_t op = (ss == 1) ? 0xB6 : 0xB7;
-    uint8_t rex = rexRR(ds, rd, rs);
+    uint8_t rex = rexRR(ds, rs, rd);
 
+    if(ss == 1 && rs >= 4 && rs <= 7) rex |= 0x40; /* Force REX for SIL, DIL, etc. */
     if(ds == 2) emit_u8(V, 0x66);
     if(rex) emit_u8(V, rex);
 
@@ -437,6 +459,7 @@ static VP_AINLINE void emit_unary(VpState* V, uint8_t op1, uint8_t op8, uint8_t 
     if(size == 2) emit_u8(V, 0x66);
 
     uint8_t rex = rexRR(size, rr, 0);
+    if(size == 1 && (rr >= 4 || rex)) rex |= 0x40; /* Force REX for SIL, DIL, etc. */
     if(rex) emit_u8(V, rex);
 
     emit_u8(V, (size == 1) ? op8 : op1);

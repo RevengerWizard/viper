@@ -454,6 +454,7 @@ BB* vp_bb_new()
     bb->label = vp_bb_label();
     bb->next = NULL;
     bb->irs = vec_init(IR*);
+    bb->irspans = NULL;
     bb->ofs = 0;
     bb->frombbs = vec_init(BB*);
     bb->inregs = vec_init(VReg*);

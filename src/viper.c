@@ -27,6 +27,7 @@ enum
 #define DUMP_AST  (1 << 0)
 #define DUMP_IR   (1 << 1)
 #define DUMP_DOT  (1 << 2)
+#define DUMP_CODE (1 << 3)
 
 /* Stats flags */
 #define STATS_MEM (1 << 0)
@@ -65,6 +66,7 @@ static int parse_dump(const char* s, uint32_t* flags)
         if(strcmp(tmp, "ast") == 0) *flags |= DUMP_AST;
         else if(strcmp(tmp, "ir")  == 0) *flags |= DUMP_IR;
         else if(strcmp(tmp, "dot") == 0) *flags |= DUMP_DOT;
+        else if(strcmp(tmp, "code") == 0) *flags |= DUMP_CODE;
         else
         {
             fprintf(stderr, "vxc: unknown emit kind '%s'\n", tmp);
@@ -133,7 +135,7 @@ static void print_usage(void)
         "    --help                  print this message and exit\n"
         "    --version               print version and exit\n"
         "    -o <file|->             output file (- for stdout)\n"
-        "    --dump=<kind>[,kind]    dump: ast, ir, dot\n"
+        "    --dump=<kind>[,kind]    dump: ast, ir, dot, code\n"
         "    --stats[=<kind>[,kind]] print stats: mem\n",
         stderr
     );
@@ -190,6 +192,12 @@ static int do_dump(VpState* V, uint32_t flags)
         fputs("== dot ==\n", stdout);
         vp_dump_dot(&sb, V->codes);
         if(!sbuf_flush(&sb, stdout)) return EXIT_FAILURE;
+        fputc('\n', stdout);
+    }
+    if(flags & DUMP_CODE)
+    {
+        fputs("== code ==\n", stdout);
+        vp_dump_code(V->codes);
         fputc('\n', stdout);
     }
 

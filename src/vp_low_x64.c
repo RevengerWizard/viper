@@ -54,8 +54,9 @@ static void lowX64_params(Code* code)
                 {
                     uint32_t ofs = vr->fi.ofs;
                     vp_assertX(ofs, "0 offset");
-                    EMITX64(movMR)(X64MEM(RN_BP, NOREG, 1, ofs, 8),
-                                  X64REG(pl->idx, RC_GPR, 8, SUB_LO));
+                    uint8_t memsize = 1 << vr->vsize;
+                    EMITX64(movMR)(X64MEM(RN_BP, NOREG, 1, ofs, memsize),
+                                  X64REG(pl->idx, RC_GPR, memsize, SUB_LO));
                 }
                 else if(pl->idx != vr->phys)
                 {
@@ -360,10 +361,18 @@ static void lowX64_body(Code* code)
     {
         BB* bb = code->bbs[i];
         bb->ofs = sbuf_len(&V->code);
+        if(bb->irspans)
+            vec_clear(bb->irspans);
+        else
+            bb->irspans = vec_init(IRSpan);
         for(uint32_t j = 0; j < vec_len(bb->irs); j++)
         {
             IR* ir = bb->irs[j];
+            IRSpan span;
+            span.start = sbuf_len(&V->code);
             vp_irX64(ir);
+            span.end = sbuf_len(&V->code);
+            vec_push(bb->irspans, span);
         }
     }
 

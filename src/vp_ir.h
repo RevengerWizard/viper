@@ -221,6 +221,12 @@ typedef struct IR
     };
 } IR;
 
+typedef struct IRSpan
+{
+    uint32_t start;
+    uint32_t end;
+} IRSpan;
+
 /* Basic blocks */
 typedef struct BB
 {
@@ -228,6 +234,7 @@ typedef struct BB
     vec_t(struct BB*) frombbs;
     Str* label;
     vec_t(IR*) irs;
+    vec_t(IRSpan) irspans;
     int32_t ofs;    /* Basic block code offset */
     vec_t(VReg*) inregs;    /* Input vregs */
     vec_t(VReg*) outregs;   /* Output vregs */

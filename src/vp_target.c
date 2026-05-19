@@ -8,6 +8,14 @@
 #include "vp_def.h"
 #include "vp_target_x64.h"
 
+const X64Reg x64R8[X64_IREG] =  {AL,  CL,  DL,  BL,  SPL, BPL, SIL, DIL, R8B, R9B, R10B, R11B, R12B, R13B, R14B, R15B};
+const X64Reg x64R16[X64_IREG] = {AX,  CX,  DX,  BX,  SP,  BP,  SI,  DI,  R8W, R9W, R10W, R11W, R12W, R13W, R14W, R15W};
+const X64Reg x64R32[X64_IREG] = {EAX, ECX, EDX, EBX, ESP, EBP, ESI, EDI, R8D, R9D, R10D, R11D, R12D, R13D, R14D, R15D};
+const X64Reg x64R64[X64_IREG] = {RAX, RCX, RDX, RBX, RSP, RBP, RSI, RDI, R8,  R9,  R10,  R11,  R12,  R13,  R14,  R15};
+const X64Reg* x64R[] = {x64R8, x64R16, x64R32, x64R64};
+
+const X64Reg x64X[X64_FREG] = {XMM0, XMM1, XMM2, XMM3, XMM4, XMM5, XMM6, XMM7, XMM8, XMM9, XMM10, XMM11, XMM12, XMM13, XMM14, XMM15};
+
 /* -- Windows x64 ABI ----------------------------------------------- */
 
 /* Int parameters */

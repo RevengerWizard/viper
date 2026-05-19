@@ -4,6 +4,7 @@
 */
 
 #include <stdio.h>
+#include <string.h>
 
 #include "vp_dump.h"
 #include "vp_ast.h"
@@ -15,6 +16,7 @@
 #include "vp_type.h"
 #include "vp_vec.h"
 #include "vp_tab.h"
+#include "vp_decode_x64.h"
 
 static uint32_t indent = 0;
 
@@ -99,6 +101,76 @@ static void dump_str(SBuf* sb, Str* s)
     vp_buf_putb(sb, '"');
 }
 
+static const char* const gpr_names[4][16] = {
+    { "al",  "cl",  "dl",  "bl",  "spl","bpl","sil","dil","r8b","r9b","r10b","r11b","r12b","r13b","r14b","r15b" },
+    { "ax",  "cx",  "dx",  "bx",  "sp", "bp", "si", "di", "r8w","r9w","r10w","r11w","r12w","r13w","r14w","r15w" },
+    { "eax", "ecx", "edx", "ebx", "esp","ebp","esi","edi","r8d","r9d","r10d","r11d","r12d","r13d","r14d","r15d" },
+    { "rax", "rcx", "rdx", "rbx", "rsp","rbp","rsi","rdi","r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15" },
+};
+/* High 8-bit registers: ah, ch, dh, bh (indices 4-7, 8-bit, no REX) */
+static const char* const hireg_names[4] = { "ah", "ch", "dh", "bh" };
+static const char* const xmm_names[16] = {
+    "xmm0","xmm1","xmm2","xmm3","xmm4","xmm5","xmm6","xmm7",
+    "xmm8","xmm9","xmm10","xmm11","xmm12","xmm13","xmm14","xmm15"
+};
+
+static int size_idx(uint8_t sz)
+{
+    switch(sz) { case 1: return 0; case 2: return 1; case 8: return 3; default: return 2; }
+}
+
+static void dump_opr(SBuf* sb, const DecOpr* o)
+{
+    switch(o->kind)
+    {
+    case DOPR_REG:
+        if(o->r.hireg)
+            dump_fmt(sb, "%s", hireg_names[o->r.reg & 3]); /* reg 4->ah,5->ch,6->dh,7->bh */
+        else
+            dump_fmt(sb, "%s", gpr_names[size_idx(o->size)][o->r.reg & 15]);
+        break;
+    case DOPR_XMM:
+        dump_fmt(sb, "%s", xmm_names[o->r.reg & 15]);
+        break;
+    case DOPR_IMM:
+        dump_fmt(sb, "0x%llx", (unsigned long long)o->imm);
+        break;
+    case DOPR_REL:
+        dump_fmt(sb, ".%+d", o->rel);
+        break;
+    case DOPR_MEM:
+    {
+        const char* szpfx[] = { "byte", "word", "dword", "qword", "xmmword" };
+        int si = size_idx(o->size);
+        if(o->size == 16) si = 4;
+        dump_fmt(sb, "%s ptr [", szpfx[si]);
+        int need_plus = 0;
+        if(o->m.base >= 0)
+        {
+            dump_fmt(sb, "%s", gpr_names[3][o->m.base & 15]);
+            need_plus = 1;
+        }
+        else
+        {
+            /* base==-1 means RIP */
+            vp_buf_putlit(sb, "rip");
+            need_plus = 1;
+        }
+        if(o->m.idx >= 0)
+        {
+            dump_fmt(sb, need_plus ? "+%s" : "%s", gpr_names[3][o->m.idx & 15]);
+            if(o->m.scale > 1) dump_fmt(sb, "*%d", o->m.scale);
+            need_plus = 1;
+        }
+        if(o->m.disp > 0) dump_fmt(sb, "+%d", o->m.disp);
+        else if(o->m.disp < 0) dump_fmt(sb, "%d", o->m.disp);
+        vp_buf_putb(sb, ']');
+        break;
+    }
+    default: break;
+    }
+}
+
 /* -- IR dump ------------------------------------------------------- */
 
 static const char* const vrf_flags[] = {
@@ -147,6 +219,18 @@ static void dump_vreg_flags(SBuf* sb, uint8_t flag)
     }
 }
 
+static const char* vsize_suffix(VRSize vsize)
+{
+    static const char* const suffix[] = {".b", ".w", ".d", ".q"};
+    vp_assertX(vsize < ARRSIZE(suffix), "bad vreg size");
+    return suffix[vsize];
+}
+
+static void dump_vreg_id(SBuf* sb, VReg* vr)
+{
+    dump_fmt(sb, "v%d%s", vr->virt, vsize_suffix(vr->vsize));
+}
+
 static void dump_vreg(SBuf* sb, VReg* vr)
 {
     vp_assertX(vr, "empty vreg");
@@ -176,11 +260,11 @@ static void dump_vreg(SBuf* sb, VReg* vr)
         {
             rt = 'f';
         }
-        dump_fmt(sb, "%c%d<v%d>", rt, vr->phys, vr->virt);
+        dump_fmt(sb, "%c%d<v%d%s>", rt, vr->phys, vr->virt, vsize_suffix(vr->vsize));
     }
     else
     {
-        dump_fmt(sb, "v%d", vr->virt);
+        dump_vreg_id(sb, vr);
     }
 }
 
@@ -210,21 +294,36 @@ static const char* const kbinop2[] = {
     "&", "|", "^", "<<", ">>"
 };
 
-static void dump_ir(SBuf* sb, IR* ir)
+static void dump_ir_name(SBuf* sb, IR* ir)
 {
+    char opname[32];
     switch(ir->kind)
     {
         case IR_JMP:
-            dump_fmt(sb, "J%s", kcond[ir->jmp.cond & (COND_MASK | COND_UNSIGNED)]);
+            snprintf(opname, sizeof(opname), "J%s",
+                    kcond[ir->jmp.cond & (COND_MASK | COND_UNSIGNED)]);
             break;
         default:
-            dump_fmt(sb, "%s", vp_ir_name[ir->kind]);
+            snprintf(opname, sizeof(opname), "%s", vp_ir_name[ir->kind]);
             break;
     }
 
-    if(irf_unsigned(ir)) vp_buf_putb(sb, 'U');
-    vp_buf_putb(sb, '\t');
+    if(irf_unsigned(ir))
+    {
+        size_t len = strlen(opname);
+        if(len + 2 < sizeof(opname))
+        {
+            opname[len] = '.';
+            opname[len + 1] = 'u';
+            opname[len + 2] = '\0';
+        }
+    }
+    dump_fmt(sb, "%-9s ", opname);
+}
 
+static void dump_ir(SBuf* sb, IR* ir)
+{
+    dump_ir_name(sb, ir);
     switch(ir->kind)
     {
         case IR_BOFS:
@@ -268,7 +367,9 @@ static void dump_ir(SBuf* sb, IR* ir)
             dump_vreg(sb, ir->src1);
             break;
         case IR_STORE_S:
-            dump_fmt(sb, "[v%d] = ", ir->src2->virt);
+            vp_buf_putb(sb, '[');
+            dump_vreg_id(sb, ir->src2);
+            vp_buf_putlit(sb, "] = ");
             dump_vreg(sb, ir->src1);
             break;
         case IR_LOAD:
@@ -279,7 +380,9 @@ static void dump_ir(SBuf* sb, IR* ir)
             break;
         case IR_LOAD_S:
             dump_vreg(sb, ir->dst);
-            dump_fmt(sb, " = [v%d]", ir->src1->virt);
+            vp_buf_putlit(sb, " = [");
+            dump_vreg_id(sb, ir->src1);
+            vp_buf_putb(sb, ']');
             break;
         case IR_RET:
         {
@@ -418,11 +521,15 @@ static void dump_ir(SBuf* sb, IR* ir)
     }
 }
 
-static void dump_bbs(SBuf* sb, Code* code)
+static void dump_code_info(SBuf* sb, Code* code)
 {
     dump_fmt(sb, "fn %s\n", str_data(code->name));
     vp_buf_putlit(sb, "params and locals:\n");
-    vec_t(VarInfo*) stackvars = vec_init(VarInfo*);
+    vec_t(VarInfo*) vars = vec_init(VarInfo*);
+    uint32_t namew = 0;
+    uint32_t typew = 0;
+    SBuf tmp;
+    vp_buf_init(&tmp);
     for(uint32_t i = 0; i < vec_len(code->scopes); i++)
     {
         Scope* scope = code->scopes[i];
@@ -431,26 +538,34 @@ static void dump_bbs(SBuf* sb, Code* code)
         for(uint32_t j = 0; j < vec_len(scope->vars); j++)
         {
             VarInfo* vi = scope->vars[j];
-            VReg* vr = vi->vreg;
-            if(vr == NULL)
-            {
-                vec_push(stackvars, vi);
-                continue;
-            }
-            dump_fmt(sb, "v%d (flag=", vr->virt);
-            dump_vreg_flags(sb, vr->flag);
-            dump_fmt(sb, ") %.*s : ", vi->name->len, str_data(vi->name));
-            dump_type(sb, vi->type);
-            vp_buf_putb(sb, '\n');
+            vec_push(vars, vi);
+            namew = MAX(namew, vi->name->len);
+            vp_buf_reset(&tmp);
+            dump_type(&tmp, vi->type);
+            typew = MAX(typew, sbuf_len(&tmp));
         }
     }
-    for(uint32_t i = 0; i < vec_len(stackvars); i++)
+    for(uint32_t i = 0; i < vec_len(vars); i++)
     {
-        VarInfo* vi = stackvars[i];
-        dump_fmt(sb, "stack (offset=%d, size=%d) %.*s : ", vi->fi->ofs, vp_type_sizeof(vi->type), vi->name->len, str_data(vi->name));
-        dump_type(sb, vi->type);
+        VarInfo* vi = vars[i];
+        vp_buf_reset(&tmp);
+        dump_type(&tmp, vi->type);
+
+        dump_fmt(sb, "    %-*.*s : %-*.*s -> ",
+                namew, vi->name->len, str_data(vi->name),
+                typew, (int)sbuf_len(&tmp), tmp.b);
+        if(vi->vreg)
+        {
+            dump_vreg_id(sb, vi->vreg);
+        }
+        else
+        {
+            dump_fmt(sb, "stack (offset=%d, size=%d)",
+                    vi->fi->ofs, vp_type_sizeof(vi->type));
+        }
         vp_buf_putb(sb, '\n');
     }
+    vec_free(vars);
 
     RegAlloc* ra = code->ra;
     dump_fmt(sb, "VREG: #%d\n", vec_len(ra->vregs));
@@ -464,58 +579,70 @@ static void dump_bbs(SBuf* sb, Code* code)
             if(vr == NULL)
                 continue;
 
-            dump_fmt(sb, "    v%d (flag=", vr->virt);
+            vp_buf_putlit(sb, "    ");
+            dump_vreg_id(sb, vr);
+            vp_buf_putlit(sb, " (flag=");
             dump_vreg_flags(sb, vr->flag);
-            dump_fmt(sb, "):  live %d - %d", li->start, li->end);
+            vp_buf_putlit(sb, ")\n");
+            dump_fmt(sb, "        live %d - %d", li->start, li->end);
             switch(li->state)
             {
                 case LI_NORMAL:
                 {
                     char rt = vrf_flo(vr) ? 'f' : 'r';
-                    dump_fmt(sb, " => %c%d", rt, li->phys);
+                    dump_fmt(sb, " => %c%d\n", rt, li->phys);
                     if(li->regbits)
                     {
-                        vp_buf_putlit(sb, ", occupied=");
+                        vp_buf_putlit(sb, "        occupied=");
                         dump_regbits(sb, li->regbits, vrf_flo(vr) ? 'f' : 'r');
+                        vp_buf_putb(sb, '\n');
                     }
                     break;
                 }
                 case LI_SPILL:
                 {
-                    dump_fmt(sb, " (spilled, offset=%d)", vr->fi.ofs);
+                    dump_fmt(sb, "        spill    : offset=%d\n", vr->fi.ofs);
                     break;
                 }
             }
-            vp_buf_putb(sb, '\n');
         }
     }
+}
 
+static void dump_bb_header(SBuf* sb, BB* bb)
+{
+    vp_buf_puts(sb, bb->label);
+    if(vec_len(bb->frombbs) > 0)
+    {
+        vp_buf_putlit(sb, " from=[");
+        for(uint32_t j = 0; j < vec_len(bb->frombbs); j++)
+        {
+            BB* fbb = bb->frombbs[j];
+            dump_fmt(sb, "%s", (j > 0 ? ", " : ""));
+            vp_buf_puts(sb, fbb->label);
+        }
+        vp_buf_putb(sb, ']');
+    }
+    if(vec_len(bb->inregs) > 0)
+    {
+        dump_vregs(sb, " in", bb->inregs);
+    }
+    if(vec_len(bb->outregs) > 0)
+    {
+        dump_vregs(sb, " out", bb->outregs);
+    }
+}
+
+static void dump_bbs(SBuf* sb, Code* code)
+{
+    dump_code_info(sb, code);
     uint32_t nip = 0;
     vec_t(BB*) bbs = code->bbs;
     dump_fmt(sb, "BB: #%d\n", vec_len(bbs));
     for(uint32_t i = 0; i < vec_len(bbs); i++)
     {
         BB* bb = bbs[i];
-        vp_buf_puts(sb, bb->label);
-        if(vec_len(bb->frombbs) > 0)
-        {
-            vp_buf_putlit(sb, " from=[");
-            for(uint32_t j = 0; j < vec_len(bb->frombbs); j++)
-            {
-                BB* fbb = bb->frombbs[j];
-                dump_fmt(sb, "%s", (j > 0 ? ", " : ""));
-                vp_buf_puts(sb, fbb->label);
-            }
-            vp_buf_putb(sb, ']');
-        }
-        if(vec_len(bb->inregs) > 0)
-        {
-            dump_vregs(sb, " in", bb->inregs);
-        }
-        if(vec_len(bb->outregs) > 0)
-        {
-            dump_vregs(sb, " out", bb->outregs);
-        }
+        dump_bb_header(sb, bb);
         vp_buf_putb(sb, '\n');
         for(uint32_t j = 0; j < vec_len(bb->irs); j++, nip++)
         {
@@ -550,37 +677,26 @@ void vp_dump_ir(SBuf* sb, vec_t(Code*) codes)
 
 static void dump_inst(SBuf* sb, void* p, uint32_t size)
 {
-    /* Windows temp file */
-    char tmpname[L_tmpnam];
-    tmpnam(tmpname);
-    FILE* tmp = fopen(tmpname, "wb");
-    if(!tmp)
+    const uint8_t* code = (const uint8_t*)p;
+    uint32_t off = 0;
+    while(off < size)
     {
-        printf("  [failed to create temp file]\n");
-    }
-
-    fwrite(p, 1, size, tmp);
-    fclose(tmp);
-
-    char cmd[512];
-    snprintf(cmd, sizeof(cmd),
-                "objdump -D -b binary -m i386:x86-64 -M intel \"%s\" 2>nul",
-                tmpname);
-
-    FILE* pipe = _popen(cmd, "r");
-    if(pipe)
-    {
-        char line[512];
-        int skip = 7;
-        while(fgets(line, sizeof(line), pipe))
+        DecInst inst;
+        if(!vp_decodeX64(code + off, size - off, &inst))
         {
-            if(skip-- > 0) continue;
-            dump_fmt(sb, "  %s", line);
+            dump_fmt(sb, "      | ?? %02x\n", code[off]);
+            off++;
+            continue;
         }
-        _pclose(pipe);
+        dump_fmt(sb, "      | %-9s ", inst.mnem);
+        for(uint32_t i = 0; i < inst.nops; i++)
+        {
+            if(i > 0) vp_buf_putlit(sb, ", ");
+            dump_opr(sb, &inst.ops[i]);
+        }
+        vp_buf_putb(sb, '\n');
+        off += inst.len;
     }
-
-    remove(tmpname);
 }
 
 static void dump_codes(SBuf* sb, vec_t(Code*) codes)
@@ -591,6 +707,11 @@ static void dump_codes(SBuf* sb, vec_t(Code*) codes)
     {
         Code* code = codes[i];
         vec_t(BB*) bbs = code->bbs;
+
+        dump_code_info(sb, code);
+        dump_fmt(sb, "BB: #%d\n", vec_len(bbs));
+
+        /* Prologue machine code (before first BB) */
         if(vec_len(bbs) > 0)
         {
             uint32_t start = code->ofs;
@@ -599,23 +720,52 @@ static void dump_codes(SBuf* sb, vec_t(Code*) codes)
 
             if(size > 0)
             {
-                dump_fmt(sb, "\n%s: (offset=%d, size=%d)\n",
-                        str_data(code->name), start, size);
+                dump_fmt(sb, "\n%s:\n", str_data(code->name));
                 dump_inst(sb, base + start, size);
             }
         }
+
+        /* Per-BB: predecessors, live in/out, IR instructions, then disassembly */
         for(uint32_t j = 0; j < vec_len(bbs); j++)
         {
             BB* bb = bbs[j];
             int32_t start = bb->ofs;
             int32_t end = (j + 1 < vec_len(bbs)) ? bbs[j + 1]->ofs : ((i + 1 < vec_len(codes)) ? codes[i + 1]->ofs : (int32_t)sbuf_len(&V->code));
             int32_t size = end - start;
-            if(size == 0) continue;
 
-            dump_fmt(sb, "\n%.*s: (offset=%d, size=%d)\n",
-                           bb->label->len, str_data(bb->label), start, size);
+            vp_buf_putb(sb, '\n');
+            dump_bb_header(sb, bb);
+            vp_buf_putb(sb, '\n');
 
-            dump_inst(sb, base + start, size);
+            bool has_spans = bb->irspans && vec_len(bb->irspans) == vec_len(bb->irs);
+            for(uint32_t k = 0; k < vec_len(bb->irs); k++)
+            {
+                dump_fmt(sb, "%6d| ", k);
+                IR* ir = bb->irs[k];
+                dump_ir(sb, ir);
+                vp_buf_putb(sb, '\n');
+
+                if(has_spans)
+                {
+                    IRSpan* span = &bb->irspans[k];
+                    uint32_t spansize = span->end - span->start;
+                    if(spansize > 0)
+                    {
+                        dump_inst(sb, base + span->start, spansize);
+                        vp_buf_putlit(sb, "      |\n");
+                    }
+                }
+            }
+
+            if(!has_spans && size > 0)
+            {
+                dump_inst(sb, base + start, size);
+            }
+        }
+
+        if(i != vec_len(codes) - 1)
+        {
+            vp_buf_putb(sb, '\n');
         }
     }
 }
