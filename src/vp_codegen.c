@@ -3,7 +3,6 @@
 ** Code generation (AST -> IR)
 */
 
-#include <stdbool.h>
 #include <string.h>
 #include <stdlib.h>
 

@@ -263,9 +263,13 @@ void EMITX64(movsxRR)(X64Reg dst, X64Reg src)
     uint8_t ss = REG_SIZE(src);
     uint8_t rd = REG_NUM(dst);
     uint8_t rs = REG_NUM(src);
-    uint8_t rex = rexRR(ds, rd, rs);
 
-    if(ds == 2 && ss == 1) emit_u8(V, 0x66);
+    uint8_t rex = rexRR(ds, rs, rd);
+
+    /* Force REX to unlock uniform byte registers (SPL, BPL, SIL, DIL) */
+    if(ss == 1 && rs >= 4 && rs <= 7) rex |= 0x40;
+
+    if(ds == 2) emit_u8(V, 0x66);
     if(rex) emit_u8(V, rex);
 
     if(ss == 1)
@@ -308,15 +312,20 @@ void EMITX64(movzxRR)(X64Reg dst, X64Reg src)
     emit_u8(V, MODRM(3, rd & 7, rs & 7));
 }
 
-/* MOVD xmm, gpr */
+/* MOVD xmm, gpr (32-bit zero-extended move) */
 void EMITX64(movdXR)(X64Reg dst, X64Reg src)
 {
     vp_assertX(REG_CLASS(dst) == RC_XMM, "dst != xmm");
     vp_assertX(REG_CLASS(src) == RC_GPR, "src != gpr");
-    uint8_t size = REG_SIZE(src);
+    vp_assertX(REG_SIZE(src) == 4, "src != r32");
+
     uint8_t rd = REG_NUM(dst);
     uint8_t rs = REG_NUM(src);
-    uint8_t rex = (size == 8) ? REX_W : 0;
+    uint8_t rex = 0;
+
+    if(regext(rd)) rex |= REX_R;
+    if(regext(rs)) rex |= REX_B;
+
     emit_u8(V, 0x66);
     if(rex) emit_u8(V, rex);
     emit_u8(V, 0x0F);
@@ -324,10 +333,25 @@ void EMITX64(movdXR)(X64Reg dst, X64Reg src)
     emit_u8(V, MODRM(3, rd & 7, rs & 7));
 }
 
-/* MOVQ xmm, gpr */
+/* MOVQ xmm, gpr (64-bit move) */
 void EMITX64(movqXR)(X64Reg dst, X64Reg src)
 {
-    EMITX64(movdXR)(dst, src);
+    vp_assertX(REG_CLASS(dst) == RC_XMM, "dst != xmm");
+    vp_assertX(REG_CLASS(src) == RC_GPR, "src != gpr");
+    vp_assertX(REG_SIZE(src) == 8, "src != r64");
+
+    uint8_t rd = REG_NUM(dst);
+    uint8_t rs = REG_NUM(src);
+
+    uint8_t rex = REX_W;
+    if(regext(rd)) rex |= REX_R;
+    if(regext(rs)) rex |= REX_B;
+
+    emit_u8(V, 0x66);
+    emit_u8(V, rex);
+    emit_u8(V, 0x0F);
+    emit_u8(V, 0x6E);
+    emit_u8(V, MODRM(3, rd & 7, rs & 7));
 }
 
 /* LEA gpr, [mem] */
@@ -352,12 +376,29 @@ static VP_AINLINE void emit_aluRR(VpState* V, uint8_t op1, uint8_t op8, X64Reg d
     uint8_t rs = REG_NUM(src);
     uint8_t rex = rexRR(size, rd, rs);
 
-    if(size == 1 && (rd >= 4 || rs >= 4 || rex)) rex |= 0x40;
+    /* Adjust indices for high-byte registers */
+    bool is_high = (REG_SUB(dst) == SUB_HI || REG_SUB(src) == SUB_HI);
+    uint8_t rd_enc = (REG_SUB(dst) == SUB_HI) ? rd + 4 : rd;
+    uint8_t rs_enc = (REG_SUB(src) == SUB_HI) ? rs + 4 : rs;
+
+    if(size == 1)
+    {
+        if(is_high)
+        {
+            vp_assertX(rex == 0, "Cannot use high-byte registers with REX prefix");
+        }
+        else if(rd >= 4 || rs >= 4 || rex)
+        {
+            rex |= 0x40;
+        }
+    }
+
     if(size == 2) emit_u8(V, 0x66);
     if(rex) emit_u8(V, rex);
 
     emit_u8(V, (size == 1) ? op8 : op1);
-    emit_u8(V, MODRM(3, rs & 7, rd & 7));
+    /* Use the adjusted encoding indices */
+    emit_u8(V, MODRM(3, rs_enc & 7, rd_enc & 7));
 }
 
 /* ADD gpr, gpr */
@@ -395,10 +436,27 @@ static void emit_aluRI(VpState* V, uint8_t modrmreg, uint8_t raxop, X64Reg dst, 
 
     uint8_t rex = (size == 8) ? REX_W : 0;
     if(regext(rd)) rex |= REX_B;
+
+    /* Adjust index for high-byte destination register */
+    bool is_high = (REG_SUB(dst) == SUB_HI);
+    uint8_t rd_enc = is_high ? rd + 4 : rd;
+
+    if(size == 1)
+    {
+        if(is_high)
+        {
+            vp_assertX(rex == 0, "Cannot use high-byte registers with REX prefix");
+        }
+        else if(rd >= 4 || rex)
+        {
+            rex |= 0x40;
+        }
+    }
+
     if(rex) emit_u8(V, rex);
 
-    /* Short-form optimization for RAX (AL/EAX only) */
-    if(rd == 0 && !regext(rd))
+    /* Short-form optimization for RAX (AL/EAX only) - must not be high-byte */
+    if(rd == 0 && !regext(rd) && !is_high)
     {
         if(size == 1)
         {
@@ -408,24 +466,22 @@ static void emit_aluRI(VpState* V, uint8_t modrmreg, uint8_t raxop, X64Reg dst, 
         }
         else if(size == 4 || size == 8)
         {
-            /* 0x05/25/3D etc. always take 32-bit imm even in 64-bit mode */
             emit_u8(V, raxop + 1);
             emit_im32(V, (int32_t)imm);
             return;
         }
     }
 
-    /* 2. Use imm8 encoding (0x83) if possible (sign-extended by CPU) */
     if(size > 1 && vp_isimm8(imm))
     {
         emit_u8(V, 0x83);
-        emit_u8(V, MODRM(3, modrmreg, rd & 7));
+        emit_u8(V, MODRM(3, modrmreg, rd_enc & 7));
         emit_u8(V, (uint8_t)imm);
         return;
     }
 
     emit_u8(V, (size == 1) ? 0x80 : 0x81);
-    emit_u8(V, MODRM(3, modrmreg, rd & 7));
+    emit_u8(V, MODRM(3, modrmreg, rd_enc & 7));
 
     if(size == 1)      emit_u8(V, (uint8_t)imm);
     else if(size == 2) emit_im16(V, (int16_t)imm);

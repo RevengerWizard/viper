@@ -9,9 +9,9 @@ default all:
 
 ##############################################################################
 
-clean depend:
+clean depend ctest:
 	$(MAKE) -C src $@
 
-.PHONY: all clean depend
+.PHONY: all clean depend ctest
 
 ##############################################################################

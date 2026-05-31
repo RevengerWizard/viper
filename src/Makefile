@@ -119,6 +119,12 @@ VP_A = libvp.a
 OUT_DIR ?= .
 VP_T := $(OUT_DIR)/$(VP_T)
 
+CTEST_DIR = ../test/tmp
+CTEST_T = $(CTEST_DIR)/emit_decode_x64
+ifeq (Windows,$(HOST_SYS))
+	CTEST_T := $(CTEST_T).exe
+endif
+
 ALL_T = $(VP_T) $(VP_A)
 WIN_RM = *.obj *.lib *.exp *.dll *.exe *.manifest *.pdb *.ilk
 ALL_RM = $(ALL_T) *.o $(WIN_RM)
@@ -149,7 +155,7 @@ clean:
 depend:
 	$(Q)$(HOST_CC) $(HOST_ACFLAGS) -MM *.c > Makefile.dep
 
-.PHONY: default all amalg clean depend
+.PHONY: default all amalg clean depend ctest
 
 ##############################################################################
 # Object file rules
@@ -178,5 +184,13 @@ $(VP_T): $(VP_A) $(VP_O)
 	$(Q)$(TARGET_LD) $(TARGET_ALDFLAGS) -o $@ $(VP_O) $(VP_A) $(TARGET_ALIBS)
 	$(Q)$(TARGET_STRIP) $@
 	$(E) "OK        Successfully built Viper"
+
+$(CTEST_T): $(VP_A) ../test/c/emit_decode_x64.c
+	$(E) "LINK      $@"
+	$(Q)mkdir -p $(CTEST_DIR)
+	$(Q)$(TARGET_LD) $(TARGET_ALDFLAGS) $(HOST_XCFLAGS) -o $@ ../test/c/emit_decode_x64.c $(VP_A) $(TARGET_ALIBS)
+
+ctest: $(CTEST_T)
+	$(Q)$(CTEST_T)
 
 ##############################################################################

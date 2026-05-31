@@ -69,3 +69,21 @@ Str* vp_buf_cat2str(Str* s1, Str* s2)
     memcpy(buf + len1, str_data(s2), len2);
     return vp_str_new(buf, len1 + len2);
 }
+
+void vp_buf_fmt(SBuf* sb, const char* fmt, ...)
+{
+    va_list args;
+    va_start(args, fmt);
+    int n = vsnprintf(NULL, 0, fmt, args);
+    va_end(args);
+
+    if(n <= 0) return;
+
+    /* Reserve space directly in the buffer and write into it */
+    char* w = vp_buf_more(sb, (size_t)n + 1);
+    va_start(args, fmt);
+    vsnprintf(w, (size_t)n + 1, fmt, args);
+    va_end(args);
+
+    sb->w = w + n;
+}

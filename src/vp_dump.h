@@ -9,6 +9,8 @@
 #include "vp_codegen.h"
 #include "vp_ast.h"
 
+void vp_dump_rawX64(SBuf* sb, const void* p, uint32_t size);
+
 void vp_dump_bbs(Code* code);
 void vp_dump_code(vec_t(Code*) codes);
 void vp_dump_strintern(void);

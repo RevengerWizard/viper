@@ -20,6 +20,7 @@ char* vp_buf_need2(SBuf* sb, size_t size);
 char* vp_buf_more2(SBuf* sb, size_t size);
 SBuf* vp_buf_putmem(SBuf* sb, const void* q, size_t len);
 SBuf* vp_buf_putstr(SBuf* sb, Str* s);
+void vp_buf_fmt(SBuf* sb, const char* fmt, ...);
 
 Str* vp_buf_cat2str(Str* s1, Str* s2);
 
