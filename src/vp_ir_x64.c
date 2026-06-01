@@ -852,7 +852,7 @@ static void irX64_mod(IR* ir)
             EMITX64(divR)(x64R[VRSize1][ir->src2->phys]);
         }
         /* Cannot MOV directly from AH to R8B */
-        EMITX64(movRR)(AH, AL);
+        EMITX64(movRR)(AL, AH);
         if(ir->dst->phys != RN_AX)
             EMITX64(movRR)(x64R[VRSize1][ir->dst->phys], AL);
     }
@@ -876,7 +876,7 @@ static void irX64_mod(IR* ir)
             case VRSize8: EMITX64(cqo)(); break;
             default: vp_assertX(0, "?");
             }
-            EMITX64(idivR)(ir->src2->phys);
+            EMITX64(idivR)(x64R[p][ir->src2->phys]);
         }
         else
         {

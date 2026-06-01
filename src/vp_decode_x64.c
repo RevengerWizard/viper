@@ -310,6 +310,9 @@ static const OpcEntry opc2_table[] =
     OPC(0x31, 0x0F, NO_REG, DEC_ZO, IW_NONE, 0, 0, 0, PFX_NONE, "rdtsc"),  /* RDTSC */
     OPC(0xA2, 0x0F, NO_REG, DEC_ZO, IW_NONE, 0, 0, 0, PFX_NONE, "cpuid"),  /* CPUID */
 
+    OPC(0x10, 0x0F, NO_REG, DEC_RM, IW_NONE, 16, 0, OPCF_XMM|OPCF_SSE, PFX_NONE, "movups"),/* MOVUPS xmm1, xmm2/m128 */
+    OPC(0x11, 0x0F, NO_REG, DEC_MR, IW_NONE, 16, 0, OPCF_XMM|OPCF_SSE, PFX_NONE, "movups"),/* MOVUPS xmm2/m128, xmm1 */
+
     OPC(0x10, 0x0F, NO_REG, DEC_RM, IW_NONE, 4, 0, OPCF_XMM, PFX_F3, "movss"),/* MOVSS xmm, xmm/m32 */
     OPC(0x11, 0x0F, NO_REG, DEC_MR, IW_NONE, 4, 0, OPCF_XMM, PFX_F3, "movss"),/* MOVSS xmm/m32, xmm */
 
@@ -328,10 +331,10 @@ static const OpcEntry opc2_table[] =
     OPC(0x57, 0x0F, NO_REG, DEC_RM, IW_NONE, 16, 0, OPCF_XMM|OPCF_SSE, PFX_NONE, "xorps"),  /* XORPS xmm, xmm/m128 */
     OPC(0x57, 0x0F, NO_REG, DEC_RM, IW_NONE, 8, 0, OPCF_XMM|OPCF_SSE, PFX_66, "xorpd"),/* XORPD xmm, xmm/m12 */
 
-    OPC(0x2F, 0x0F, NO_REG, DEC_RM, IW_NONE, 4, 0, OPCF_XMM|OPCF_SSE, PFX_NONE, "comiss"),      /* COMISS xmm, xmm/m32 */
-    OPC(0x2F, 0x0F, NO_REG, DEC_RM, IW_NONE, 8, 0, OPCF_XMM|OPCF_SSE, PFX_66, "comisd"),   /* COMISD xmm, xmm/m64 */
-    OPC(0x2E, 0x0F, NO_REG, DEC_RM, IW_NONE, 4, 0, OPCF_XMM|OPCF_SSE, PFX_NONE, "ucomiss"),     /* UCOMISS xmm, xmm/m32 */
-    OPC(0x2E, 0x0F, NO_REG, DEC_RM, IW_NONE, 8, 0, OPCF_XMM|OPCF_SSE, PFX_66, "ucomisd"),  /* UCOMISD xmm, xmm/m64 */
+    OPC(0x2F, 0x0F, NO_REG, DEC_RM, IW_NONE, 4, 0, OPCF_XMM|OPCF_SSE, PFX_NONE, "comiss"),  /* COMISS xmm, xmm/m32 */
+    OPC(0x2F, 0x0F, NO_REG, DEC_RM, IW_NONE, 8, 0, OPCF_XMM|OPCF_SSE, PFX_66, "comisd"),    /* COMISD xmm, xmm/m64 */
+    OPC(0x2E, 0x0F, NO_REG, DEC_RM, IW_NONE, 4, 0, OPCF_XMM|OPCF_SSE, PFX_NONE, "ucomiss"), /* UCOMISS xmm, xmm/m32 */
+    OPC(0x2E, 0x0F, NO_REG, DEC_RM, IW_NONE, 8, 0, OPCF_XMM|OPCF_SSE, PFX_66, "ucomisd"),   /* UCOMISD xmm, xmm/m64 */
 
     OPC(0x2C, 0x0F, NO_REG, DEC_RM, IW_NONE, 4, 0, OPCF_XMM_SRC, PFX_F3, "cvttss2si"),/* CVTTSS2SI r, xmm/m32 */
     OPC(0x2C, 0x0F, NO_REG, DEC_RM, IW_NONE, 8, 0, OPCF_XMM_SRC, PFX_F2, "cvttsd2si"),/* CVTTSD2SI r, xmm/m64 */
@@ -342,6 +345,9 @@ static const OpcEntry opc2_table[] =
 
     OPC(0x6E, 0x0F, NO_REG, DEC_RM, IW_NONE, 0, 0, OPCF_XMM_DST, PFX_66, "movd"),/* MOVD xmm, r/m32 */
     OPC(0x6E, 0x0F, NO_REG, DEC_RM, IW_NONE, 0, 0, OPCF_XMM_DST|OPCF_REXW, PFX_66, "movq"), /* MOVQ xmm, r/m64 */
+
+    OPC(0x6F, 0x0F, NO_REG, DEC_RM, IW_NONE, 16, 0, OPCF_XMM, PFX_66, "movdqa"),/* MOVDQA xmm, xmm/m128 */
+    OPC(0x7F, 0x0F, NO_REG, DEC_MR, IW_NONE, 16, 0, OPCF_XMM, PFX_66, "movdqa"),/* MOVDQA xmm/m128, xmm */
 };
 
 #define OPC1_COUNT (ARRSIZE(opc1_table))

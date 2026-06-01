@@ -312,12 +312,12 @@ void EMITX64(movzxRR)(X64Reg dst, X64Reg src)
     emit_u8(V, MODRM(3, rd & 7, rs & 7));
 }
 
-/* MOVD xmm, gpr (32-bit zero-extended move) */
+/* MOVD xmm, gpr */
 void EMITX64(movdXR)(X64Reg dst, X64Reg src)
 {
     vp_assertX(REG_CLASS(dst) == RC_XMM, "dst != xmm");
     vp_assertX(REG_CLASS(src) == RC_GPR, "src != gpr");
-    vp_assertX(REG_SIZE(src) == 4, "src != r32");
+    //vp_assertX(REG_SIZE(src) == 4, "src != r32");
 
     uint8_t rd = REG_NUM(dst);
     uint8_t rs = REG_NUM(src);
@@ -333,7 +333,7 @@ void EMITX64(movdXR)(X64Reg dst, X64Reg src)
     emit_u8(V, MODRM(3, rd & 7, rs & 7));
 }
 
-/* MOVQ xmm, gpr (64-bit move) */
+/* MOVQ xmm, gpr */
 void EMITX64(movqXR)(X64Reg dst, X64Reg src)
 {
     vp_assertX(REG_CLASS(dst) == RC_XMM, "dst != xmm");

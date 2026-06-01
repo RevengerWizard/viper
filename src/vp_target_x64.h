@@ -18,7 +18,7 @@
 
 #define REG_NUM(r)   ((r) & 0xF)
 #define REG_CLASS(r) (((r) >> 4) & 0xF)
-#define REG_SIZE(r)  (1u << (((r) >> 8) & 0xF))
+#define REG_SIZE(r)  (1 << (((r) >> 8) & 0xF))
 #define REG_SUB(r)   (((r) >> 12) & 0xF)
 
 #define X64REG(num, cls, size, sub) \

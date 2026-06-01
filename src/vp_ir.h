@@ -199,7 +199,7 @@ typedef struct IR
         struct
         {
             struct BB** bbs;
-            uint32_t len;
+            size_t len;
         } tjmp;
         struct
         {
@@ -256,7 +256,7 @@ IR* vp_ir_ret(VReg* src, uint8_t irflag);
 IR* vp_ir_cond(VReg* src1, VReg* src2, CondKind cond);
 IR* vp_ir_jmp(BB* bb);
 void vp_ir_cjmp(VReg* src1, VReg* src2, CondKind cond, BB* bb);
-void vp_ir_tjmp(VReg* src1, BB** bbs, uint32_t len);
+void vp_ir_tjmp(VReg* src1, BB** bbs, size_t len);
 IR* vp_ir_pusharg(VReg* src, uint32_t idx);
 IR* vp_ir_call(IRCallInfo* ci, VReg* dst, VReg* freg);
 IR* vp_ir_cast(VReg* src, bool srcunsigned, VRSize dstsize, uint8_t vflag);

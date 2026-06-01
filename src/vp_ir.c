@@ -147,9 +147,9 @@ void vp_ir_cjmp(VReg* src1, VReg* src2, CondKind cond, BB* bb)
 }
 
 /* Table jump */
-void vp_ir_tjmp(VReg* src1, BB** bbs, uint32_t len)
+void vp_ir_tjmp(VReg* src1, BB** bbs, size_t len)
 {
-    vp_assertX(vec_len(bbs) > 0, "empty bbs");
+    vp_assertX(bbs && len > 0, "empty bbs");
     IR* ir = ir_new(IR_TJMP);
     ir->src1 = src1;
     ir->tjmp.bbs = bbs;

@@ -43,6 +43,7 @@ static VP_AINLINE Type* type_alloc(TypeKind kind)
 {
     Type* t = vp_arena_alloc(&V->typearena, sizeof(*t));
     t->kind = kind;
+    t->qual = 0;
     return t;
 }
 

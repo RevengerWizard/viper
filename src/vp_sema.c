@@ -1268,7 +1268,7 @@ static Operand sema_binary_add(Expr* e, Type* ret)
         sym_complete(rop.ty->p);
         return opr_rval(rop.ty);
     }
-    vp_err_error(loc, "operands of '+' must both have arithmetic type, or pointer and integer type");
+    vp_err_error(loc, "invalid operands to '+' ('%s' and '%s'); expected both operands to be arithmetic, or one pointer and one integer", type_str(lop.ty), type_str(rop.ty));
     return opr_nil;
 }
 

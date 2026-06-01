@@ -288,6 +288,16 @@ int main(void)
         "cmp       rdx, 0xffffffff80000000\n");
     TEST_EMIT(vp_emitX64_cmpRI(AX, 0),
         "cmp       ax, 0x0\n");
+    /* -- MOVDQA -- */
+    TEST_EMIT(vp_emitX64_movdqaXM(XMM0, X64MEM(RN_AX, NOREG, 1, 0, 8)),
+        "movdqa    xmm0, xmmword ptr [rax]\n");
+    TEST_EMIT(vp_emitX64_movdqaMX(X64MEM(RN_SP, NOREG, 1, 16, 8), XMM0),
+        "movdqa    xmmword ptr [rsp+16], xmm0\n");
+    /* -- MOVUPS -- */
+    TEST_EMIT(vp_emitX64_movupsXM(XMM3, X64MEM(RN_BX, RN_CX, 2, 0, 8)),
+        "movups    xmm3, xmmword ptr [rbx+rcx*2]\n");
+    TEST_EMIT(vp_emitX64_movupsMX(X64MEM(RN_DI, NOREG, 1, 0, 8), XMM5),
+        "movups    xmmword ptr [rdi], xmm5\n");
     /* -- MOVD -- */
     TEST_EMIT(vp_emitX64_movdXR(XMM11, EAX),
         "movd      xmm11, eax\n");
