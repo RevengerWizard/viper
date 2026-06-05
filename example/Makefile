@@ -12,6 +12,7 @@ all: cube
 
 cube: cube.exe
 triangle: triangle.exe
+win: win.exe
 
 %.exe: %.vp
 	$(VXC) comp $<
@@ -20,4 +21,4 @@ triangle: triangle.exe
 clean:
 	$(RM) -f $(EXES) *.obj
 
-.PHONY: all cube triangle clean
+.PHONY: all cube triangle win clean
