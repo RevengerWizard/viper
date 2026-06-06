@@ -10,6 +10,6 @@ pub fn main() : uint32
 {
     io::init();
     let err : io::IOError;
-    io::write(io::stdin, "hello\n", 6, &err);
+    io::write(io::stdout, "hello\n", 6, &err);
     return uint32(err);
 }

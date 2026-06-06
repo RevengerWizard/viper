@@ -51,6 +51,7 @@ typedef struct Code
     Stmt* body;
     const ABIInfo* abi;
     uint32_t paramofs;  /* Stack offset of stack params, if any */
+    bool inlining;
 } Code;
 
 vec_t(Code*) vp_codegen(vec_t(Decl*) decls);

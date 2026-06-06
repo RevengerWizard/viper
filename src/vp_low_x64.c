@@ -105,7 +105,6 @@ static void lowX64_params(Code* code)
                 break;
             }
             case PC_STACK:
-            case PC_MEM:
                 /* Already on stack */
                 break;
             case PC_SMALL:

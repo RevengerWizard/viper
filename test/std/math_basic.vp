@@ -10,5 +10,5 @@ pub fn main() : int32
     let b : int64 = math::absi64(-13);
     let c : float32 = math::absf32(-4.5);
     let d : float64 = math::floorf64(18.75);
-    return a + intcast(int32, b) + floatcast(int32, c) + floatcast(int32, d);
+    return a + intcast(int32, b) + intcast(int32, c) + intcast(int32, d);
 }

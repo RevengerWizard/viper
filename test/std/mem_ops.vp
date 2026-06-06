@@ -16,5 +16,5 @@ pub fn main() : int32
     if mem::cmp(dst, src, 6) != 0 return 2;
 
     mem::move(&dst[1], dst, 5);
-    return int32(dst[0]) + int32(dst[1]) + int32(dst[2]) + int32(dst[5]) + 29;
+    return intcast(int32, dst[0]) + intcast(int32, dst[1]) + intcast(int32, dst[2]) + intcast(int32, dst[5]) + 29;
 }

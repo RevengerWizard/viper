@@ -2464,7 +2464,8 @@ static void sema_fn_body(Sym* sym)
             Param* param = &d->fn.params[i];
             Type* pty = sema_typespec(param->spec);
             sym_add(param->name, SYM_VAR, pty);
-            vp_scope_add(V->currscope, param->name, pty);
+            VarInfo* vi = vp_scope_add(V->currscope, param->name, pty);
+            vi->storage |= VS_PARAM;
         }
         ret = sema_typespec(d->fn.ret);
         d->fn.rett = ret;

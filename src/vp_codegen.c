@@ -503,6 +503,12 @@ static VReg* gen_ref(Expr* e)
             {
                 return vp_ir_iofs(name, vi->storage & VS_FN, false, true)->dst;
             }
+            /* Handle struct params passed by pointer */
+            if(vs_isparam(vi) && abi_isstack(vi->type) && !V->fncode->inlining)
+            {
+                vp_assertX(vi->vreg, "empty vreg on VS_PARAM '%s'", str_data(name));
+                return vi->vreg;
+            }
             if(!vi->fi)
             {
                 if(!vrf_spill(vi->vreg))
@@ -659,6 +665,7 @@ static VReg* gen_call(Expr* e)
         ParamClass cls;    /* Parameter class */
         uint32_t idx;   /* Register index or stack offset */
         uint32_t size;
+        int32_t indirect_offset;  /* -1 = not indirect; >= 0 = sofs offset for struct copy */
     } ArgInfo;
 
     vec_t(ArgInfo) arginfos = vec_init(ArgInfo);
@@ -678,7 +685,7 @@ static VReg* gen_call(Expr* e)
 
         uint32_t previidx = iidx, prevfidx = fidx;
         ParamClass cls = abi_classify(argty, abi, &iidx, &fidx);
-        ArgInfo p = {.cls = cls, .size = vp_type_sizeof(argty)};
+        ArgInfo p = {.cls = cls, .size = vp_type_sizeof(argty), .indirect_offset = -1};
         switch(cls)
         {
             case PC_SMALL:  /* Small structs consume GPRs */
@@ -691,7 +698,6 @@ static VReg* gen_call(Expr* e)
                 regargs++;
                 break;
             case PC_STACK:
-            case PC_MEM:
             {
                 uint32_t align = vp_type_alignof(argty);
                 offset = ALIGN_UP(offset, align);
@@ -704,14 +710,41 @@ static VReg* gen_call(Expr* e)
         vec_push(arginfos, p);
     }
 
+    /* Carve out sofs space for large struct args */
+    for(uint32_t i = 0; i < argnum; i++)
+    {
+        ArgInfo* p = &arginfos[i];
+        Type* argty = e->call.args[i]->ty;
+        if(p->cls == PC_IREG && abi_isstack(argty))
+        {
+            uint32_t align = vp_type_alignof(argty);
+            offset = ALIGN_UP(offset, align);
+            p->indirect_offset = (int32_t)offset;
+            offset += vp_type_sizeof(argty);
+            V->ra->flag = RAF_STACK_FRAME;
+        }
+    }
+
     uint32_t argtotal = argnum + argstart;
     VReg** args = argtotal == 0 ? NULL : vp_mem_calloc(argtotal, sizeof(*args));
+
+    /* Copy structs into call stack space */
+    for(uint32_t i = 0; i < argnum; i++)
+    {
+        ArgInfo* p = &arginfos[i];
+        if(p->indirect_offset == -1) continue;
+        Type* argty = e->call.args[i]->ty;
+        VReg* src = gen_expr(e->call.args[i]);
+        VReg* dst = vp_ir_sofs(p->indirect_offset + shadow)->dst;
+        gen_memcpy(argty, dst, src);
+        args[i + argstart] = dst;
+    }
 
     /* Pre-compute arguments */
     for(uint32_t i = 0; i < argnum; i++)
     {
-        uint32_t vidx = i + argstart;
-        args[vidx] = gen_expr(e->call.args[i]);
+        if(arginfos[i].indirect_offset != -1) continue;   /* already handled */
+        args[i + argstart] = gen_expr(e->call.args[i]);
     }
 
     /* Generate arguments (in reverse, for stack) */
@@ -729,13 +762,14 @@ static VReg* gen_call(Expr* e)
             case PC_STACK:
             {
                 VReg* dst = vp_ir_sofs(p->idx + shadow)->dst;
-                vp_ir_store(dst, src, ir_flag(argty));
-                break;
-            }
-            case PC_MEM:
-            {
-                VReg* dst = vp_ir_sofs(p->idx + shadow)->dst;
-                gen_memcpy(argty, dst, src);
+                if(ty_isscalar(argty))
+                {
+                    vp_ir_store(dst, src, ir_flag(argty));
+                }
+                else
+                {
+                    gen_memcpy(argty, dst, src);
+                }
                 break;
             }
             case PC_SMALL:
@@ -1226,7 +1260,10 @@ static VReg* gen_inline(Expr* e, Type* ret, Stmt* body, Code* code)
     }
 
     /* Inline the body */
+    bool prev = V->fncode->inlining;
+    V->fncode->inlining = true;
     gen_block(body);
+    V->fncode->inlining = prev;
 
     V->fncode->inretvr = saveretvr;
     V->fncode->retbb = saveretbb;
@@ -1393,7 +1430,7 @@ static void gen_ret(Stmt* st)
                 VReg* retvr = V->fncode->retvr;
                 vp_assertX(retvr, "?");
                 gen_memcpy(ty, retvr, vreg);
-                vp_ir_ret(vreg, IRF_UNSIGNED);  /* Pointer is unsigned */
+                vp_ir_ret(retvr, IRF_UNSIGNED);  /* Pointer is unsigned */
             }
         }
         else    /* Inlining */
@@ -1802,17 +1839,6 @@ static void gen_stack(Code* code)
                 vi->vreg->fi.ofs = paramofs = ALIGN_UP(paramofs, TARGET_PTR_SIZE);
                 paramofs += TARGET_PTR_SIZE;
                 break;
-            case PC_MEM:
-            {
-                Type* ty = vi->type;
-                uint32_t size = vp_type_sizeof(ty);
-                uint32_t align = vp_type_alignof(ty);
-                V->ra->flag = RAF_STACK_FRAME;
-                /* Stack parameter offset */
-                vi->fi->ofs = paramofs = ALIGN_UP(paramofs, align);
-                paramofs += ALIGN_UP(size, TARGET_PTR_SIZE);
-                break;
-            }
             default: break;
         }
     }
@@ -1834,7 +1860,7 @@ static void gen_params(Decl* d, Code* code)
     {
         VReg* vr = vp_vreg_new(vp_type_ptr(ret));
         vr->flag |= VRF_STACK_PARAM;
-        vr->param = REG_NO;
+        vr->param = abi->imap[0];
         code->retvr = vr;
 
         ParamLoc pl = {.cls = PC_IREG, .idx = abi->imap[0]};
@@ -1864,9 +1890,23 @@ static void gen_params(Decl* d, Code* code)
         switch(cls)
         {
             case PC_IREG:
-                vp_assertX(vr, "'%s' (%s) param is not scalar", str_data(vi->name), type_str(ty));
-                vr->flag |= VRF_PARAM;
-                vr->param = pl.idx = abi->imap[previidx];
+                if(ty_isaggr(ty))
+                {
+                    /* Large struct: vi->vreg holds the incoming pointer */
+                    vi->vreg = vp_vreg_new(vp_type_ptr(ty));
+                    vi->vreg->flag |= VRF_PARAM;
+                    vi->vreg->param = pl.idx = abi->imap[previidx];
+                    vr = vi->vreg;
+                    vi->fi = NULL; /* accessed via pointer in vi->vreg */
+                    pl.vi = vi;
+                    V->ra->flag = RAF_STACK_FRAME;
+                }
+                else
+                {
+                    vp_assertX(vr, "'%s' (%s) param is not scalar", str_data(vi->name), type_str(ty));
+                    vr->flag |= VRF_PARAM;
+                    vr->param = pl.idx = abi->imap[previidx];
+                }
                 break;
             case PC_FREG:
                 vp_assertX(vr, "not scalar param");
@@ -1880,13 +1920,6 @@ static void gen_params(Decl* d, Code* code)
                 V->ra->flag = RAF_STACK_FRAME;
                 pl.vi = vi;
                 break;
-            case PC_MEM:
-            {
-                vp_assertX(vi->fi, "aggregate param needs frame info");
-                V->ra->flag = RAF_STACK_FRAME;
-                pl.vi = vi;
-                break;
-            }
             case PC_SMALL:
             {
                 vp_assertX(!vr, "small aggr param must not have a vreg");

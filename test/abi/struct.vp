@@ -1,0 +1,27 @@
+//! stage: run
+//! expect-compile: ok
+//! expect-exit: 90
+
+struct Mem
+{
+    a : uint64;
+    b : uint64;
+}
+
+#staticassert(sizeof(Mem) == 16);
+
+fn add(a : Mem, b : Mem) : Mem
+{
+    let res : Mem;
+    res.a = a.a + b.a;
+    res.b = a.b + b.b;
+    return res;
+}
+
+pub fn main() : uint64
+{
+    let m1 = Mem::{34, 67};
+    let m2 = Mem::{98, 23};
+    let res : Mem = add(m1, m2);
+    return res.b;
+}

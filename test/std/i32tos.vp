@@ -1,0 +1,27 @@
+//! stage: run
+//! expect-compile: ok
+//! expect-stdout: "-2147483648\n2147483647\n"
+//! expect-exit: 0
+
+import std::io as io
+import std::conv as conv
+from std::conv import ConvError
+from std::debug import assert
+
+pub fn main() : uint32
+{
+    io::init();
+    var num : int32 = int32::min;
+    let buf : uint8[20];
+
+    var s : usize = conv::i32tos(buf, 20, num);
+    io::write(io::stdout, buf, s, nil);
+    io::putc('\n');
+
+    num = int32::max;
+    s = conv::i32tos(buf, 20, num);
+    io::write(io::stdout, buf, s, nil);
+    io::putc('\n');
+
+    return 0;
+}

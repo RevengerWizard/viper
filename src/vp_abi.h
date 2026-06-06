@@ -17,7 +17,6 @@ typedef enum
     PC_IREG,    /* Integer register */
     PC_FREG,    /* Float register */
     PC_STACK,   /* Stack slot */
-    PC_MEM,     /* Memory  */
     PC_SMALL,   /* Small struct passed in GPR */
 } ParamClass;
 
@@ -32,12 +31,7 @@ typedef struct ParamLoc
 /* Determine if type parameter needs to be allocated on the stack */
 static VP_AINLINE bool abi_isstack(Type* ty)
 {
-    if(ty_isaggr(ty))
-    {
-        uint32_t size = vp_type_sizeof(ty);
-        return size > 8;
-    }
-    return false;
+    return ty_isaggr(ty) && vp_type_sizeof(ty) > 8;
 }
 
 /* Determine if type parameter aggregate is a small struct (passed in GPR) */
@@ -49,8 +43,16 @@ static VP_AINLINE bool abi_issmall(Type* ty)
 /* Classify parameter for ABI */
 static VP_AINLINE ParamClass abi_classify(Type* ty, const ABIInfo* abi, uint32_t* iidx, uint32_t* fidx)
 {
+    /* Large struct: passed by pointer (pointer is classified as a GPR arg) */
     if(abi_isstack(ty))
-        return PC_MEM;
+    {
+        uint32_t slot = (abi->flags & ABI_POS) ? MAX(*iidx, *fidx) : *iidx;
+        if(abi->flags & ABI_POS)
+            *iidx = *fidx = slot + 1;
+        else
+            (*iidx)++;
+        return slot >= abi->imax ? PC_STACK : PC_IREG;
+    }
 
     if(abi_issmall(ty))
     {

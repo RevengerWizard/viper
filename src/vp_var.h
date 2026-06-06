@@ -19,12 +19,14 @@ enum
     VS_PUB = 1 << 2,
     VS_EXTERN = 1 << 3,
     VS_MOD = 1 << 4,
+    VS_PARAM = 1 << 5,
 };
 
 #define vs_isglob(vi) ((vi)->storage & VS_GLOB)
 #define vs_isfn(vi) ((vi)->storage & VS_FN)
 #define vs_ispub(vi) ((vi)->storage & VS_PUB)
 #define vs_isloc(vi) (!vs_isglob(vi))
+#define vs_isparam(vi) ((vi)->storage & VS_PARAM)
 
 typedef struct VarInfo
 {

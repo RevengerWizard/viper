@@ -1,0 +1,46 @@
+//! stage: run
+//! expect-compile: ok
+//! expect-exit: 0
+
+import std::conv as conv
+from std::conv import ConvError
+from std::debug import assert
+
+pub fn main() : uint32
+{
+    var num : int8;
+    let ok : ConvError;
+
+    var p : uint8* = "19";
+    num = conv::stoi8(p, 2, 10, &ok);
+    assert(num == 19);
+    //assert(ok == conv::ConvError::OK);
+    assert(ok == ConvError::OK);
+
+    p = "0";
+    num = conv::stoi8(p, 1, 10, &ok);
+    assert(num == 0);
+    assert(ok == ConvError::OK);
+
+    p = "a";
+    num = conv::stoi8(p, 1, 16, &ok);
+    assert(num == 10);
+    assert(ok == ConvError::OK);
+
+    p = "-89";
+    num = conv::stoi8(p, 3, 10, &ok);
+    assert(num == -89);
+    assert(ok == ConvError::OK);
+
+    p = "129";
+    num = conv::stoi8(p, 3, 10, &ok);
+    assert(num == 0);
+    assert(ok == ConvError::OVERFLOW);
+
+    //p = "-129";
+    //num = conv::stoi8(p, 4, 10, &ok);
+    //assert(num == 0);
+    //assert(ok == ConvError::UNDERFLOW);
+
+    return 0;
+}

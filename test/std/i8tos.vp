@@ -1,0 +1,32 @@
+//! stage: run
+//! expect-compile: ok
+//! expect-stdout: "-128\n67\n127\n"
+//! expect-exit: 0
+
+import std::io as io
+import std::conv as conv
+from std::conv import ConvError
+from std::debug import assert
+
+pub fn main() : uint32
+{
+    io::init();
+    var num : int8 = int8::min;
+    let buf : uint8[5];
+
+    var s : usize = conv::i8tos(buf, 5, num);
+    io::write(io::stdout, buf, s, nil);
+    io::putc('\n');
+
+    num = 67;
+    s = conv::i8tos(buf, 5, num);
+    io::write(io::stdout, buf, s, nil);
+    io::putc('\n');
+
+    num = int8::max;
+    s = conv::i8tos(buf, 5, num);
+    io::write(io::stdout, buf, s, nil);
+    io::putc('\n');
+
+    return 0;
+}

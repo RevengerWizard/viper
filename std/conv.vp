@@ -1,0 +1,870 @@
+pub enum ConvError : uint32
+{
+    OK,
+    INVALID,    // bad characters
+    OVERFLOW,   // out of range for target type
+    UNDERFLOW,
+    EMPTY       // zero-length input
+}
+
+inline fn set_err(err : ConvError*?, val : ConvError) : void
+{
+    if err != nil { *err = val; }
+}
+
+pub fn u8tos(buf : uint8*, len : usize, num : uint8) : usize
+{
+    var digits : usize = 0;
+    var tmp : int32 = intcast(int32, num);
+    if tmp == 0 { digits = 1; }
+    else
+    {
+        while tmp > 0 { tmp /= 10; digits++; }
+    }
+
+    if digits >= len return 0;
+
+    var idx : usize = digits;
+    buf[idx] = '\0';
+
+    if num == 0
+    {
+        buf[0] = '0';
+    }
+    else
+    {
+        tmp = intcast(int32, num);
+        while tmp > 0
+        {
+            idx--;
+            buf[idx] = intcast(uint8, '0' + intcast(uint8, tmp % 10));
+            tmp /= 10;
+        }
+    }
+
+    return digits;
+}
+
+pub fn i8tos(buf : uint8*, len : usize, num : int8) : usize
+{
+    var neg : bool = num < 0;
+    var n : int8 = neg ? -num : num;
+
+    if num == int8::min
+    {
+        if len < 5 return 0;
+        buf[0] = '-';
+        buf[1] = '1';
+        buf[2] = '2';
+        buf[3] = '8';
+        buf[4] = '\0';
+        return 4;
+    }
+
+    var digits : usize = 0;
+    var tmp : int8 = n;
+    if tmp == 0 { digits = 1; }
+    else
+    {
+        while tmp > 0 { tmp /= 10; digits++; }
+    }
+
+    if neg { digits++; }
+    if digits >= len return 0;
+
+    var idx : usize = digits;
+    buf[idx] = 0;
+
+    if n == 0
+    {
+        buf[0] = '0';
+    }
+    else
+    {
+        tmp = n;
+        while tmp > 0
+        {
+            idx--;
+            buf[idx] = intcast(uint8, '0' + intcast(uint8, tmp) % 10);
+            tmp /= 10;
+        }
+    }
+
+    if neg
+    {
+        idx--;
+        buf[idx] = '-';
+    }
+
+    return digits;
+}
+
+pub fn i32tos(buf : uint8*, len : usize, num : int32) : usize
+{
+    var neg : bool = num < 0;
+    var n : int32 = neg ? -num : num;
+
+    // Special case: INT_MIN cannot be negated
+    if num == int32::min
+    {
+        if len < 12 return 0;
+        buf[0] = '-';
+        buf[1] = '2';
+        buf[2] = '1';
+        buf[3] = '4';
+        buf[4] = '7';
+        buf[5] = '4';
+        buf[6] = '8';
+        buf[7] = '3';
+        buf[8] = '6';
+        buf[9] = '4';
+        buf[10] = '8';
+        buf[11] = 0;
+        return 11;
+    }
+
+    var digits : usize = 0;
+    var tmp : int32 = n;
+    if tmp == 0 { digits = 1; }
+    else
+    {
+        while tmp > 0 { tmp /= 10; digits++; }
+    }
+
+    if neg { digits++; }
+    if digits >= len return 0;
+
+    var idx : usize = digits;
+    buf[idx] = 0;
+
+    if n == 0
+    {
+        buf[0] = '0';
+    }
+    else
+    {
+        tmp = n;
+        while tmp > 0
+        {
+            idx--;
+            buf[idx] = intcast(uint8, '0' + intcast(uint8, tmp % 10));
+            tmp /= 10;
+        }
+    }
+
+    if neg
+    {
+        idx--;
+        buf[idx] = '-';
+    }
+
+    return digits;
+}
+
+// grisu3 - fast float-to-string conversion
+//
+// Based on "Printing Floating-Point Numbers Quickly And Accurately with Integers"
+// by Florian Loitsch
+//
+// Derived from https://github.com/juj/MathGeoLib/blob/master/src/Math/grisu3.c
+
+// Do-it-yourself floating point
+struct DiyFp
+{
+    f : uint64;
+    e : int32;
+}
+
+// Multiply two DiyFp values: r.f = high 64 bits of x.f * y.f (rounded), r.e = x.e + y.e + 64
+inline fn diyfp_multiply(x : DiyFp, y : DiyFp) : DiyFp
+{
+    // Split each 64-bit mantissa into two 32-bit halves
+    let a : uint64 = x.f >> 32;
+    let b : uint64 = x.f & 0xFFFFFFFF;
+    let c : uint64 = y.f >> 32;
+    let d : uint64 = y.f & 0xFFFFFFFF;
+
+    let ac : uint64 = a * c;
+    let bc : uint64 = b * c;
+    let ad : uint64 = a * d;
+    let bd : uint64 = b * d;
+
+    // tmp accumulates the cross terms; add rounding bit
+    let tmp : uint64 = (bd >> 32) + (ad & 0xFFFFFFFF) + (bc & 0xFFFFFFFF) + (uint64(1) << 31);
+
+    var r : DiyFp;
+    r.f = ac + (ad >> 32) + (bc >> 32) + (tmp >> 32);
+    r.e = x.e + y.e + 64;
+    return r;
+}
+
+inline fn diyfp_minus(x : DiyFp, y : DiyFp) : DiyFp
+{
+    // assert x.e == y.e && x.f >= y.f
+    return DiyFp::{f = x.f - y.f, e = x.e};
+}
+
+// Extract a float64 (double) into a DiyFp.
+// Uses the IEEE 754 double layout: 1 sign bit, 11 exponent bits, 52 fraction bits.
+// D64_EXP_BIAS = 1075 = 1023 + 52 (bias + mantissa width)
+fn diyfp_f64(d : float64) : DiyFp
+{
+    let u64 : uint64 = ptrcast(uint64*, &d)[0];
+    let exp_mask  : uint64 = 0x7FF0000000000000;
+    let frac_mask : uint64 = 0x000FFFFFFFFFFFFF;
+    let implicit1 : uint64 = 0x0010000000000000;
+
+    var fp : DiyFp;
+    if (u64 & exp_mask) == 0
+    {
+        // Denormal: no implicit leading 1
+        fp.f = u64 & frac_mask;
+        fp.e = 1 - 1075;       // 1 - D64_EXP_BIAS
+    }
+    else
+    {
+        // Normal: restore implicit leading 1
+        fp.f = (u64 & frac_mask) + implicit1;
+        fp.e = intcast(int32, (u64 & exp_mask) >> 52) - 1075;  // biased_exp - D64_EXP_BIAS
+    }
+    return fp;
+}
+
+// Extract a float32 into a DiyFp.
+// Uses the IEEE 754 single layout: 1 sign bit, 8 exponent bits, 23 fraction bits.
+// F32_EXP_BIAS = 150 = 127 + 23 (bias + mantissa width)
+fn diyfp_f32(v : float32) : DiyFp
+{
+    let bits : uint32 = ptrcast(uint32*, &v)[0];
+    let exp_mask  : uint32 = 0x7F800000;
+    let frac_mask : uint32 = 0x007FFFFF;
+    let implicit1 : uint32 = 0x00800000;
+
+    var fp : DiyFp;
+    if (bits & exp_mask) == 0
+    {
+        // Denormal: no implicit leading 1
+        fp.f = intcast(uint64, bits & frac_mask);
+        fp.e = 1 - 150;       // 1 - F32_EXP_BIAS
+    }
+    else
+    {
+        // Normal: restore implicit leading 1
+        fp.f = intcast(uint64, (bits & frac_mask) + implicit1);
+        fp.e = intcast(int32, (bits & exp_mask) >> 23) - 150;  // biased_exp - F32_EXP_BIAS
+    }
+    return fp;
+}
+
+// Normalize DiyFp so that the most significant bit of f is 1.
+// Uses a fast 10-bit shift when the top 10 bits are all zero, then singles.
+fn diyfp_normalize(n : DiyFp) : DiyFp
+{
+    var f : uint64 = n.f;
+    var e : int32  = n.e;
+
+    // Fast path: shift 10 bits at a time while top 10 bits are clear
+    while (f & uint64(0xFFC0000000000000)) == 0
+    {
+        f = f << 10;
+        e = e - 10;
+    }
+    // Fine path: shift 1 bit at a time until bit 63 is set
+    while (f & uint64(0x8000000000000000)) == 0
+    {
+        f = f << 1;
+        e = e - 1;
+    }
+    return DiyFp::{ f = f, e = e };
+}
+
+struct Pow10
+{
+    fract : uint64;
+    b_exp, d_exp : int16;
+}
+
+let pow_cache : Pow10[] = {
+    {0xfa8fd5a0081c0288, -1220, -348},
+	{0xbaaee17fa23ebf76, -1193, -340},
+	{0x8b16fb203055ac76, -1166, -332},
+	{0xcf42894a5dce35ea, -1140, -324},
+	{0x9a6bb0aa55653b2d, -1113, -316},
+	{0xe61acf033d1a45df, -1087, -308},
+	{0xab70fe17c79ac6ca, -1060, -300},
+	{0xff77b1fcbebcdc4f, -1034, -292},
+	{0xbe5691ef416bd60c, -1007, -284},
+	{0x8dd01fad907ffc3c,  -980, -276},
+	{0xd3515c2831559a83,  -954, -268},
+	{0x9d71ac8fada6c9b5,  -927, -260},
+	{0xea9c227723ee8bcb,  -901, -252},
+	{0xaecc49914078536d,  -874, -244},
+	{0x823c12795db6ce57,  -847, -236},
+	{0xc21094364dfb5637,  -821, -228},
+	{0x9096ea6f3848984f,  -794, -220},
+	{0xd77485cb25823ac7,  -768, -212},
+	{0xa086cfcd97bf97f4,  -741, -204},
+	{0xef340a98172aace5,  -715, -196},
+	{0xb23867fb2a35b28e,  -688, -188},
+	{0x84c8d4dfd2c63f3b,  -661, -180},
+	{0xc5dd44271ad3cdba,  -635, -172},
+	{0x936b9fcebb25c996,  -608, -164},
+	{0xdbac6c247d62a584,  -582, -156},
+	{0xa3ab66580d5fdaf6,  -555, -148},
+	{0xf3e2f893dec3f126,  -529, -140},
+	{0xb5b5ada8aaff80b8,  -502, -132},
+	{0x87625f056c7c4a8b,  -475, -124},
+	{0xc9bcff6034c13053,  -449, -116},
+	{0x964e858c91ba2655,  -422, -108},
+	{0xdff9772470297ebd,  -396, -100},
+	{0xa6dfbd9fb8e5b88f,  -369,  -92},
+	{0xf8a95fcf88747d94,  -343,  -84},
+	{0xb94470938fa89bcf,  -316,  -76},
+	{0x8a08f0f8bf0f156b,  -289,  -68},
+	{0xcdb02555653131b6,  -263,  -60},
+	{0x993fe2c6d07b7fac,  -236,  -52},
+	{0xe45c10c42a2b3b06,  -210,  -44},
+	{0xaa242499697392d3,  -183,  -36},
+	{0xfd87b5f28300ca0e,  -157,  -28},
+	{0xbce5086492111aeb,  -130,  -20},
+	{0x8cbccc096f5088cc,  -103,  -12},
+	{0xd1b71758e219652c,   -77,   -4},
+	{0x9c40000000000000,   -50,    4},
+	{0xe8d4a51000000000,   -24,   12},
+	{0xad78ebc5ac620000,     3,   20},
+	{0x813f3978f8940984,    30,   28},
+	{0xc097ce7bc90715b3,    56,   36},
+	{0x8f7e32ce7bea5c70,    83,   44},
+	{0xd5d238a4abe98068,   109,   52},
+	{0x9f4f2726179a2245,   136,   60},
+	{0xed63a231d4c4fb27,   162,   68},
+	{0xb0de65388cc8ada8,   189,   76},
+	{0x83c7088e1aab65db,   216,   84},
+	{0xc45d1df942711d9a,   242,   92},
+	{0x924d692ca61be758,   269,  100},
+	{0xda01ee641a708dea,   295,  108},
+	{0xa26da3999aef774a,   322,  116},
+	{0xf209787bb47d6b85,   348,  124},
+	{0xb454e4a179dd1877,   375,  132},
+	{0x865b86925b9bc5c2,   402,  140},
+	{0xc83553c5c8965d3d,   428,  148},
+	{0x952ab45cfa97a0b3,   455,  156},
+	{0xde469fbd99a05fe3,   481,  164},
+	{0xa59bc234db398c25,   508,  172},
+	{0xf6c69a72a3989f5c,   534,  180},
+	{0xb7dcbf5354e9bece,   561,  188},
+	{0x88fcf317f22241e2,   588,  196},
+	{0xcc20ce9bd35c78a5,   614,  204},
+	{0x98165af37b2153df,   641,  212},
+	{0xe2a0b5dc971f303a,   667,  220},
+	{0xa8d9d1535ce3b396,   694,  228},
+	{0xfb9b7cd9a4a7443c,   720,  236},
+	{0xbb764c4ca7a44410,   747,  244},
+	{0x8bab8eefb6409c1a,   774,  252},
+	{0xd01fef10a657842c,   800,  260},
+	{0x9b10a4e5e9913129,   827,  268},
+	{0xe7109bfba19c0c9d,   853,  276},
+	{0xac2820d9623bf429,   880,  284},
+	{0x80444b5e7aa7cf85,   907,  292},
+	{0xbf21e44003acdd2d,   933,  300},
+	{0x8e679c2f5e44ff8f,   960,  308},
+	{0xd433179d9c8cb841,   986,  316},
+	{0x9e19db92b4e31ba9,  1013,  324},
+	{0xeb96bf6ebadf77d9,  1039,  332},
+	{0xaf87023b9bf0ee6b,  1066,  340}
+};
+
+// Cached power of 10: fills *p with a DiyFp approximation of 10^k where k is chosen
+// so that 10^k brings w into the target exponent range. Returns the decimal exponent k.
+// k = ceil((exp + DIYFP_FRACT_SIZE - 1) * D_1_LOG2_10)  where D_1_LOG2_10 = 1/lg(10)
+fn cached_pow(exp : int32, p : DiyFp*) : int32
+{
+    let k : int32 = intcast(int32, (intcast(int64, exp + 64 - 1) * 1233 >> 12) + 1);
+    let i : int32 = (k - (-348) - 1) / 8 + 1;
+    p.f = pow_cache[i].fract;
+    p.e = intcast(int32, pow_cache[i].b_exp);
+    return intcast(int32, pow_cache[i].d_exp);
+}
+
+// pow10[i] = 10^(i-1)
+let pow10 : uint32[] = {0, 1, 10, 100, 1000, 10000, 100000, 1000000, 10000000, 100000000, 1000000000};
+
+// Find the largest power of 10 <= n given n has at most n_bits significant bits.
+// Sets *div = 10^(kappa-1) and returns kappa. Mirrors largest_pow10() in the C reference.
+fn pow10_largest(n : uint32, n_bits : int32, div : uint32*) : int32
+{
+    var guess : int32 = ((n_bits + 1) * 1233 >> 12) + 1;    // Skip first entry
+    if n < pow10[guess] { guess--; }    // We don't have any guarantees that 2^n_bits <= n
+    *div = pow10[guess];
+    return guess;
+}
+
+// Trim/round trailing digits so the result is closest to the true value
+fn round_weed(buffer : uint8*, len : int32, wp_W : uint64, delta : uint64,
+              rest : uint64, ten_kappa : uint64, ulp : uint64) : bool
+{
+    let wp_Wup : uint64 = wp_W - ulp;
+    let wp_Wdown : uint64 = wp_W + ulp;
+
+    // Trim trailing digit if safe
+    while rest < wp_Wup and delta - rest >= ten_kappa and
+          (rest + ten_kappa < wp_Wup or wp_Wup - rest >= rest + ten_kappa - wp_Wup)
+    {
+        buffer[len - 1]--;
+        rest += ten_kappa;
+    }
+
+    if rest < wp_Wdown and delta - rest >= ten_kappa and
+       (rest + ten_kappa < wp_Wdown or wp_Wdown - rest > rest + ten_kappa - wp_Wdown)
+    {
+        return false;
+    }
+
+    return uint64(2 * ulp) <= rest and rest <= uint64(delta - 4 * ulp);
+}
+
+// Digit generation: emit digits until we've uniquely identified the value
+fn digit_gen(low : DiyFp, w : DiyFp, high : DiyFp, buffer : uint8*,
+             length : int32*, kappa : int32*) : bool
+{
+    var unit : uint64 = 1;
+    let too_low = DiyFp::{f = low.f  - unit, e = low.e};
+    let too_high = DiyFp::{f = high.f + unit, e = high.e};
+    let unsafe_interval : DiyFp = diyfp_minus(too_high, too_low);
+    let one = DiyFp::{f = uint64(1) << intcast(uint64, -w.e), e = w.e};
+
+    var p1 : uint32 = intcast(uint32, too_high.f >> intcast(uint64, -one.e));
+    var p2 : uint64 = too_high.f & (one.f - 1);
+    var div : uint32;
+    *kappa = pow10_largest(p1, 64 + one.e, &div);
+    *length = 0;
+
+    while *kappa > 0
+    {
+        let digit : uint32 = p1 / div;
+        buffer[*length] = intcast(uint8, '0' + intcast(uint8, digit));
+        *length = *length + 1;
+        p1 = p1 % div;
+        *kappa = *kappa - 1;
+
+        let rest : uint64 = (intcast(uint64, p1) << intcast(uint64, -one.e)) + p2;
+        if rest < unsafe_interval.f
+        {
+            return round_weed(buffer, *length,
+                              diyfp_minus(too_high, w).f,
+                              unsafe_interval.f, rest,
+                              intcast(uint64, div) << intcast(uint64, -one.e), unit);
+        }
+        div /= 10;
+    }
+
+    while true
+    {
+        p2 = p2 * 10;
+        unit = unit * 10;
+        unsafe_interval.f = unsafe_interval.f * 10;
+
+        // Integer division by one
+        let digit : int32 = intcast(int32, p2 >> intcast(uint64, -one.e));
+        buffer[*length] = intcast(uint8, '0' + intcast(uint8, digit));
+        *length = *length + 1;
+        p2 = p2 & (one.f - 1);  // Modulo by one
+        *kappa = *kappa - 1;
+
+        if p2 < unsafe_interval.f
+        {
+            return round_weed(buffer, *length,
+                              diyfp_minus(too_high, w).f * unit,
+                              unsafe_interval.f, p2, one.f, unit);
+        }
+    }
+    return false;
+}
+
+// Shared core: given already-computed and scaled w/b_minus/b_plus DiyFps, find the
+// cached power, scale everything, run digit_gen, and write back d_exp.
+// Both grisu3_f32 and grisu3_f64 set up type-specific boundaries then call this.
+inline fn grisu3_core(w : DiyFp, b_minus : DiyFp, b_plus : DiyFp,
+                      buffer : uint8*, length : int32*, d_exp : int32*) : bool
+{
+    // Find cached power of 10 that scales w into [MIN_TARGET_EXP, MIN_TARGET_EXP + DIYFP_FRACT_SIZE)
+    // MIN_TARGET_EXP = -60, DIYFP_FRACT_SIZE = 64
+    var c_mk : DiyFp;
+    let mk : int32 = cached_pow(-60 - 64 - w.e, &c_mk);
+
+    let scaled_w : DiyFp = diyfp_multiply(w, c_mk);
+    let scaled_wm : DiyFp = diyfp_multiply(b_minus, c_mk);
+    let scaled_wp : DiyFp = diyfp_multiply(b_plus, c_mk);
+
+    var kappa : int32 = 0;
+    let success : bool = digit_gen(scaled_wm, scaled_w, scaled_wp, buffer, length, &kappa);
+    *d_exp = kappa - mk;
+    return success;
+}
+
+// Compute normalized w, b_minus, b_plus boundaries from a DiyFp and a raw bits test
+// for the "lower boundary is closer" (power-of-two) case.
+// frac_zero: true if the source value's mantissa bits (excluding implicit 1) are all zero.
+// exp_nonzero: true if the source value's exponent bits are non-zero (i.e. it's normal).
+inline fn grisu3_boundaries(dfp : DiyFp, frac_zero : bool, exp_nonzero : bool,
+                            out_w : DiyFp*, out_bm : DiyFp*, out_bp : DiyFp*) : void
+{
+    *out_w = diyfp_normalize(dfp);
+
+    // Upper boundary: half ULP above
+    var t = DiyFp::{f = (dfp.f << 1) + 1, e = dfp.e - 1};
+    *out_bp = diyfp_normalize(t);
+
+    // Lower boundary: closer (quarter ULP) only for powers of two in normal range,
+    // because the predecessor is then twice as far away.
+    var bm : DiyFp;
+    if frac_zero and exp_nonzero
+    {
+        bm = DiyFp::{f = (dfp.f << 2) - 1, e = dfp.e - 2};
+    }
+    else
+    {
+        bm = DiyFp::{f = (dfp.f << 1) - 1, e = dfp.e - 1};
+    }
+    bm.f = bm.f << intcast(uint64, bm.e - out_bp.e);
+    bm.e = out_bp.e;
+    *out_bm = bm;
+}
+
+// grisu3 for float32: uses float32-native boundaries so digit_gen stops at the shortest
+// decimal that round-trips back to the same float32 (typically 6–9 significant digits).
+fn grisu3_f32(v : float32, buffer : uint8*, length : int32*, d_exp : int32*) : bool
+{
+    let dfp : DiyFp = diyfp_f32(v);
+    let bits : uint32 = ptrcast(uint32*, &v)[0];
+
+    var w : DiyFp; var bm : DiyFp; var bp : DiyFp;
+    grisu3_boundaries(dfp,
+                      (bits & uint32(0x7FFFFF)) == 0,
+                      ((bits >> 23) & uint32(0xFF)) != 0,
+                      &w, &bm, &bp);
+    return grisu3_core(w, bm, bp, buffer, length, d_exp);
+}
+
+// grisu3 for float64: uses float64-native boundaries, producing the shortest decimal
+// that round-trips back to the same float64 (typically 15–17 significant digits).
+// Grisu only handles strictly positive finite numbers; caller must handle sign/nan/inf/zero.
+fn grisu3_f64(v : float64, buffer : uint8*, length : int32*, d_exp : int32*) : bool
+{
+    let dfp : DiyFp = diyfp_f64(v);
+    let u64 : uint64 = ptrcast(uint64*, &v)[0];
+
+    var w : DiyFp; var bm : DiyFp; var bp : DiyFp;
+    grisu3_boundaries(dfp,
+                      (u64 & uint64(0x000FFFFFFFFFFFFF)) == 0,
+                      (u64 & uint64(0x7FF0000000000000)) != 0,
+                      &w, &bm, &bp);
+    return grisu3_core(w, bm, bp, buffer, length, d_exp);
+}
+
+// Format digit buffer into output string with decimal point and/or scientific exponent.
+// Mirrors the presentation logic in dtoa_grisu3() from the reference C implementation:
+// we don't always pick the absolute shortest form, but balance readability and shortness.
+fn grisu3_format(buffer : uint8*, length : int32, d_exp : int32, dst : uint8*) : int32
+{
+    // Copy raw digit string into dst first
+    var i : int32 = 0;
+    while i < length { dst[i] = buffer[i]; i++; }
+
+    var len : int32 = length;
+
+    // decimals = MIN(-d_exp, MAX(1, len-1))
+    var decimals : int32 = len - 1;
+    if decimals < 1 { decimals = 1; }
+    if -d_exp < decimals { decimals = -d_exp; }
+
+    if d_exp < 0 and len > 1  // Add decimal point?
+    {
+        i = 0;
+        while i < decimals { dst[len - i] = dst[len - i - 1]; i++; }
+        dst[len - decimals] = '.';
+        len++;
+        d_exp = d_exp + decimals;
+        // Need scientific notation as well?
+        if d_exp != 0
+        {
+            dst[len] = 'e';
+            len++;
+            len = len + intcast(int32, i32tos(dst + len, 32, d_exp));
+        }
+    }
+    else if d_exp < 0 and d_exp >= -3  // Add "0.000x" form where it's shorter than scientific?
+    {
+        // This branch only fires when len == 1 (the len > 1 case is handled above).
+        // We want "0." followed by (-d_exp - 1) zeros then the digit.
+        // Shift the single digit right by (-d_exp + 1) to make room for "0." + zeros.
+        let shift : int32 = -d_exp + 1;
+        dst[len - 1 + shift] = dst[len - 1];
+        dst[0] = '0';
+        dst[1] = '.';
+        i = 2;
+        while i < shift { dst[i] = '0'; i++; }
+        len = len + shift;
+    }
+    // Add scientific notation?
+    else if d_exp < 0 or d_exp > 2
+    {
+        dst[len] = 'e';
+        len++;
+        len = len + intcast(int32, i32tos(dst + len, 32, d_exp));
+    }
+    // Add zeroes instead of scientific notation?
+    else if d_exp > 0
+    {
+        while d_exp > 0 { dst[len] = '0'; len++; d_exp--; }
+    }
+
+    dst[len] = 0;  // grisu3 doesn't null-terminate, so ensure termination
+    return len;
+}
+
+// Convert float32 to string using float32-native boundaries so grisu3 emits the
+// shortest decimal that round-trips back to the same float32 (typically 6–9 digits).
+// Special cases (nan, inf, zero, sign) are detected from the float32 bits directly.
+pub fn f32tos(buf : uint8*, len : usize, v : float32) : usize
+{
+    let bits : uint32 = ptrcast(uint32*, &v)[0];
+    let sign_bit : uint32 = bits >> 31;
+    let exp_bits : uint32 = (bits >> 23) & 0xFF;
+    let frac_bits : uint32 = bits & 0x7FFFFF;
+
+    // Prehandle NaN (exp all-ones, frac non-zero)
+    if exp_bits == 0xFF and frac_bits != 0
+    {
+        if len < 4 return 0;
+        buf[0] = 'n'; buf[1] = 'a'; buf[2] = 'n'; buf[3] = '\0';
+        return 3;
+    }
+
+    // Prehandle infinity (exp all-ones, frac zero)
+    if exp_bits == 0xFF and frac_bits == 0
+    {
+        if sign_bit != 0
+        {
+            if len < 5 return 0;
+            buf[0] = '-'; buf[1] = 'i'; buf[2] = 'n'; buf[3] = 'f'; buf[4] = '\0';
+            return 4;
+        }
+        if len < 4 return 0;
+        buf[0] = 'i'; buf[1] = 'n'; buf[2] = 'f'; buf[3] = '\0';
+        return 3;
+    }
+
+    // Prehandle negative values: emit '-', then work with the positive magnitude
+    var out_idx : usize = 0;
+    var vpos : float32 = v;
+    if sign_bit != 0
+    {
+        if out_idx >= len - 1 return 0;
+        buf[out_idx] = '-';
+        out_idx++;
+        vpos = -v;
+    }
+
+    // Prehandle zero (after sign strip)
+    if (bits & uint32(0x7FFFFFFF)) == 0
+    {
+        if out_idx >= len - 1 return 0;
+        buf[out_idx] = '0';
+        out_idx++;
+        buf[out_idx] = 0;
+        return out_idx;
+    }
+
+    var digit_buf : uint8[32];
+    var digit_len : int32 = 0;
+    var d_exp : int32 = 0;
+
+    // Use float32-native boundaries so digit_gen stops at the shortest round-trip
+    // representation rather than emitting all float64 digits.
+    let success : bool = grisu3_f32(vpos, &digit_buf[0], &digit_len, &d_exp);
+    if !success return 0;
+
+    let written : int32 = grisu3_format(&digit_buf[0], digit_len, d_exp, &buf[out_idx]);
+    if written == 0 return 0;
+    return out_idx + intcast(usize, written);
+}
+
+// Convert float64 to string using float64-native boundaries so grisu3 emits the
+// shortest decimal that round-trips back to the same float64 (typically 15–17 digits).
+// Special cases (nan, inf, zero, sign) are detected from the float64 bits directly.
+pub fn f64tos(buf : uint8*, len : usize, v : float64) : usize
+{
+    let u64 : uint64 = ptrcast(uint64*, &v)[0];
+    let sign_bit : uint64 = u64 >> 63;
+    let exp_bits : uint64 = (u64 >> 52) & 0x7FF;
+    let frac_bits : uint64 = u64 & uint64(0x000FFFFFFFFFFFFF);
+
+    // Prehandle NaN (exp all-ones, frac non-zero)
+    if exp_bits == 0x7FF and frac_bits != 0
+    {
+        if len < 4 return 0;
+        buf[0] = 'n'; buf[1] = 'a'; buf[2] = 'n'; buf[3] = '\0';
+        return 3;
+    }
+
+    // Prehandle infinity (exp all-ones, frac zero)
+    if exp_bits == 0x7FF and frac_bits == 0
+    {
+        if sign_bit != 0
+        {
+            if len < 5 return 0;
+            buf[0] = '-'; buf[1] = 'i'; buf[2] = 'n'; buf[3] = 'f'; buf[4] = '\0';
+            return 4;
+        }
+        if len < 4 return 0;
+        buf[0] = 'i'; buf[1] = 'n'; buf[2] = 'f'; buf[3] = '\0';
+        return 3;
+    }
+
+    // Prehandle negative values: emit '-', then work with the positive magnitude
+    var out_idx : usize = 0;
+    var vpos : float64 = v;
+    if sign_bit != 0
+    {
+        if out_idx >= len - 1 return 0;
+        buf[out_idx] = '-';
+        out_idx++;
+        vpos = -v;
+    }
+
+    // Prehandle zero (after sign strip)
+    if (u64 & uint64(0x7FFFFFFFFFFFFFFF)) == 0
+    {
+        if out_idx >= len - 1 return 0;
+        buf[out_idx] = '0';
+        out_idx++;
+        buf[out_idx] = 0;
+        return out_idx;
+    }
+
+    var digit_buf : uint8[32];
+    var digit_len : int32 = 0;
+    var d_exp : int32 = 0;
+
+    let success : bool = grisu3_f64(vpos, &digit_buf[0], &digit_len, &d_exp);
+    if !success return 0;
+
+    let written : int32 = grisu3_format(&digit_buf[0], digit_len, d_exp, &buf[out_idx]);
+    if written == 0 return 0;
+    return out_idx + intcast(usize, written);
+}
+
+pub fn stou8(s : const uint8*, slen : usize, base : uint8, err : ConvError*?) : uint8
+{
+    if slen == 0
+    {
+        set_err(err, ConvError::EMPTY);
+        return 0;
+    }
+
+    if base < 2 or base > 36
+    {
+        set_err(err, ConvError::INVALID);
+        return 0;
+    }
+
+    var res : uint32 = 0;
+    var i : int32 = 0;
+    while i < intcast(int32, slen)
+    {
+        var c : uint8 = s[i];
+        var val : uint8 = 0;
+        if c >= '0' and c <= '9' { val = c - '0'; }
+        else if c >= 'a' and c <= 'z' { val = c - 'a' + 10; }
+        else if c >= 'A' and c <= 'Z' { val = c - 'A' + 10; }
+        else
+        {
+            set_err(err, ConvError::INVALID);
+            return 0;
+        }
+
+        if val >= base
+        {
+            set_err(err, ConvError::INVALID);
+            return 0;
+        }
+
+        var next : uint32 = res * intcast(uint32, base) + intcast(uint32, val);
+        if next > 255
+        {
+            set_err(err, ConvError::OVERFLOW);
+            return 0;
+        }
+        res = next;
+        i++;
+    }
+
+    set_err(err, ConvError::OK);
+    return intcast(uint8, res);
+}
+
+pub fn stoi8(s : const uint8*, slen : usize, base : uint8, err : ConvError*?) : int8
+{
+    if slen == 0
+    {
+        set_err(err, ConvError::EMPTY);
+        return 0;
+    }
+
+    var neg : bool = false;
+    var i : int32 = 0;
+    if s[0] == '-' or s[0] == '+'
+    {
+        neg = s[0] == '-';
+        i++;
+        if i == intcast(int32, slen)
+        {
+            set_err(err, ConvError::INVALID);
+            return 0;
+        }
+    }
+
+    var res : uint32 = 0;
+    while i < intcast(int32, slen)
+    {
+        let c : uint8 = s[i];
+        var val : uint8 = 0;
+        if c >= '0' and c <= '9' { val = c - '0'; }
+        else if c >= 'a' and c <= 'z' { val = c - 'a' + 10; }
+        else if c >= 'A' and c <= 'Z' { val = c - 'A' + 10; }
+        else
+        {
+            set_err(err, ConvError::INVALID);
+            return 0;
+        }
+
+        if val >= base
+        {
+            set_err(err, ConvError::INVALID);
+            return 0;
+        }
+
+        var next : uint32 = res * intcast(uint32, base) + intcast(uint32, val);
+        if next > 128
+        {
+            set_err(err, ConvError::OVERFLOW);
+            return 0;
+        }
+        res = next;
+        i++;
+    }
+
+    if neg
+    {
+        set_err(err, ConvError::OK);
+        return -intcast(int8, res);
+    }
+    if res > 127
+    {
+        set_err(err, ConvError::OVERFLOW);
+        return 0;
+    }
+    set_err(err, ConvError::OK);
+    return intcast(int8, res);
+}

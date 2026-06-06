@@ -819,8 +819,13 @@ static void irX64_div(IR* ir)
         else
         {
             vp_assertX(p != VRSize1, "r8?");
-            X64Reg d = x64R[p][RN_DX];
-            EMITX64(xorRR)(d, d);
+            switch(p)
+            {
+            case VRSize2: EMITX64(xorRR)(DX, DX); break;
+            case VRSize4: EMITX64(xorRR)(EDX, EDX); break;
+            case VRSize8: EMITX64(xorRR)(EDX, EDX); break;
+            default: vp_assertX(0, "?");
+            }
             EMITX64(divR)(x64R[p][ir->src2->phys]);
         }
         if(ir->dst->phys != RN_AX)
