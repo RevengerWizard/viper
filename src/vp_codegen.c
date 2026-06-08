@@ -440,6 +440,7 @@ static VReg* gen_incdec(Expr* e)
     if(unary->kind == EX_NAME && !vs_isglob(unary->vi))
     {
         vi = unary->vi;
+        vp_assertX(vi, "empty vi");
     }
 
     VRSize vs = vp_vsize(e->ty);
@@ -1409,7 +1410,7 @@ static void gen_ret(Stmt* st)
     {
         vp_assertX(st->expr->ty, "missing return type");
         Type* ty = st->expr->ty;
-        VReg* vreg = gen_expr(st->expr);
+        VReg* src = gen_expr(st->expr);
         VReg* inretvr = V->fncode->inretvr;
         if(inretvr == NULL) /* No inlining */
         {
@@ -1418,18 +1419,18 @@ static void gen_ret(Stmt* st)
                 /* Load the struct as an integer and pass in the GPR */
                 uint32_t size = vp_type_sizeof(ty);
                 VRSize vrsz = vp_msb(size);
-                VReg* val = vp_ir_load(vreg, vrsz, 0, IRF_UNSIGNED)->dst;
+                VReg* val = vp_ir_load(src, vrsz, 0, IRF_UNSIGNED)->dst;
                 vp_ir_ret(val, IRF_UNSIGNED);
             }
             else if(ty_isscalar(ty))
             {
-                vp_ir_ret(vreg, ir_flag(ty));
+                vp_ir_ret(src, ir_flag(ty));
             }
             else if(ty != tyvoid)
             {
                 VReg* retvr = V->fncode->retvr;
                 vp_assertX(retvr, "?");
-                gen_memcpy(ty, retvr, vreg);
+                gen_memcpy(ty, retvr, src);
                 vp_ir_ret(retvr, IRF_UNSIGNED);  /* Pointer is unsigned */
             }
         }
@@ -1437,7 +1438,7 @@ static void gen_ret(Stmt* st)
         {
             /* Scalar -> return value */
             /* Non-scalar -> return pointer */
-            vp_ir_mov(inretvr, vreg, ty_isscalar(ty) ? ir_flag(ty) : IRF_UNSIGNED);
+            vp_ir_mov(inretvr, src, ty_isscalar(ty) ? ir_flag(ty) : IRF_UNSIGNED);
         }
     }
     vp_ir_jmp(V->fncode->retbb);
@@ -1859,21 +1860,21 @@ static void gen_params(Decl* d, Code* code)
     if(abi_isstack(ret))
     {
         VReg* vr = vp_vreg_new(vp_type_ptr(ret));
-        vr->flag |= VRF_STACK_PARAM;
+        vr->flag |= VRF_PARAM;
         vr->param = abi->imap[0];
         code->retvr = vr;
 
         ParamLoc pl = {.cls = PC_IREG, .idx = abi->imap[0]};
         vec_push(code->plocs, pl);
         iidx = 1;
-
-        /* Stack parameter offset */
-        paramofs = ALIGN_UP(paramofs, TARGET_PTR_SIZE);
-        paramofs += TARGET_PTR_SIZE;
     }
     if(abi_issmall(ret))
     {
         V->ra->flag = RAF_STACK_FRAME;
+
+        /* Small struct params are passed into the stack */
+        paramofs = ALIGN_UP(paramofs, TARGET_PTR_SIZE);
+        paramofs += TARGET_PTR_SIZE;
     }
 
     code->paramofs = paramofs;
@@ -1914,11 +1915,26 @@ static void gen_params(Decl* d, Code* code)
                 vr->param = pl.idx = abi->fmap[prevfidx];
                 break;
             case PC_STACK:
-                vp_assertX(vr, "scalar param needs vreg");
-                vr->flag |= VRF_STACK_PARAM;
-                vreg_spill(vr);
-                V->ra->flag = RAF_STACK_FRAME;
-                pl.vi = vi;
+                if(abi_isstack(ty))
+                {
+                    /* Large struct passed by pointer on the stack (5th+ param on Win x64).
+                       The caller placed a pointer in the stack slot; treat vi->vreg as that
+                       incoming pointer, resolved later by gen_stack via paramofs. */
+                    vi->vreg = vp_vreg_new(vp_type_ptr(ty));
+                    vi->vreg->flag |= VRF_STACK_PARAM;
+                    vi->fi = NULL;  /* accessed via pointer in vi->vreg, not a local slot */
+                    vr = vi->vreg;
+                    pl.vi = vi;
+                    V->ra->flag = RAF_STACK_FRAME;
+                }
+                else
+                {
+                    vp_assertX(vr, "scalar param needs vreg");
+                    vr->flag |= VRF_STACK_PARAM;
+                    vreg_spill(vr);
+                    V->ra->flag = RAF_STACK_FRAME;
+                    pl.vi = vi;
+                }
                 break;
             case PC_SMALL:
             {
