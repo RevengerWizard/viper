@@ -700,10 +700,9 @@ static VReg* gen_call(Expr* e)
                 break;
             case PC_STACK:
             {
-                uint32_t align = vp_type_alignof(argty);
-                offset = ALIGN_UP(offset, align);
+                offset = ALIGN_UP(offset, TARGET_PTR_SIZE);
                 p.idx = offset;
-                offset += ALIGN_UP(p.size, TARGET_PTR_SIZE);
+                offset += TARGET_PTR_SIZE;
                 break;
             }
         }
@@ -763,14 +762,7 @@ static VReg* gen_call(Expr* e)
             case PC_STACK:
             {
                 VReg* dst = vp_ir_sofs(p->idx + shadow)->dst;
-                if(ty_isscalar(argty))
-                {
-                    vp_ir_store(dst, src, ir_flag(argty));
-                }
-                else
-                {
-                    gen_memcpy(argty, dst, src);
-                }
+                vp_ir_store(dst, src, ir_flag(argty));
                 break;
             }
             case PC_SMALL:
@@ -1836,10 +1828,12 @@ static void gen_stack(Code* code)
         switch(pl->cls)
         {
             case PC_STACK:
+            {
                 /* Stack parameter offset */
                 vi->vreg->fi.ofs = paramofs = ALIGN_UP(paramofs, TARGET_PTR_SIZE);
                 paramofs += TARGET_PTR_SIZE;
                 break;
+            }
             default: break;
         }
     }
@@ -1924,6 +1918,7 @@ static void gen_params(Decl* d, Code* code)
                     vi->vreg->flag |= VRF_STACK_PARAM;
                     vi->fi = NULL;  /* accessed via pointer in vi->vreg, not a local slot */
                     vr = vi->vreg;
+                    vreg_spill(vr);
                     pl.vi = vi;
                     V->ra->flag = RAF_STACK_FRAME;
                 }

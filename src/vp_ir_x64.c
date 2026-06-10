@@ -554,13 +554,16 @@ static void irX64_jmp(IR* ir)
         {
         case COND_EQ:
             cmp_vregs(src1, src2, cond);
-            EMITX64(jccREL32)(CC_P, 0);
+            EMITX64(jccREL32)(CC_P, 6); /* Jump after JE */
             EMITX64(jccREL32)(CC_E, 0);
+            patchinfo_jmprel(ir->jmp.bb, sbuf_len(&V->code) - 4);
             return;
         case COND_NEQ:
             cmp_vregs(src1, src2, cond);
             EMITX64(jccREL32)(CC_P, 0);
+            patchinfo_jmprel(ir->jmp.bb, sbuf_len(&V->code) - 4);
             EMITX64(jccREL32)(CC_NE, 0);
+            patchinfo_jmprel(ir->jmp.bb, sbuf_len(&V->code) - 4);
             return;
         case COND_LT: case COND_LE:
         {
