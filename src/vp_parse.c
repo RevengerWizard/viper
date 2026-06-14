@@ -891,6 +891,20 @@ static Stmt* parse_for(LexState* ls)
     return vp_stmt_for(loc, init, cond, next, body);
 }
 
+/* Parse 'do' statement */
+static Stmt* parse_dowhile(LexState* ls)
+{
+    vp_lex_next(ls);    /* Skip 'do' */
+    SrcLoc loc = lex_srcloc(ls);
+    loopcount++;
+    Stmt* body = parse_block(ls);
+    loopcount--;
+    vp_lex_consume(ls, TK_while);
+    Expr* cond = expr(ls);
+    vp_lex_consume(ls, ';');
+    return vp_stmt_dowhile(loc, cond, body);
+}
+
 /* Parse 'while' statement */
 static Stmt* parse_while(LexState* ls)
 {
@@ -1337,6 +1351,9 @@ static Stmt* parse_stmt(LexState* ls)
             break;
         case TK_for:
             st = parse_for(ls);
+            break;
+        case TK_do:
+            st = parse_dowhile(ls);
             break;
         case TK_while:
             st = parse_while(ls);

@@ -1449,6 +1449,14 @@ static void dump_ast_stmt(SBuf* sb, Stmt* st)
             dump_ast_block(sb, st->forst.body);
             vp_buf_putb(sb, '\n');
             break;
+        case ST_DO_WHILE:
+            dump_indent(sb);
+            vp_buf_putlit(sb, "do");
+            dump_ast_block(sb, st->whst.body);
+            vp_buf_putlit(sb, "while ");
+            dump_ast_expr(sb, st->whst.cond);
+            vp_buf_putb(sb, '\n');
+            break;
         case ST_WHILE:
             dump_indent(sb);
             vp_buf_putlit(sb, "while ");

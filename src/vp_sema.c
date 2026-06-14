@@ -2292,6 +2292,7 @@ static const SemaStmtFn semastfn[] = {
     [ST_RSHIFT_ASSIGN] = sema_stmt_assign,
     [ST_ASM] = sema_st,
     [ST_BREAK] = sema_st,
+    [ST_DO_WHILE] = sema_while,
     [ST_WHILE] = sema_while,
     [ST_SWITCH] = sema_switch,
     [ST_FOR] = sema_for,

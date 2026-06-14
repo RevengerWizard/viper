@@ -34,7 +34,7 @@
     _(float32) _(float64) \
     _(true) _(false) _(nil) \
     _(if) _(else) \
-    _(for) _(while) \
+    _(for) _(while) _(do) \
     _(switch) _(case) _(default) \
     _(break) _(continue) \
     _(return) \

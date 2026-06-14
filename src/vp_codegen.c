@@ -1554,6 +1554,28 @@ static void gen_for_stmt(Stmt* st)
     bb_pop_break(breakbb1);
 }
 
+/* Generate do while statement */
+static void gen_dowhile_stmt(Stmt* st)
+{
+    vp_assertX(st->kind == ST_DO_WHILE, "not a do while statement");
+
+    BB* breakbb1, *contbb1;
+    BB* loopbb = vp_bb_new();
+    BB* condbb = bb_push_continue(&contbb1);
+    BB* exitbb = bb_push_break(&breakbb1);
+
+    vp_bb_setcurr(loopbb);
+    gen_stmt(st->whst.body);
+
+    /* Set up the condition block */
+    vp_bb_setcurr(condbb);
+    gen_cond_jmp(st->whst.cond, loopbb, exitbb);
+
+    vp_bb_setcurr(exitbb);
+    bb_pop_continue(contbb1);
+    bb_pop_break(breakbb1);
+}
+
 /* Generate while statement */
 static void gen_while_stmt(Stmt* st)
 {
@@ -1763,6 +1785,7 @@ static const GenStmtFn gensttab[] = {
     [ST_EXPR] = gen_expr_stmt,
     [ST_IF] = gen_if_stmt,
     [ST_FOR] = gen_for_stmt,
+    [ST_DO_WHILE] = gen_dowhile_stmt,
     [ST_WHILE] = gen_while_stmt,
     [ST_SWITCH] = gen_switch_stmt,
     [ST_RETURN] = gen_ret,

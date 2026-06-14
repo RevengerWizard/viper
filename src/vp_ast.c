@@ -304,6 +304,14 @@ Stmt* vp_stmt_for(SrcLoc loc, Stmt* init, Expr* cond, Stmt* next, Stmt* body)
     return st;
 }
 
+Stmt* vp_stmt_dowhile(SrcLoc loc, Expr* cond, Stmt* body)
+{
+    Stmt* st = stmt_new(ST_DO_WHILE, loc);
+    st->whst.cond = cond;
+    st->whst.body = body;
+    return st;
+}
+
 Stmt* vp_stmt_while(SrcLoc loc, Expr* cond, Stmt* body)
 {
     Stmt* st = stmt_new(ST_WHILE, loc);
