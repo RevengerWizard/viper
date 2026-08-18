@@ -354,7 +354,47 @@ static void irX64_cast(IR* ir)
             }
             else
             {
-                vp_assertX(0, "not implemented");
+                /*
+                **  x64 has no cvtsi2ss/cvtsi2sd for unsigned 64-bit integers.
+                **  If the high bit is set, halve the value, convert, then double.
+                **  Precision is lost either way for values > 2^53 (f64) / 2^24 (f32).
+                */
+                X64Reg src64 = x64R[VRSize8][ir->src1->phys];
+
+                EMITX64(testRR)(src64, src64);
+                /* JS rel32: if negative (high bit set), jump to negsrc block */
+                EMITX64(jccREL32)(CC_S, 0);
+                uint32_t js_patch = sbuf_len(&V->code) - 4;
+
+                /* High bit clear: direct cvtsi2ss/sd, then jump to end */
+                switch(ir->dst->vsize)
+                {
+                case VRSize4: EMITX64(cvtsi2ssXR)(dst, src64); break;
+                case VRSize8: EMITX64(cvtsi2sdXR)(dst, src64); break;
+                default: vp_assertX(0, "?"); break;
+                }
+                EMITX64(jmpREL32)(0);
+                uint32_t jmp_patch = sbuf_len(&V->code) - 4;
+
+                /* negsrc: patch JS target here */
+                uint32_t neg_label = sbuf_len(&V->code);
+                *(int32_t*)(V->code.b + js_patch) = (int32_t)(neg_label - (js_patch + 4));
+
+                EMITX64(pushR)(RAX);
+                EMITX64(movRR)(RAX, src64);
+                EMITX64(shrRI)(RAX, 1);
+                switch(ir->dst->vsize)
+                {
+                case VRSize4: EMITX64(cvtsi2ssXR)(dst, RAX); EMITX64(addssXX)(dst, dst); break;
+                case VRSize8: EMITX64(cvtsi2sdXR)(dst, RAX); EMITX64(addsdXX)(dst, dst); break;
+                default: vp_assertX(0, "?"); break;
+                }
+                EMITX64(popR)(RAX);
+
+                /* end: patch JMP target here */
+                uint32_t skip_label = sbuf_len(&V->code);
+                *(int32_t*)(V->code.b + jmp_patch) = (int32_t)(skip_label - (jmp_patch + 4));
+                //vp_assertX(0, "not implemented (i64 -> f32)");
             }
         }
     }
