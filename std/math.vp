@@ -108,6 +108,11 @@ pub fn floorf32(x : float32) : float32
     return u.f;
 }
 
+pub fn ceilf32(x : float32) : float32
+{
+    return -floorf32(-x);
+}
+
 //
 // Strategy: Cephes-style range reduction + minimax polynomial.
 //
@@ -148,7 +153,7 @@ inline fn cos_kernel_f32(z : float32) : float32
 
 pub fn sinf32(x : float32) : float32
 {
-    var j : int32 = floatcast(int32, x * F32_TWO_OVER_PI + (x >= 0.0 ? 0.5 : -0.5));
+    var j : int32 = intcast(int32, x * F32_TWO_OVER_PI + (x >= 0.0 ? 0.5 : -0.5));
     var r : float32 = x - floatcast(float32, j) * F32_PI_OVER_2;
     var q : int32 = j & 3;
 
@@ -160,7 +165,7 @@ pub fn sinf32(x : float32) : float32
 
 pub fn cosf32(x : float32) : float32
 {
-    var j : int32 = floatcast(int32, x * F32_TWO_OVER_PI + (x >= 0.0 ? 0.5 : -0.5));
+    var j : int32 = intcast(int32, x * F32_TWO_OVER_PI + (x >= 0.0 ? 0.5 : -0.5));
     var r : float32 = x - floatcast(float32, j) * F32_PI_OVER_2;
     var q : int32 = j & 3;
 
@@ -222,7 +227,7 @@ inline fn tan_kernel_f32(z : float32) : float32
 
 pub fn tanf32(x : float32) : float32
 {
-    var j : int32 = floatcast(int32, x * F32_TWO_OVER_PI + (x >= 0.0 ? 0.5 : -0.5));
+    var j : int32 = intcast(int32, x * F32_TWO_OVER_PI + (x >= 0.0 ? 0.5 : -0.5));
     var r : float32 = x - floatcast(float32, j) * F32_PI_OVER_2;
     var q : int32 = j & 1;
 
