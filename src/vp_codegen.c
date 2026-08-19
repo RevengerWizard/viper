@@ -2092,7 +2092,7 @@ static void glob_eval(Type* ty, Expr* e, DataEntry* entry, uint32_t baseofs, boo
             {
                 vp_tab_set(&V->ifuncs, vi->name, vi);
             }
-            if(isref || ty_isfn(e->ty))
+            if(isref || ty_isfn(e->ty) || ty_isptrlike(e->ty) || ty_isarr(e->ty))
             {
                 vp_reloc_add(entry, baseofs, e->name);
                 vp_wint(entry->data, baseofs, 0, TARGET_PTR_SIZE);
