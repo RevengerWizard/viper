@@ -394,6 +394,7 @@ pub def GENERIC_APPEND_FLAG : DWORD = 0x00000004;
 
 // File sharing
 pub def FILE_SHARE_READ_FLAG : DWORD = 0x00000001;
+pub def FILE_SHARE_WRITE_FLAG : DWORD = 0x00000002;
 
 // Creation disposition
 pub def CREATE_NEW_D : DWORD = 1;
@@ -405,6 +406,8 @@ pub def TRUNCATE_EXISTING : DWORD = 5;
 
 // File attributes
 pub def FILE_ATTRIBUTE_NORMAL : DWORD = 128;
+pub def FILE_ATTRIBUTE_DIRECTORY : DWORD = 0x00000010;
+
 pub def FILE_FLAG_APPEND : DWORD = 0x00000004;
 
 // File pointer movement
@@ -416,6 +419,9 @@ pub def FILE_END_D : DWORD = 2;
 pub def FILE_TYPE_CHAR : DWORD = 0x0002;
 
 pub def INVALID_SET_FILE_POINTER : DWORD = 0xFFFFFFFF;
+pub def INVALID_FILE_ATTRIBUTES : DWORD = 0xFFFFFFFF;
+
+pub def FILE_FLAG_BACKUP_SEMANTICS : DWORD = 0x02000000;
 
 // File I/O
 pub extern fn CreateFileA(lpFileName : LPCSTR, dwDesiredAccess : DWORD, dwShareMode : DWORD, lpSecurityAttributes : LPSECURITY_ATTRIBUTES?, dwCreationDisposition : DWORD, dwFlagsAndAttributes : DWORD, hTemplateFile : HANDLE?) : HANDLE;
@@ -424,6 +430,49 @@ pub extern fn WriteFile(hFile : HANDLE, lpBuffer : LPCVOID, nNumberOfBytesToWrit
 pub extern fn SetFilePointer(hFile : HANDLE, lDistanceToMove : LONG, lpDistanceToMoveHigh : LONG*?, dwMoveMethod : DWORD) : DWORD;
 pub extern fn FlushFileBuffers(hFile : HANDLE) : BOOL;
 pub extern fn GetFileType(hFile : HANDLE) : DWORD;
+pub extern fn GetFileAttributesA(lpFileName : LPCSTR) : DWORD;
+
+pub struct WIN32_FIND_DATAA
+{
+    dwFileAttributes   : DWORD;
+    ftCreationTime     : FILETIME;
+    ftLastAccessTime   : FILETIME;
+    ftLastWriteTime    : FILETIME;
+    nFileSizeHigh      : DWORD;
+    nFileSizeLow       : DWORD;
+    dwReserved0        : DWORD;
+    dwReserved1        : DWORD;
+    cFileName          : uint8[260];
+    cAlternateFileName : uint8[14];
+}
+pub alias LPWIN32_FIND_DATAA = WIN32_FIND_DATAA*;
+
+pub extern fn FindFirstFileA(lpFileName : LPCSTR, lpFindFileData : LPWIN32_FIND_DATAA) : HANDLE;
+pub extern fn FindNextFileA(hFindFile : HANDLE, lpFindFileData : LPWIN32_FIND_DATAA) : BOOL;
+pub extern fn FindClose(hFindFile : HANDLE) : BOOL;
+
+pub struct BY_HANDLE_FILE_INFORMATION
+{
+    dwFileAttributes     : DWORD;
+    ftCreationTime       : FILETIME;
+    ftLastAccessTime     : FILETIME;
+    ftLastWriteTime      : FILETIME;
+    dwVolumeSerialNumber : DWORD;
+    nFileSizeHigh        : DWORD;
+    nFileSizeLow         : DWORD;
+    nNumberOfLinks       : DWORD;
+    nFileIndexHigh       : DWORD;
+    nFileIndexLow        : DWORD;
+}
+pub alias LPBY_HANDLE_FILE_INFORMATION = BY_HANDLE_FILE_INFORMATION*;
+
+pub extern fn GetFileInformationByHandle(hFile : HANDLE, lpFileInformation : LPBY_HANDLE_FILE_INFORMATION) : BOOL;
+
+pub extern fn GetFileSize(hFile : HANDLE, lpFileSizeHigh : LPDWORD?) : DWORD;
+
+pub extern fn CreateDirectoryA(lpPathName : LPCSTR, lpSecurityAttributes : LPSECURITY_ATTRIBUTES?) : BOOL;
+
+pub extern fn DeleteFileA(lpFileName : LPCSTR) : BOOL;
 
 /* -- errhandlingapi.h ---------------------------------------------- */
 
@@ -440,6 +489,8 @@ pub extern fn GetLastError() : DWORD;
 /* -- handleapi.h --------------------------------------------------- */
 
 pub extern fn CloseHandle(hObject : HANDLE) : BOOL;
+
+pub def INVALID_HANDLE_VALUE : HANDLE = ptrcast(HANDLE, -1);
 
 /* -- synchapi.h ---------------------------------------------------- */
 
