@@ -325,7 +325,7 @@ pub fn eof(f : FILE*) : bool
     return cast(uint32, f.flags & FF_EOF) != 0;
 }
 
-pub fn putc(c : uint8) : void
+pub fn putc(f : FILE*, c : uint8) : void
 {
-    write(stdout, &c, 1, nil);
+    write(f, &c, 1, nil);
 }
