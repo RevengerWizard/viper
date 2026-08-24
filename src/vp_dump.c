@@ -1030,6 +1030,8 @@ static void dump_ast_attr(SBuf* sb, Attr* attr)
     vp_buf_putlit(sb, "]]\n");
 }
 
+static void dump_ast_aggr(SBuf* sb, Aggregate* agr);
+
 static void dump_typespec(SBuf* sb, TypeSpec* spec)
 {
     if(spec->qual & SPEC_CONST)
@@ -1129,6 +1131,30 @@ static void dump_typespec(SBuf* sb, TypeSpec* spec)
             dump_ast_expr(sb, spec->expr);
             vp_buf_putb(sb, ')');
             break;
+        case SPEC_STRUCT:
+        case SPEC_UNION:
+        {
+            AggregateKind kind;
+            if(spec->kind == SPEC_STRUCT)
+            {
+                kind = AGR_STRUCT;
+                vp_buf_putlit(sb, "struct");
+            }
+            else
+            {
+                kind = AGR_UNION;
+                vp_buf_putlit(sb, "union");
+            }
+            Aggregate agr;
+            agr.kind = kind;
+            agr.loc = spec->loc;
+            agr.items = spec->items;
+            vp_buf_putlit(sb, " { ");
+            dump_ast_aggr(sb, &agr);
+            dump_indent(sb);
+            vp_buf_putlit(sb, " }");
+            break;
+        }
         default:
             vp_assertX(0, "unknown typespec");
             break;

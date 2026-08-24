@@ -602,9 +602,30 @@ static TypeSpec* parse_type_fn(LexState* ls)
     return vp_typespec_fn(loc, ret, args);
 }
 
+static AggregateItem parse_aggr_item(LexState* ls);
+
+/* Parse a type struct or union */
+static TypeSpec* parse_type_structunion(LexState* ls, TypeSpecKind kind)
+{
+    SrcLoc loc = lex_srcloc(ls);
+    vec_t(AggregateItem) items = vec_init(AggregateItem);
+    vp_lex_consume(ls, '{');
+    while(!lex_check(ls, '}') && !lex_check(ls, TK_eof))
+    {
+        AggregateItem item = parse_aggr_item(ls);
+        vec_push(items, item);
+    }
+    vp_lex_consume(ls, '}');
+    return vp_typespec_aggr(loc, kind, items);
+}
+
 /* Parse base type information (keyword or name) */
 static TypeSpec* parse_type(LexState* ls)
 {
+    if(lex_match(ls, TK_struct) || lex_match(ls, TK_union))
+    {
+        return parse_type_structunion(ls, ls->prev == TK_struct ? SPEC_STRUCT : SPEC_UNION);
+    }
     bool isconst = lex_match(ls, TK_const);
     TypeSpec* spec = NULL;
     if(lex_match(ls, TK_typeof))

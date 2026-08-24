@@ -21,6 +21,8 @@ typedef enum TypeSpecKind
     SPEC_FN,
     SPEC_ARRAY,
     SPEC_PTR,
+    SPEC_STRUCT,
+    SPEC_UNION,
     SPEC_TYPEOF
 } TypeSpecKind;
 
@@ -29,6 +31,8 @@ enum
     SPEC_CONST = 1 << 0,
     SPEC_NILABLE = 1 << 1
 };
+
+typedef struct AggregateItem AggregateItem;
 
 typedef struct TypeSpec
 {
@@ -54,6 +58,7 @@ typedef struct TypeSpec
             vec_t(struct TypeSpec*) args;
             struct TypeSpec* ret;
         } fn;
+        vec_t(AggregateItem) items;
     };
 } TypeSpec;
 
@@ -315,7 +320,7 @@ typedef enum AggregateItemKind
     AGR_ITEM_SUB
 } AggregateItemKind;
 
-typedef struct AggregateItem
+struct AggregateItem
 {
     AggregateItemKind kind;
     SrcLoc loc;
@@ -328,7 +333,7 @@ typedef struct AggregateItem
         };
         struct Aggregate* sub;
     };
-} AggregateItem;
+};
 
 typedef enum AggregateKind
 {
@@ -553,5 +558,6 @@ TypeSpec* vp_typespec_ptr(SrcLoc loc, TypeSpec* base);
 TypeSpec* vp_typespec_arr(SrcLoc loc, TypeSpec* base, Expr* e);
 TypeSpec* vp_typespec_fn(SrcLoc loc, TypeSpec* ret, vec_t(TypeSpec*) args);
 TypeSpec* vp_typespec_typeof(SrcLoc loc, Expr* e);
+TypeSpec* vp_typespec_aggr(SrcLoc loc, TypeSpecKind kind, vec_t(AggregateItem) items);
 
 #endif

@@ -1013,6 +1013,16 @@ static Type* sema_typespec(TypeSpec* spec)
             ty = vp_type_fn(ret, args);
             break;
         }
+        case SPEC_STRUCT:
+        case SPEC_UNION:
+        {
+            Aggregate agr;
+            agr.kind = spec->kind == SPEC_STRUCT ? AGR_STRUCT : AGR_UNION;
+            agr.loc = spec->loc;
+            agr.items = spec->items;
+            ty = sym_aggr_complete(NULL, NULL, &agr);
+            break;
+        }
         case SPEC_TYPEOF:
             ty = sema_expr(spec->expr, NULL).ty;
             break;

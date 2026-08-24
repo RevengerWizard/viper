@@ -496,3 +496,10 @@ TypeSpec* vp_typespec_typeof(SrcLoc loc, Expr* e)
     ts->expr = e;
     return ts;
 }
+
+TypeSpec* vp_typespec_aggr(SrcLoc loc, TypeSpecKind kind, vec_t(AggregateItem) items)
+{
+    TypeSpec* ts = new_typespec(kind, loc);
+    ts->items = items;
+    return ts;
+}
