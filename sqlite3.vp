@@ -1,0 +1,19 @@
+pub def SQLITE_OK = 0;
+
+pub struct sqlite3;
+
+pub extern fn sqlite3_open(filename : const uint8*, ppDb : sqlite3**) : int32;
+
+pub extern fn sqlite3_exec(
+  db : sqlite3*,                                  /* An open database */
+  sql : const uint8*,                           /* SQL to be evaluated */
+  callback : fn(void*, int32, uint8**, uint8**) : int32,  /* Callback function */
+  data : void*,                                    /* 1st argument to callback */
+  errmsg : uint8**                              /* Error msg written here */
+) : int32;
+
+pub extern fn sqlite3_errmsg(db : sqlite3*) : const uint8*;
+
+pub extern fn sqlite3_free(x : void*) : void;
+
+pub extern fn sqlite3_close(db : sqlite3*) : int32;
