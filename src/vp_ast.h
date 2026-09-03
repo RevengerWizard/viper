@@ -23,6 +23,7 @@ typedef enum TypeSpecKind
     SPEC_PTR,
     SPEC_STRUCT,
     SPEC_UNION,
+    SPEC_ENUM,
     SPEC_TYPEOF
 } TypeSpecKind;
 
@@ -33,6 +34,7 @@ enum
 };
 
 typedef struct AggregateItem AggregateItem;
+typedef struct EnumItem EnumItem;
 
 typedef struct TypeSpec
 {
@@ -59,6 +61,11 @@ typedef struct TypeSpec
             struct TypeSpec* ret;
         } fn;
         vec_t(AggregateItem) items;
+        struct
+        {
+            struct TypeSpec* spec;
+            vec_t(EnumItem) items;
+        } enm;
     };
 } TypeSpec;
 
@@ -220,10 +227,15 @@ typedef struct Expr
         struct
         {
             TypeSpec* spec;
-            Str* name;
+            vec_t(Str*) names;
         } ofst;
     };
 } Expr;
+
+static VP_AINLINE bool expr_islit(Expr* e)
+{
+    return e->kind == EX_FALSE || e->kind == EX_TRUE || e->kind == EX_NIL || e->kind == EX_CHAR || e->kind == EX_INT || e->kind == EX_NUM || e->kind == EX_NUM || e->kind == EX_FLO;
+}
 
 typedef enum StmtKind
 {
@@ -349,14 +361,14 @@ typedef struct Aggregate
     vec_t(AggregateItem) items;
 } Aggregate;
 
-typedef struct EnumItem
+struct EnumItem
 {
     SrcLoc loc;
     Str* name;
     Expr* init;
     Type* ty;
     uint64_t val;
-} EnumItem;
+};
 
 typedef struct NoteArg
 {
@@ -454,7 +466,7 @@ typedef struct Decl
         struct
         {
             TypeSpec* spec;
-            EnumItem* items;
+            vec_t(EnumItem) items;
         } enm;
         struct
         {
@@ -520,7 +532,7 @@ Expr* vp_expr_access_type(SrcLoc loc, Str* name, Type* ty);
 Expr* vp_expr_cast(SrcLoc loc, ExprKind kind, TypeSpec* spec, Expr* e);
 Expr* vp_expr_sizeof(SrcLoc loc, TypeSpec* spec);
 Expr* vp_expr_alignof(SrcLoc loc, TypeSpec* spec);
-Expr* vp_expr_offsetof(SrcLoc loc, TypeSpec* spec, Str* name);
+Expr* vp_expr_offsetof(SrcLoc loc, TypeSpec* spec, vec_t(Str*) names);
 Expr* vp_expr_ternary(SrcLoc loc, Expr* cond, Expr* then, Expr* els);
 
 /* Statements */
@@ -559,5 +571,6 @@ TypeSpec* vp_typespec_arr(SrcLoc loc, TypeSpec* base, Expr* e);
 TypeSpec* vp_typespec_fn(SrcLoc loc, TypeSpec* ret, vec_t(TypeSpec*) args);
 TypeSpec* vp_typespec_typeof(SrcLoc loc, Expr* e);
 TypeSpec* vp_typespec_aggr(SrcLoc loc, TypeSpecKind kind, vec_t(AggregateItem) items);
+TypeSpec* vp_typespec_enum(SrcLoc loc, TypeSpec* spec, vec_t(EnumItem) items);
 
 #endif

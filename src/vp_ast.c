@@ -215,11 +215,11 @@ Expr* vp_expr_alignof(SrcLoc loc, TypeSpec* spec)
     return expr;
 }
 
-Expr* vp_expr_offsetof(SrcLoc loc, TypeSpec* spec, Str* name)
+Expr* vp_expr_offsetof(SrcLoc loc, TypeSpec* spec, vec_t(Str*) names)
 {
     Expr* expr = expr_new(EX_OFFSETOF, loc);
     expr->ofst.spec = spec;
-    expr->ofst.name = name;
+    expr->ofst.names = names;
     return expr;
 }
 
@@ -501,5 +501,13 @@ TypeSpec* vp_typespec_aggr(SrcLoc loc, TypeSpecKind kind, vec_t(AggregateItem) i
 {
     TypeSpec* ts = new_typespec(kind, loc);
     ts->items = items;
+    return ts;
+}
+
+TypeSpec* vp_typespec_enum(SrcLoc loc, TypeSpec* spec, vec_t(EnumItem) items)
+{
+    TypeSpec* ts = new_typespec(SPEC_ENUM, loc);
+    ts->enm.spec = spec;
+    ts->enm.items = items;
     return ts;
 }

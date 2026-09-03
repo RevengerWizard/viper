@@ -425,13 +425,13 @@ static double fold_binop_f(ExprKind op, double l, double r)
 
 /* -- Operand types ------------------------------------------------- */
 
-/* Literal value operand */
-static Operand opr_lit(Type* ty, Val val, uint8_t flags)
+/* Untyped value operand */
+static Operand opr_untyped(Type* ty, Val val)
 {
     return (Operand){
         .ty = ty,
         .val = val,
-        .flags = OPR_LIT | OPR_CONST | flags
+        .flags = OPR_UNTYPED | OPR_CONST
     };
 }
 
@@ -557,7 +557,7 @@ static bool opr_cast(Operand* opr, Type* ty)
 /* Implicit operand type conversion */
 static void opr_conv(SrcLoc loc, Operand* opr, Type* ty)
 {
-    if(!vp_type_isconv(ty, opr->ty))
+    if(!opr_isconst(*opr) && !opr_isuntyped(*opr) && !vp_type_isconv(ty, opr->ty))
     {
         if(!ty_isnilable(ty) && ty_isnil(opr->ty))
         {
@@ -608,6 +608,10 @@ static Val val_fromtype(SrcLoc loc, Type* ret, uint64_t u64)
         {
             val = (Val){.i64 = u64};
         }
+    }
+    else if(ty_isbool(ret))
+    {
+        val = (Val){.b = u64};
     }
     else
     {
@@ -789,16 +793,18 @@ static Val val_binop(SrcLoc loc, ExprKind op, Type* ty, Val lval, Val rval)
 static void opr_fold(SrcLoc loc, Expr** e, Operand opr)
 {
     Type* ty = opr.ty;
+    if(expr_islit(*e))
+    {
+        /* Whole simple literals should not be folded */
+        (*e)->ty = ty;
+        return;
+    }
     if(opr_isconst(opr))
     {
-        if(opr_islit(opr))
+        if(opr_isuntyped(opr))
         {
-            if(opr_isuntyped(opr))
-            {
-                opr.flags &= ~OPR_UNTYPED;
-                opr.val = val_fromtype(loc, opr.ty, opr.val.u64);
-            }
-            return;
+            opr.flags &= ~OPR_UNTYPED;
+            opr.val = val_fromtype(loc, opr.ty, opr.val.u64);
         }
         if(ty_isbool(ty))
         {
@@ -849,8 +855,8 @@ static Operand opr_unary(Expr* e, Operand opr)
 {
     if(opr_isuntyped(opr))
     {
-        opr.flags &= ~OPR_UNTYPED;
-        opr.val = val_fromtype(e->loc, opr.ty, opr.val.u64);
+        opr.val = val_unary(e, opr.ty, opr.val);
+        return opr;
     }
     if(opr_isconst(opr))
     {
@@ -862,28 +868,37 @@ static Operand opr_unary(Expr* e, Operand opr)
     }
 }
 
+static Type* untyped_common(Type* lty, Type* rty)
+{
+    if(ty_isint(lty) && ty_isint(rty)) return tyint64;
+    if(ty_isflo(lty) && ty_isflo(rty)) return tyfloat64;
+    else
+    {
+        vp_assertX(0, "bad untyped");
+        return NULL;
+    }
+}
+
 static Operand opr_binop(SrcLoc loc, ExprKind op, Operand lop, Operand rop, Type* ret)
 {
     if(opr_isuntyped(lop) && !opr_isuntyped(rop))
     {
         /* Left is untyped, right is typed */
         lop.ty = rop.ty;
-        lop.flags &= ~OPR_UNTYPED;
         lop.val = val_fromtype(loc, rop.ty, lop.val.u64);
     }
     else if(opr_isuntyped(rop) && !opr_isuntyped(lop))
     {
         /* Right is untyped, left is typed */
         rop.ty = lop.ty;
-        rop.flags &= ~OPR_UNTYPED;
         rop.val = val_fromtype(loc, lop.ty, rop.val.u64);
     }
     else if(opr_isuntyped(lop) && opr_isuntyped(rop))
     {
-        lop.flags &= ~OPR_UNTYPED;
-        rop.flags &= ~OPR_UNTYPED;
         lop.val = val_fromtype(loc, lop.ty, lop.val.u64);
         rop.val = val_fromtype(loc, rop.ty, rop.val.u64);
+        ret = untyped_common(lop.ty, rop.ty);
+        return opr_untyped(ret, val_binop(loc, op, ret, lop.val, rop.val));
     }
 
     /* Unify operands of different types */
@@ -1023,6 +1038,53 @@ static Type* sema_typespec(TypeSpec* spec)
             ty = sym_aggr_complete(NULL, NULL, &agr);
             break;
         }
+        case SPEC_ENUM:
+        {
+            ty = sema_typespec(spec->enm.spec);
+            if(!ty_isint(ty))
+            {
+                vp_err_error(spec->loc, "enum base type must be an integer type");
+            }
+
+            uint64_t val = 0;
+            for(uint32_t i = 0; i < vec_len(spec->enm.items); i++)
+            {
+                EnumItem* item = &spec->enm.items[i];
+                item->ty = ty;
+
+                if(item->init)
+                {
+                    Operand opr = sema_constexpr(item->init, ty);
+                    if(!ty_isint(opr.ty))
+                    {
+                        vp_err_error(item->loc, "enum constant initializer must have an integer type");
+                    }
+
+                    opr_conv(item->loc, &opr, ty);
+                    opr_fold(item->loc, &item->init, opr);
+
+                    if(ty_isunsigned(ty))
+                    {
+                        val = opr.val.u64;
+                    }
+                    else
+                    {
+                        val = (uint64_t)opr.val.i64;
+                    }
+                }
+                else
+                {
+                    if(val_overflow(val, ty))
+                    {
+                        vp_err_error(item->loc, "literal out of range for '%s'", type_str(ty));
+                    }
+                }
+
+                item->val = val;
+                val++;
+            }
+            break;
+        }
         case SPEC_TYPEOF:
             ty = sema_expr(spec->expr, NULL).ty;
             break;
@@ -1053,14 +1115,14 @@ static Operand sema_nil(Expr* e, Type* ret)
 static Operand sema_bool(Expr* e, Type* ret)
 {
     UNUSED(ret);
-    return opr_lit(tybool, (Val){.b = e->b}, 0);
+    return opr_untyped(tybool, (Val){.b = e->b});
 }
 
 /* Resolve char (byte) expression */
 static Operand sema_char(Expr* e, Type* ret)
 {
     UNUSED(ret);
-    return opr_lit(tyuint8, (Val){.u8 = e->i}, 0);
+    return opr_untyped(tyuint8, (Val){.u8 = e->i});
 }
 
 /* Resolve integer literal expression, typed or untyped */
@@ -1082,11 +1144,14 @@ static Operand sema_int(Expr* e, Type* ret)
     if(ret && ty_isnum(ret))
     {
         Val val = val_fromtype(e->loc, ret, u64);
-        res = opr_lit(ret, val, 0);
+        res = opr_const(ret, val);
     }
     else
     {
-        res = opr_lit(ity, (Val){.u64 = u64}, untyped ? OPR_UNTYPED : 0);
+        if(untyped)
+            res = opr_untyped(ity, (Val){.u64 = u64});
+        else
+            res = opr_const(ity, (Val){.u64 = u64});
     }
     return res;
 }
@@ -1106,11 +1171,11 @@ static Operand sema_num(Expr* e, Type* ret)
         {
             val = (Val){.f32 = e->n};
         }
-        res = opr_lit(ret, val, 0);
+        res = opr_const(ret, val);
     }
     else
     {
-        res = opr_lit(tyfloat32, (Val){.f32 = e->n}, 0);
+        res = opr_untyped(tyfloat32, (Val){.f64 = e->n});
     }
     return res;
 }
@@ -1150,7 +1215,15 @@ static Operand sema_name(Expr* e, Type* ret)
         case SYM_VAR:
             return opr_lval(sym->type);
         case SYM_DEF:
+        {
+            if(sym->untyped)
+            {
+                /* Untyped def: materialize into the context type if one is given,
+                    otherwise stay untyped (val.u64 holds the raw integer bits). */
+                return opr_untyped(sym->type, sym->val);
+            }
             return opr_const(sym->type, sym->val);
+        }
         case SYM_FN:
             return opr_rval(sym->type);
         default:
@@ -1851,7 +1924,7 @@ static Operand sema_floatcast(Expr* e, Type* ret)
     {
         vp_err_error(e->loc, "invalid floatcast from '%s' to '%s'", type_str(opr.ty), type_str(ty));
     }
-    return isconst ? opr_const(opr.ty, opr.val) : opr_lval(ty);
+    return isconst ? opr_const(ty, opr.val) : opr_lval(ty);
 }
 
 /* Resolve ptrcast expression */
@@ -1888,7 +1961,7 @@ static Operand sema_bitcast(Expr* e, Type* ret)
         /*vp_err_note(e->loc, "bitcast size mismatch: destination type '%s' has %d bits but source type '%s' has %d bits", type_str(ty), lsize, type_str(opr.ty), rsize);*/
         vp_err_error(e->loc, "invalid bitcast between '%s' and '%s'", type_str(ty), type_str(opr.ty));
     }
-    return isconst ? opr_const(ret, opr.val) : opr_lval(ty);
+    return isconst ? opr_const(ty, opr.val) : opr_lval(ty);
 }
 
 /* Resolve sizeof expression */
@@ -1920,16 +1993,35 @@ static Operand sema_offsetof(Expr* e, Type* ret)
     sym_complete(ty);
     if(!ty_isaggr(ty))
     {
-        vp_err_error(e->loc, "offset can only be used with struct/union types");
+        vp_err_error(e->loc, "offsetof can only be used with struct/union types");
     }
-    uint32_t idx = vp_type_fieldidx(ty, e->ofst.name);
-    if(idx == (uint32_t)-1)
+
+    uint32_t total = 0;
+    uint32_t nnames = vec_len(e->ofst.names);
+
+    for(uint32_t i = 0; i < nnames; i++)
     {
-        vp_err_error(e->loc, "no field '%s' in type", str_data(e->ofst.name));
+        Str* name = e->ofst.names[i];
+        uint32_t idx = vp_type_fieldidx(ty, name);
+        if(idx == (uint32_t)-1)
+        {
+            vp_err_error(e->loc, "no field '%s' in type", str_data(name));
+        }
+        total += ty->st.fields[idx].offset;
+        /* Descend into field type for next iteration */
+        if(i + 1 < nnames)
+        {
+            ty = ty->st.fields[idx].ty;
+            /*sym_complete(ty)*/;
+            if(!ty_isaggr(ty))
+            {
+                vp_err_error(e->loc, "field '%s' is not a struct/union type", str_data(name));
+            }
+        }
     }
+
     Type* rty = ret ? ret : tyusize;
-    uint32_t ofs = ty->st.fields[idx].offset;
-    Val val = val_fromtype(e->loc, rty, ofs);
+    Val val = val_fromtype(e->loc, rty, total);
     return opr_const(rty, val);
 }
 
@@ -2102,18 +2194,9 @@ static bool sema_stmt_assign(Stmt* st, Type* ret)
     {
         vp_err_error(st->loc, "cannot assign to array");
     }
-    if(st->kind != ST_ASSIGN)
-    {
-        Operand res = sema_expr(st->rhs, lop.ty);
-        opr_conv(st->loc, &res, lop.ty);
-        opr_fold(st->loc, &st->rhs, res);
-    }
-    else
-    {
-        Operand res = sema_expr(st->rhs, lop.ty);
-        opr_conv(st->loc, &res, lop.ty);
-        opr_fold(st->loc, &st->rhs, res);
-    }
+    Operand res = sema_expr(st->rhs, lop.ty);
+    opr_conv(st->loc, &res, lop.ty);
+    opr_fold(st->loc, &st->rhs, res);
     return false;
 }
 
@@ -2535,7 +2618,7 @@ static Operand sema_glob(Expr* e, Type* ty)
     return opr;
 }
 
-/* Resolve var declaration */
+/* Resolve var/let declaration */
 static Type* sema_var(Sym* sym, Decl* d)
 {
     vp_assertX(d->kind == DECL_VAR || d->kind == DECL_LET, "var/let declaration");
@@ -2558,7 +2641,7 @@ static Type* sema_var(Sym* sym, Decl* d)
             }
             opr_conv(d->loc, &res, declty);
             opr_fold(d->loc, &d->var.expr, res);
-            expr->ty = inferty;
+            expr->ty = declty;
         }
     }
     else
@@ -2605,7 +2688,7 @@ static Type* sema_var(Sym* sym, Decl* d)
 }
 
 /* Resolve def declaration */
-static Type* sema_def(Decl* d, Val* val)
+static Type* sema_def(Decl* d, Val* val, Operand* opr, bool* isuntyped)
 {
     vp_assertX(d->kind == DECL_DEF, "def declaration");
     Type* ty = NULL;
@@ -2614,15 +2697,28 @@ static Type* sema_def(Decl* d, Val* val)
         ty = sema_typespec(d->def.spec);
     }
     Operand res = sema_constexpr(d->def.expr, ty);
-    ty = res.ty;
-    if(!ty_isscalar(ty))
+    /* If explicitly typed, coerce now; otherwise keep the untyped operand as-is */
+    if(ty)
     {
-        vp_err_error(d->loc, "def declaration must have scalar type");
+        if(!ty_isscalar(ty))
+        {
+            vp_err_error(d->loc, "def declaration must have scalar type");
+        }
+        opr_conv(d->loc, &res, ty);
     }
-    opr_conv(d->loc, &res, ty);
+    else
+    {
+        ty = res.ty;
+        if(!ty_isscalar(ty))
+        {
+            vp_err_error(d->loc, "def declaration must have scalar type");
+        }
+        *isuntyped = true;
+    }
     opr_fold(d->loc, &d->def.expr, res);
     d->def.expr->ty = ty;
     *val = res.val;
+    *opr = res;
     return ty;
 }
 
@@ -2710,8 +2806,13 @@ static void sema_resolve(Sym* sym)
             sym->type = sema_var(sym, d);
             break;
         case SYM_DEF:
-            sym->type = sema_def(d, &sym->val);
+        {
+            Operand res;
+            bool isuntyped = false;
+            sym->type = sema_def(d, &sym->val, &res, &isuntyped);
+            sym->untyped = isuntyped;
             break;
+        }
         case SYM_FN:
             sym->type = sema_fn(sym, d);
             break;

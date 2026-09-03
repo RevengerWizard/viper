@@ -184,9 +184,15 @@ static Expr* expr_offsetof(LexState* ls, SrcLoc loc)
     vp_lex_consume(ls, '(');
     TypeSpec* spec = parse_type(ls);
     vp_lex_consume(ls, ',');
-    Str* name = lex_name(ls);
+    vec_t(Str*) names = vec_init(Str*);
+    do
+    {
+        Str* name = lex_name(ls);
+        vec_push(names, name);
+    }
+    while(lex_match(ls, '.'));
     vp_lex_consume(ls, ')');
-    return vp_expr_offsetof(loc, spec, name);
+    return vp_expr_offsetof(loc, spec, names);
 }
 
 /* Parse call expression */
@@ -619,12 +625,42 @@ static TypeSpec* parse_type_structunion(LexState* ls, TypeSpecKind kind)
     return vp_typespec_aggr(loc, kind, items);
 }
 
+static EnumItem parse_enum_item(LexState* ls);
+
+/* Parse 'enum' declaration */
+static TypeSpec* parse_type_enum(LexState* ls)
+{
+    SrcLoc loc = lex_srcloc(ls);
+    TypeSpec* spec = NULL;
+    if(lex_match(ls, ':'))
+    {
+        spec = parse_type(ls);
+    }
+    vp_lex_consume(ls, '{');
+    vec_t(EnumItem) items = vec_init(EnumItem);
+    while(!lex_check(ls, '}') && !lex_check(ls, TK_eof))
+    {
+        EnumItem item = parse_enum_item(ls);
+        vec_push(items, item);
+        if(!lex_match(ls, ','))
+        {
+            break;
+        }
+    }
+    vp_lex_consume(ls, '}');
+    return vp_typespec_enum(loc, spec, items);
+}
+
 /* Parse base type information (keyword or name) */
 static TypeSpec* parse_type(LexState* ls)
 {
     if(lex_match(ls, TK_struct) || lex_match(ls, TK_union))
     {
         return parse_type_structunion(ls, ls->prev == TK_struct ? SPEC_STRUCT : SPEC_UNION);
+    }
+    else if(lex_match(ls, TK_enum))
+    {
+        return parse_type_enum(ls);
     }
     bool isconst = lex_match(ls, TK_const);
     TypeSpec* spec = NULL;

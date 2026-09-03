@@ -1151,7 +1151,29 @@ static void dump_typespec(SBuf* sb, TypeSpec* spec)
             agr.items = spec->items;
             vp_buf_putlit(sb, " { ");
             dump_ast_aggr(sb, &agr);
-            dump_indent(sb);
+            vp_buf_putlit(sb, " }");
+            break;
+        }
+        case SPEC_ENUM:
+        {
+            vp_buf_putlit(sb, "enum");
+            vp_buf_putlit(sb, " { ");
+            for(uint32_t i = 0; i < vec_len(spec->enm.items); i++)
+            {
+                dump_indent(sb);
+                EnumItem* item = &spec->enm.items[i];
+                vp_buf_puts(sb, item->name);
+                if(item->init)
+                {
+                    vp_buf_putlit(sb, " = ");
+                    dump_ast_expr(sb, item->init);
+                }
+                if(i != vec_len(spec->enm.items) - 1)
+                {
+                    vp_buf_putlit(sb, ",");
+                }
+                vp_buf_putb(sb, '\n');
+            }
             vp_buf_putlit(sb, " }");
             break;
         }
@@ -1381,7 +1403,14 @@ static void dump_ast_expr(SBuf* sb, Expr* e)
             vp_buf_putlit(sb, "offsetof(");
             dump_typespec(sb, e->ofst.spec);
             vp_buf_putlit(sb, ", ");
-            vp_buf_puts(sb, e->ofst.name);
+            for(uint32_t i = 0; i < vec_len(e->ofst.names); i++)
+            {
+                vp_buf_puts(sb, e->ofst.names[i]);
+                if(i != vec_len(e->ofst.names) - 1)
+                {
+                    vp_buf_putlit(sb, ".");
+                }
+            }
             vp_buf_putb(sb, ')');
             break;
         case EX_FIELD:
