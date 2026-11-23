@@ -2,6 +2,7 @@
 # Viper Makefile. Requires GNU Make.
 ##############################################################################
 
+#CC = gcc
 CC = clang -fsanitize=address
 
 CCOPT = #-O2
@@ -155,7 +156,43 @@ clean:
 depend:
 	$(Q)$(HOST_CC) $(HOST_ACFLAGS) -MM *.c > Makefile.dep
 
-.PHONY: default all amalg clean depend ctest
+##############################################################################
+# WASM target
+# Requires:
+#   - clang with wasm32-wasi target support
+#   - wasm-ld (ships with LLVM)
+#   - wasi-sdk
+#     Override WASI_SYSROOT for another installation, e.g.:
+#       make wasm WASI_SYSROOT=/opt/wasi-sdk/share/wasi-sysroot
+##############################################################################
+
+# Environment variable
+WASI_SYSROOT ?=
+
+WASM_CC = clang --target=wasm32-wasip1
+ifneq (,$(WASI_SYSROOT))
+	WASM_CC += --sysroot=$(WASI_SYSROOT)
+endif
+WASM_AR ?= llvm-ar
+WASM_A = libvxc-wasm.a
+
+WASM_CFLAGS = -O2 -I. $(XCFLAGS) -fno-stack-protector $(WASM_XCFLAGS)
+
+WASM_O = $(VPCORE_O:.o=.wasm.o)
+WASM_RM = $(WASM_O) $(WASM_A)
+
+%.wasm.o: %.c
+	$(E) "WASM CC   $@"
+	$(Q)$(WASM_CC) $(WASM_CFLAGS) -c -o $@ $<
+
+wasm: $(WASM_A)
+
+$(WASM_A): $(WASM_O)
+	$(E) "WASM AR   $@"
+	$(Q)$(WASM_AR) rcs $@ $(WASM_O)
+	$(E) "OK        Successfully built $@"
+
+.PHONY: default all amalg clean depend ctest wasm
 
 ##############################################################################
 # Object file rules
