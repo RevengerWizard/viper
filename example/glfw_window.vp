@@ -1,0 +1,22 @@
+from glfw3 import *
+
+def width : int32 = 800;
+def height : int32 = 800;
+
+pub fn main() : int32
+{
+    if glfwInit() == 0 return -1;
+
+    var window : GLFWwindow* = glfwCreateWindow(800, 800, "hello window", nil, nil);
+    if window == nil return -2;
+
+    while glfwWindowShouldClose(window) == 0
+    {
+        glfwPollEvents();
+    }
+
+    glfwDestroyWindow(window);
+    glfwTerminate();
+
+    return 4;
+}
