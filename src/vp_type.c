@@ -32,6 +32,7 @@ Type* tyfloat64 = &(Type){.kind = TY_float64};
 
 Type* tyvoid = &(Type){.kind = TY_void};
 Type* tynil = &(Type){.kind = TY_nil};
+Type* tyellipsis = &(Type){.kind = TY_ellipsis};
 
 const char* const vp_type_names[] = {
 #define TYSTR(name) #name,
@@ -222,7 +223,7 @@ bool vp_type_isconv(Type* dst, Type* src)
     }
     else if(ty_isflo(dst) && ty_isflo(src))
     {
-        return dst == src;
+        return vp_type_sizeof(dst) >= vp_type_sizeof(src);
     }
     else if(ty_isnilable(dst) && !ty_isnilable(src))
     {
@@ -445,7 +446,7 @@ Type* vp_type_arr(Type* t, uint32_t len)
     return ty;
 }
 
-Type* vp_type_fn(Type* ret, vec_t(Type*) params)
+Type* vp_type_fn(Type* ret, vec_t(Type*) params, bool isvariadic)
 {
     for(uint32_t i = 0; i < vec_len(V->cachefn); i++)
     {
@@ -468,6 +469,7 @@ Type* vp_type_fn(Type* ret, vec_t(Type*) params)
     Type* ty = type_alloc(TY_fn);
     ty->fn.ret = ret;
     ty->fn.params = params;
+    ty->fn.isvariadic = isvariadic;
     vec_push(V->cachefn, ty);
     return ty;
 }
@@ -703,6 +705,9 @@ static void type_tostr(Type* ty, SBuf* sb)
             break;
         case TY_nil:
             vp_buf_putlit(sb, "nil");
+            break;
+        case TY_ellipsis:
+            vp_buf_putlit(sb, "...");
             break;
         default:
             vp_assertX(0, "%d", ty->kind);

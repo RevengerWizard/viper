@@ -579,6 +579,13 @@ static TypeSpec* parse_type_fnarr(LexState* ls, uint8_t qual)
     return spec;
 }
 
+/* Parse function type argument */
+static TypeSpec* parse_type_arg(LexState* ls, SrcLoc loc)
+{
+    if(lex_match(ls, TK_dotdotdot)) return vp_typespec_type(loc, tyellipsis);
+    else return parse_type(ls);
+}
+
 /* Parse a function type */
 static TypeSpec* parse_type_fn(LexState* ls)
 {
@@ -589,7 +596,7 @@ static TypeSpec* parse_type_fn(LexState* ls)
     {
         do
         {
-            TypeSpec* spec = parse_type(ls);
+            TypeSpec* spec = parse_type_arg(ls, loc);
             if(lex_match(ls, ':'))
             {
                 if(spec->kind != SPEC_NAME)
@@ -656,7 +663,29 @@ static TypeSpec* parse_type(LexState* ls)
 {
     if(lex_match(ls, TK_struct) || lex_match(ls, TK_union))
     {
-        return parse_type_structunion(ls, ls->prev == TK_struct ? SPEC_STRUCT : SPEC_UNION);
+        LexToken tok = ls->prev;
+        SrcLoc loc = lex_srcloc(ls);
+        TypeSpec* spec = NULL;
+
+        if(lex_check(ls, '{'))
+        {
+            return parse_type_structunion(ls, tok == TK_struct ? SPEC_STRUCT : SPEC_UNION);
+        }
+        else
+        {
+            /* Anonymous opaque struct/union types */
+            spec = vp_typespec_aggr(loc,
+                tok == TK_struct ? SPEC_STRUCT : SPEC_UNION,
+                NULL);
+        }
+
+        /* Handle opaque pointers to struct/union */
+        while(lex_check(ls, '*'))
+        {
+            vp_lex_next(ls);
+            spec = vp_typespec_ptr(loc, spec);
+        }
+        return spec;
     }
     else if(lex_match(ls, TK_enum))
     {
@@ -1066,7 +1095,7 @@ static vec_t(Param) parse_params(LexState* ls)
             SrcLoc loc = lex_srcloc(ls);
             Str* name = lex_name(ls);
             vp_lex_consume(ls, ':');
-            TypeSpec* spec = parse_type(ls);
+            TypeSpec* spec = parse_type_arg(ls, loc);
             Param p = (Param){.loc = loc, .name = name, .spec = spec};
             vec_push(params, p);
         }

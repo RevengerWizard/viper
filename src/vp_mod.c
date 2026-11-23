@@ -6,8 +6,10 @@
 #include <string.h>
 #include <stdlib.h>
 
+#ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#endif
 
 #include "vp_mod.h"
 #include "vp_str.h"

@@ -40,6 +40,7 @@ enum
 typedef struct Operand
 {
     Type* ty;
+    Type* convty;
     Val val;
     uint8_t flags;
 } Operand;

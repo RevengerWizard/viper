@@ -430,6 +430,7 @@ static Operand opr_untyped(Type* ty, Val val)
 {
     return (Operand){
         .ty = ty,
+        .convty = ty,
         .val = val,
         .flags = OPR_UNTYPED | OPR_CONST
     };
@@ -440,6 +441,7 @@ static Operand opr_const(Type* ty, Val val)
 {
     return (Operand){
         .ty = ty,
+        .convty = ty,
         .val = val,
         .flags = OPR_CONST
     };
@@ -450,6 +452,7 @@ static Operand opr_lval(Type* ty)
 {
     return (Operand){
         .ty = ty,
+        .convty = ty,
         .flags = OPR_LVAL
     };
 }
@@ -457,13 +460,13 @@ static Operand opr_lval(Type* ty)
 /* rvalue operand */
 static Operand opr_rval(Type* ty)
 {
-    return (Operand){.ty = ty};
+    return (Operand){.ty = ty, .convty = ty,};
 }
 
 /* Decay operand */
 static Operand opr_decay(Operand opr)
 {
-    opr.ty = vp_type_decay(opr.ty);
+    /*opr.ty = vp_type_decay(opr.ty);*/
     opr.flags &= ~OPR_LVAL; /* Clear lvalue */
     return opr;
 }
@@ -548,11 +551,29 @@ static bool opr_cast(Operand* opr, Type* ty)
             break;
         }
     }
+    opr->convty = opr->ty;
     opr->ty = ty;
     return true;
 }
 
 #undef CASE
+
+/* Implicit conversions require to be wrapped into a cast */
+static void opr_foldcast(Operand opr, Type* ty, Expr** e)
+{
+    /* Avoid chaining identical casts */
+    if(expr_iscast(*e))
+        return;
+    /* convty = original type, ty is the target type */
+    if(opr.convty != ty && (*e))
+    {
+        Expr* conv = vp_expr_cast((*e)->loc, EX_CAST, NULL, *e);
+        conv->cast.expr->ty = opr.convty;
+        conv->ty = opr.ty;
+        *e = conv;
+        (*e)->ty = opr.ty;
+    }
+}
 
 /* Implicit operand type conversion */
 static void opr_conv(SrcLoc loc, Operand* opr, Type* ty)
@@ -1018,24 +1039,49 @@ static Type* sema_typespec(TypeSpec* spec)
         }
         case SPEC_FN:
         {
+            bool isvariadic;
+            uint32_t len = vec_len(spec->fn.args);
             vec_t(Type*) args = vec_init(Type*);
-            for(uint32_t i = 0; i < vec_len(spec->fn.args); i++)
+            for(uint32_t i = 0; i < len; i++)
             {
+                SrcLoc loc = spec->fn.args[i]->loc;
                 Type* targ = sema_typespec(spec->fn.args[i]);
+                if(targ == tyellipsis)
+                {
+                    if(i != len - 1)
+                    {
+                        vp_err_error(loc, "ellipsis must be the last parameter");
+                    }
+                    if(isvariadic)
+                    {
+                        vp_err_error(loc, "duplicate ellipsis parameter");
+                    }
+                    isvariadic = true;
+                }
                 vec_push(args, targ);
             }
             Type* ret = sema_typespec(spec->fn.ret);
-            ty = vp_type_fn(ret, args);
+            ty = vp_type_fn(ret, args, isvariadic);
             break;
         }
         case SPEC_STRUCT:
         case SPEC_UNION:
         {
-            Aggregate agr;
-            agr.kind = spec->kind == SPEC_STRUCT ? AGR_STRUCT : AGR_UNION;
-            agr.loc = spec->loc;
-            agr.items = spec->items;
-            ty = sym_aggr_complete(NULL, NULL, &agr);
+            if(spec->items == NULL)
+            {
+                /* Incomplete opaque struct/union */
+                ty = vp_type_none(NULL);
+                ty->kind = (spec->kind == SPEC_STRUCT) ? TY_struct : TY_union;
+                ty->st.fields = vec_init(TypeField);
+            }
+            else
+            {
+                Aggregate agr;
+                agr.kind = spec->kind == SPEC_STRUCT ? AGR_STRUCT : AGR_UNION;
+                agr.loc = spec->loc;
+                agr.items = spec->items;
+                ty = sym_aggr_complete(NULL, NULL, &agr);
+            }
             break;
         }
         case SPEC_ENUM:
@@ -1820,7 +1866,7 @@ static Operand sema_idx(Expr* e, Type* ret)
     UNUSED(ret);
     vp_assertX(e->kind == EX_IDX, "index");
     Operand opr = opr_decay(sema_expr(e->idx.expr, NULL));
-    if(opr.ty->kind != TY_ptr)
+    if(!ty_isptr(opr.ty) && !ty_isarr(opr.ty))
     {
         vp_err_error(e->loc, "can only index arrays or pointers");
     }
@@ -1876,6 +1922,7 @@ static Operand sema_call(Expr* e, Type* ret)
         Type* typaram = fn.ty->fn.params[i];
         Operand arg = sema_expr_rval(e->call.args[i], typaram);
         opr_conv(loc, &arg, typaram);
+        opr_foldcast(arg, typaram, &e->call.args[i]);
         opr_fold(loc, &e->call.args[i], arg);
     }
     e->ty = fn.ty->fn.ret;
@@ -1888,13 +1935,13 @@ static Operand sema_cast(Expr* e, Type* ret)
     UNUSED(ret);
     vp_assertX(e->kind == EX_CAST, "cast");
     Type* ty = sema_typespec(e->cast.spec);
-    Operand opr = sema_expr_rval(e->cast.expr, ty);
+    Operand opr = sema_expr_rval(e->cast.expr, NULL);
     bool isconst = opr_isconst(opr);
     if(!opr_cast(&opr, ty))
     {
         vp_err_error(e->loc, "invalid type cast from '%s' to '%s'", type_str(opr.ty), type_str(ty));
     }
-    return isconst ? opr_const(opr.ty, opr.val) : opr_lval(opr.ty);
+    return isconst ? opr_const(ty, opr.val) : opr_lval(ty);
 }
 
 /* Resolve intcast expression */
@@ -1935,7 +1982,7 @@ static Operand sema_ptrcast(Expr* e, Type* ret)
     Type* ty = sema_typespec(e->cast.spec);
     Operand opr = sema_expr_rval(e->cast.expr, NULL);
     bool isconst = opr_isconst(opr);
-    bool srcvalid = ty_isptrlike(opr.ty) || ty_isint(opr.ty);
+    bool srcvalid = ty_isptrlike(opr.ty) || ty_isint(opr.ty) || ty_isarr(opr.ty);
     bool dstvalid = ty_isptrlike(ty);
     if(!dstvalid || !srcvalid)
     {
@@ -2090,6 +2137,7 @@ static Operand sema_expr(Expr* e, Type* ret)
     Operand res = semaexprtab[e->kind](e, ret);
     if(res.ty)
     {
+        res.convty = res.ty;
         vp_assertX(!e->ty || e->ty == res.ty, "invalid type");
         if(e->kind != EX_CAST)
         {
@@ -2196,6 +2244,7 @@ static bool sema_stmt_assign(Stmt* st, Type* ret)
     }
     Operand res = sema_expr(st->rhs, lop.ty);
     opr_conv(st->loc, &res, lop.ty);
+    opr_foldcast(res, lop.ty, &st->rhs);
     opr_fold(st->loc, &st->rhs, res);
     return false;
 }
@@ -2208,6 +2257,7 @@ static bool sema_return(Stmt* st, Type* ret)
     {
         Operand res = sema_expr_rval(st->expr, ret);
         opr_conv(st->expr->loc, &res, ret);
+        opr_foldcast(res, ret, &st->expr);
         opr_fold(st->expr->loc, &st->expr, res);
     }
     else if(ret != tyvoid)
@@ -2494,11 +2544,26 @@ static Type* sema_fn(Sym* sym, Decl* d)
 {
     vp_assertX(d->kind == DECL_FN, "fn declaration");
 
+    bool isvariadic = false;
     vec_push(V->mod->sorted, d);
     vec_t(Type*) params = vec_init(Type*);
-    for(uint32_t i = 0; i < vec_len(d->fn.params); i++)
+    uint32_t len = vec_len(d->fn.params);
+    for(uint32_t i = 0; i < len; i++)
     {
+        SrcLoc loc = d->fn.params[i].loc;
         Type* typaram = sema_typespec(d->fn.params[i].spec);
+        if(typaram == tyellipsis)
+        {
+            if(i != len - 1)
+            {
+                vp_err_error(loc, "ellipsis must be the last parameter");
+            }
+            if(isvariadic)
+            {
+                vp_err_error(loc, "duplicate ellipsis parameter");
+            }
+            isvariadic = true;
+        }
         typaram = vp_type_decayempty(typaram);
         sym_complete(typaram);
         if(typaram == tyvoid)
@@ -2513,7 +2578,7 @@ static Type* sema_fn(Sym* sym, Decl* d)
     {
         vp_err_error(d->loc, "function return type cannot be array");
     }
-    Type* ty = vp_type_fn(ret, params);
+    Type* ty = vp_type_fn(ret, params, isvariadic);
     /* Add function name to global scope */
     VarInfo* vi = d->fn.vi = vp_scope_add(V->globscope, d->name, ty);
     /* Distinguish from external module functions */
@@ -2640,6 +2705,10 @@ static Type* sema_var(Sym* sym, Decl* d)
                 declty = vp_type_arr(declty->p, inferty->len);
             }
             opr_conv(d->loc, &res, declty);
+            if(!isglob)
+            {
+                opr_foldcast(res, declty, &d->var.expr);
+            }
             opr_fold(d->loc, &d->var.expr, res);
             expr->ty = declty;
         }

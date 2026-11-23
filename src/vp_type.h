@@ -24,6 +24,7 @@
     _(ptr) _(fn) _(array) \
     _(struct) _(union) \
     _(void) _(nil) \
+    _(ellipsis)
 
 typedef enum TypeKind
 {
@@ -62,6 +63,7 @@ typedef struct Type
         {
             struct Type* ret;
             vec_t(struct Type*) params;
+            bool isvariadic;
         } fn;
         struct
         {
@@ -94,6 +96,7 @@ extern Type* tyfloat64;
 
 extern Type* tyvoid;
 extern Type* tynil;
+extern Type* tyellipsis;
 
 static VP_AINLINE bool ty_isbool(const Type* t)
 {
@@ -201,7 +204,7 @@ Type* vp_type_dup(Type* t);
 Type* vp_type_none(struct Sym* sym);
 Type* vp_type_ptr(Type* t);
 Type* vp_type_arr(Type* t, uint32_t size);
-Type* vp_type_fn(Type* ret, Type** params);
+Type* vp_type_fn(Type* ret, Type** params, bool isvariadic);
 Type* vp_type_qual(Type* t, uint8_t qual);
 void vp_type_struct(Str* name, Type* ty, TypeField* fields);
 void vp_type_union(Str* name, Type* ty, TypeField* fields);

@@ -237,6 +237,11 @@ static VP_AINLINE bool expr_islit(Expr* e)
     return e->kind == EX_FALSE || e->kind == EX_TRUE || e->kind == EX_NIL || e->kind == EX_CHAR || e->kind == EX_INT || e->kind == EX_NUM || e->kind == EX_NUM || e->kind == EX_FLO;
 }
 
+static VP_AINLINE bool expr_iscast(Expr* e)
+{
+    return e->kind >= EX_CAST && e->kind <= EX_BITCAST;
+}
+
 typedef enum StmtKind
 {
     ST_ASSIGN,

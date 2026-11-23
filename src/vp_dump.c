@@ -1051,7 +1051,14 @@ static void dump_typespec(SBuf* sb, TypeSpec* spec)
             break;
         }
         case SPEC_TYPE:
-            vp_buf_putmem(sb, type_name(spec->ty), strlen(type_name(spec->ty)));
+            if(spec->ty == tyellipsis)
+            {
+                vp_buf_putlit(sb, "...");
+            }
+            else
+            {
+                vp_buf_putmem(sb, type_name(spec->ty), strlen(type_name(spec->ty)));
+            }
             break;
         case SPEC_PTR:
             dump_typespec(sb, spec->ptr);
@@ -1367,7 +1374,14 @@ static void dump_ast_expr(SBuf* sb, Expr* e)
         case EX_BITCAST:
         {
             vp_buf_fmt(sb, "%s(", exprcast[e->kind - EX_CAST]);
-            dump_typespec(sb, e->cast.spec);
+            if(e->cast.spec)
+            {
+                dump_typespec(sb, e->cast.spec);
+            }
+            else
+            {
+                vp_buf_fmt(sb, "%s", type_str(e->ty));
+            }
             vp_buf_putlit(sb, ", ");
             dump_ast_expr(sb, e->cast.expr);
             vp_buf_putb(sb, ')');

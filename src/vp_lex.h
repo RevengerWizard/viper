@@ -16,6 +16,7 @@
     _(struct) _(union) _(enum) \
     _(pub) _(inline) _(noreturn) \
     _(extern) _(export) \
+    _(packed) _(aligned) \
     _(import) _(from) _(as) \
     _(asm) \
     _(undefined) \
@@ -48,7 +49,7 @@
     __(lshifteq, <<=) __(rshifteq, >>=) \
     __(inc, ++) __(dec, --) \
     __(dbleft, [[) __(dbright, ]]) \
-    __(dcolon, ::) \
+    __(dcolon, ::) __(dotdot, ..) __(dotdotdot, ...) \
     __(name, <name>) __(note, <note>) \
     __(string, <string>) __(char, <char>) \
     __(integer, <integer>) __(number, <number>) \

@@ -305,7 +305,7 @@ static VReg* gen_name(Expr* e)
         }
         if(!vs_isglob(vi))
         {
-            vp_assertX(vi->vreg, "missing vreg %s", str_data(vi->name));
+            vp_assertX(vi->vreg, "(line %d) missing vreg '%s'", e->loc.line, str_data(vi->name));
             return vi->vreg;
         }
         VReg* src = gen_lval(e);
@@ -2143,6 +2143,11 @@ static void glob_eval(Type* ty, Expr* e, DataEntry* entry, uint32_t baseofs, boo
             }
             break;
         }
+        case EX_CAST:
+        case EX_INTCAST:
+        case EX_PTRCAST:
+        case EX_BITCAST:
+            return glob_eval(ty, e->cast.expr, entry, baseofs, isref);
         default:
             vp_assertX(0, "bad initializer %d\n", e->kind);
             break;
