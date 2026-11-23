@@ -37,6 +37,8 @@
 
 - [X] memory allocator; converted dlmalloc
 
+- [X] anonymous `struct`/`union`/`enum` types
+
 ---
 
 - [ ] intrinsics
@@ -59,9 +61,10 @@
 
 - [ ] default constexpr `fn` parameters
 
-- [ ] not-deferenceable `const T*`
+- [ ] not-dereferenceable `const T*`
 
-- [ ] local `def`/`alias`/`type`/`struct`/`union`/`enum` declarations
+- [ ] local declarations
+    - `def`/`alias`/`type`/`struct`/`union`/`enum`/`import`/`from`/`macro`
 
 - [ ] instruction selection: x64, ARM64, RV64
     - [ ] x64
@@ -77,12 +80,13 @@
 
 - [ ] `aligned(n)` | `aligned(T)`
 
-- [ ] anonymous `struct`/`union`/`enum` types
-
 - [ ] `std` modules
     - [ ] `std::io`
     - [ ] `std::mem`
     - [ ] `std::math`
+    - [ ] `std::str`
+    - [ ] `std::os`
+    - [ ] `std::conv`
 
 - [ ] `switch type(x)`
 
@@ -95,6 +99,32 @@
 - [ ] ranges ?
 
 - [ ] `case` ranges ?
+
+- [ ] a `C` built-in module, for C-compatible types, `C::int`, `C::long`, `C::longlong`
+
+- [ ] `macro`s
+  - [ ] expression macros
+  - [ ] block macros
+  - [ ] `mut` macro parameters
+
+- [ ] `#load()`, to include and embed external files, as a binary `const uint8[]` array
+
+- [] `offsetof`
+    - [X] `offsetof(type, sub.field)`
+    - [ ] `offsetof(type, sub.name[idx])`
+
+---
+
+- indexing arrays is broken when the index type is *not* `int32`
+- use of global/fn name in another module broken
+- use and assignment of global variables across modules broken ???
+- *p++ not working as expected?
+- float literals not exactly represented
+- use of inline functions from another module broken
+- assigning array variable to pointer variable breaks because the array type is implicitly converted into a pointer, thus hitting an assert
+- importing a pub struct which contains struct fields, of which said structs are pub, does not resolve such structs
+- pointer arithmetic with complex addend, p + y * x, gives error, because y and x, which are integers, receive the pointer type context
+- same for p += 1; p += n
 
 ---
 
@@ -271,6 +301,14 @@ asm
 `@va_next(T, args : va_list)`
 `@va_copy(dst : va_list, src : va_list)`
 
+- no need to use `@va_start` and `@va_end` to handle `args`, these are implicitly handled by the compiler
+- `args : ...` is implicitly a `va_list` type
+- special `va_list` type, ABI compatible with C and the underlying platform ABI
+
+```vp
+pub extern fn printf(s : const uint8*, args : ...) : int32;
+```
+
 ```vp
 fn print(fmt : const uint8*, args : ...) : void
 {
@@ -435,6 +473,17 @@ macro swap(ref a, ref b) = {
 `@memcpy`
 
 `@syscall`
+
+---
+
+### C
+
+`C::char`
+`C::int`
+`C::long`
+`C::longlong`
+`C::float` `C::double`
+`C::bool`
 
 ---
 
@@ -646,24 +695,46 @@ noreturn fn sysexit(status : int32) : void
 
 ---
 
-`aligned(n)` | `aligned(T)`
-
+- `aligned(n)` | `aligned(T)`
 - `struct`, `union` types
 - fields?
 - variables?
 - `aligned(0)` not allowed
-- power of 2
+- positive power of 2
 
 `aligned(16) struct Vec { ... }`
 
-```
+aligned on what?
+- `var` `let`
+- `struct` `union` declaration, type
+- field of `struct` `union`
+- using `packed` doesn't override `aligned`
+
+```vp
 struct S
 {
     aligned(16) x : float64;
 }
 ```
 
-`aligned(64) var buf : uint8[1024]`;
+```vp
+aligned(64) var buf : uint8[1024];
+```
+
+```vp
+packed aligned(4) struct Packet
+{
+    tt : uint8; // offset 0
+    len : uint16; // offset 1
+    id : uint32; // offset 3
+}
+
+#staticassert(sizeof(Packet) == 8);
+#staticassert(alignof(Packet) == 4);
+#staticassert(offsetof(Packet, length) == 1);
+#staticassert(offsetof(Packet, id) == 3);
+```
+
 
 ---
 
@@ -717,7 +788,7 @@ for i : int32 = 0; i < 10; i++ {  }
 for i := 0u32; i < 10; i++ {  }
 ```
 
-```
+```vp
 switch x
 case 10 {  }
 case 11 {  }
@@ -729,7 +800,7 @@ case 12 => 'C';
 default => '\0';
 ```
 
-```
+```vp
 struct Data
 {
     kind : enum : uint8 {
